@@ -39,10 +39,13 @@ internal sealed class UnlockOverlay
 
         DrawGuides();
 
-        foreach (var element in layout.Elements)
+        // Elements placed by a group are not moved by hand: the group's own box is.
+        var movable = layout.Positionable;
+
+        foreach (var element in movable)
             DrawElement(element);
 
-        foreach (var element in layout.Elements)
+        foreach (var element in movable)
             DrawTag(element);
 
         DrawInspector();
@@ -169,7 +172,7 @@ internal sealed class UnlockOverlay
     private void DrawInspector()
     {
         var selected = layout.SelectedElement;
-        if (selected is null)
+        if (selected is null || selected.IsManaged)
             return;
 
         var scale = ImGuiHelpers.GlobalScale;

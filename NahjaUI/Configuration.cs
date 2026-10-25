@@ -4,6 +4,7 @@ using System.Numerics;
 using Dalamud.Configuration;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
+using NahjaUI.Modules.Auras;
 
 namespace NahjaUI;
 
@@ -23,8 +24,15 @@ public class Configuration : IPluginConfiguration
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
 
-    // Shows the two temporary test boxes (removed in H4).
-    public bool ShowTestElements { get; set; } = true;
+    // The auras the user has created.
+    public List<AuraDefinition> Auras { get; set; } = new();
+
+    // The groups that line up auras automatically.
+    public List<AuraGroupDefinition> AuraGroups { get; set; } = new();
+
+    // The top level of the Auras explorer, in the order the user chose: groups and loose auras mixed.
+    // Entries look like "group:<id>" or "aura:<id>". Auras inside a group are not listed here.
+    public List<string> RootOrder { get; set; } = new();
 
     public void Save()
     {

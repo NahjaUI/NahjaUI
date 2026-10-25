@@ -13,7 +13,7 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly string[] Pages = { "General", "Appearance", "Layout", "Debug" };
+    private static readonly string[] Pages = { "General", "Auras", "Appearance", "Layout", "Debug" };
 
     private readonly Plugin plugin;
     private ThemeScope? themeScope;
@@ -175,6 +175,9 @@ public class MainWindow : Window, IDisposable
 
         switch (page)
         {
+            case "Auras":
+                plugin.AuraEditorPage.Draw();
+                break;
             case "Appearance":
                 DrawAppearance();
                 break;
@@ -194,6 +197,7 @@ public class MainWindow : Window, IDisposable
 
     private static string PageSubtitle(string page) => page switch
     {
+        "Auras" => "Track the buffs and debuffs you care about",
         "Appearance" => "Theme and look of the interface",
         "Layout" => "Position and size of every element",
         "Debug" => "Live game data and diagnostics",
@@ -206,7 +210,7 @@ public class MainWindow : Window, IDisposable
 
         Widgets.Callout(
             "##callout_wip",
-            "Early development build. Only two test boxes are drawn so far: auras arrive in H4.",
+            "Early development build. Create your first aura on the Auras page, then place it with unlock mode on the Layout page.",
             Theme.Warning,
             2);
 
@@ -216,7 +220,7 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
             ImGui.TextWrapped("A modular interface suite for FINAL FANTASY XIV with an aura engine, so you only see the buffs, debuffs and cooldowns you choose.");
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Current milestone: H2 - positioning and unlock mode.");
+            ImGui.TextColored(Theme.TextMuted, "Current milestone: H4 - first auras.");
         });
     }
 
@@ -262,7 +266,6 @@ public class MainWindow : Window, IDisposable
     private void DrawLayout()
     {
         var layout = plugin.Layout;
-        var config = plugin.Configuration;
 
         Widgets.Callout(
             "##callout_unlock",
@@ -270,27 +273,21 @@ public class MainWindow : Window, IDisposable
             Theme.Info,
             3);
 
-        Widgets.Card("##card_positioning", 3, () =>
+        Widgets.Card("##card_positioning", 2, () =>
         {
             Widgets.SectionLabel("Positioning");
 
             if (Widgets.PrimaryButton("Unlock elements"))
                 layout.UnlockMode = true;
-
-            ImGui.SameLine();
-            var showTest = config.ShowTestElements;
-            if (ImGui.Checkbox("Show test elements", ref showTest))
-            {
-                config.ShowTestElements = showTest;
-                plugin.RequestSave();
-            }
         });
 
-        Widgets.Card("##card_elements", layout.Elements.Count + 2, () =>
+        var movable = layout.Positionable;
+
+        Widgets.Card("##card_elements", movable.Count + 2, () =>
         {
             Widgets.SectionLabel("Elements");
 
-            foreach (var element in layout.Elements)
+            foreach (var element in movable)
             {
                 if (ImGui.Selectable(element.Name, layout.SelectedId == element.Id))
                     layout.SelectedId = element.Id;
@@ -446,6 +443,23 @@ public class MainWindow : Window, IDisposable
             foreach (var member in snapshot.Party)
             {
                 ImGui.Text($"{member.Name}  {GameNames.JobAbbreviation(member.JobId)} Lv {member.Level}   HP {member.Hp}/{member.MaxHp}   statuses: {member.Statuses.Count}");
+            }
+        });
+
+        Widgets.Card("##card_cooldowns", snapshot.Cooldowns.Count * 2 + 3, () =>
+        {
+            Widgets.SectionLabel("Cooldowns (abilities watched by auras)");
+
+            if (snapshot.Cooldowns.Count == 0)
+            {
+                ImGui.TextColored(Theme.TextMuted, "No cooldown aura is enabled.");
+                return;
+            }
+
+            foreach (var cooldown in snapshot.Cooldowns.Values)
+            {
+                ImGui.Text($"{GameNames.ActionName(cooldown.ActionId)}   charges {cooldown.Charges}/{cooldown.MaxCharges}   next in {cooldown.Remaining:0.0}s   per charge {cooldown.Total:0.0}s");
+                ImGui.TextColored(Theme.TextMuted, $"   raw: gauge {cooldown.RawElapsed:0.0} / {cooldown.RawTotal:0.0}   group {cooldown.Group}   active {cooldown.GroupActive}");
             }
         });
 

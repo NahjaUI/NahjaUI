@@ -7,7 +7,7 @@ using Dalamud.Plugin.Services;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
-using NahjaUI.Modules;
+using NahjaUI.Modules.Auras;
 using NahjaUI.Windows;
 
 namespace NahjaUI;
@@ -40,7 +40,9 @@ public sealed class Plugin : IDalamudPlugin
 
     private MainWindow MainWindow { get; init; }
     private UnlockOverlay UnlockOverlay { get; init; }
-    private LayoutDemo LayoutDemo { get; init; }
+    internal OverlayFonts Fonts { get; init; }
+    internal AuraEngine AuraSystem { get; init; }
+    internal AuraEditor AuraEditorPage { get; init; }
 
     // Set when something changed; the configuration is written once the mouse button is released.
     private bool saveRequested;
@@ -52,7 +54,9 @@ public sealed class Plugin : IDalamudPlugin
         GameData = new GameDataProvider();
 
         Layout = new LayoutManager(Configuration);
-        LayoutDemo = new LayoutDemo(Configuration, Layout);
+        Fonts = new OverlayFonts();
+        AuraSystem = new AuraEngine(this);
+        AuraEditorPage = new AuraEditor(this);
         UnlockOverlay = new UnlockOverlay(this, Layout);
 
         MainWindow = new MainWindow(this);
@@ -81,6 +85,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.RemoveAllWindows();
         MainWindow.Dispose();
         GameData.Dispose();
+        Fonts.Dispose();
 
         CommandManager.RemoveHandler(CommandName);
 
@@ -94,7 +99,7 @@ public sealed class Plugin : IDalamudPlugin
         Theme.Accent = Configuration.AccentColor;
 
         WindowSystem.Draw();
-        LayoutDemo.Draw();
+        AuraSystem.Draw();
         UnlockOverlay.Draw();
 
         FlushSave();

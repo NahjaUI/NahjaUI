@@ -6,6 +6,7 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Game.ClientState.Statuses;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace NahjaUI.Game;
 
@@ -19,6 +20,10 @@ internal sealed class GameDataProvider : IDisposable
     private long frame;
     private int consecutiveErrors;
 
+    // Cooldowns are only read for the actions someone asked for.
+    private readonly HashSet<uint> watchedActions = new();
+    private static readonly IReadOnlyDictionary<uint, CooldownSnapshot> NoCooldowns = new Dictionary<uint, CooldownSnapshot>();
+
     /// <summary>The snapshot of the latest frame. Never null.</summary>
     public GameSnapshot Current { get; private set; } = GameSnapshot.Empty;
 
@@ -31,6 +36,18 @@ internal sealed class GameDataProvider : IDisposable
     public GameDataProvider()
     {
         Plugin.Framework.Update += OnUpdate;
+    }
+
+    /// <summary>
+    /// Says which actions to read cooldowns for. Call it every frame with the actions that are needed right now;
+    /// the cooldowns then appear in the next snapshot.
+    /// </summary>
+    public void SetWatchedActions(IEnumerable<uint> actionIds)
+    {
+        watchedActions.Clear();
+
+        foreach (var id in actionIds)
+            watchedActions.Add(id);
     }
 
     public void Dispose()
@@ -86,6 +103,7 @@ internal sealed class GameDataProvider : IDisposable
             ToUnit(target?.TargetObject),
             BuildParty(),
             context,
+            BuildCooldowns(),
             frame);
     }
 
@@ -153,6 +171,70 @@ internal sealed class GameDataProvider : IDisposable
                 continue;
 
             result.Add(new StatusSnapshot(status.StatusId, status.SourceId, status.RemainingTime, status.Param));
+        }
+
+        return result;
+    }
+
+    // ---------------------------------------------------------------- cooldowns
+
+    // Reads the recast information of the game for each watched action.
+    // For actions with several charges the game keeps one timer for ALL charges: it counts up from empty
+    // to full, and every (total / charges) seconds one more charge is available.
+    private unsafe IReadOnlyDictionary<uint, CooldownSnapshot> BuildCooldowns()
+    {
+        if (watchedActions.Count == 0)
+            return NoCooldowns;
+
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null)
+            return NoCooldowns;
+
+        var result = new Dictionary<uint, CooldownSnapshot>(watchedActions.Count);
+
+        foreach (var requested in watchedActions)
+        {
+            // Some actions turn into another one at higher levels; the game works with the current form.
+            var id = actionManager->GetAdjustedActionId(requested);
+
+            var maxCharges = Math.Max(1, (int)ActionManager.GetMaxCharges(id, 0));
+            var charges = Math.Min((int)actionManager->GetCurrentCharges(id), maxCharges);
+
+            // The game keeps one "gauge" per recast group. It fills from empty to full (all the charges) as time passes.
+            var group = actionManager->GetRecastGroup((int)ActionType.Action, id);
+            var detail = group >= 0 ? actionManager->GetRecastGroupDetail(group) : null;
+
+            float totalForAllCharges;
+            float elapsed;
+            bool groupActive;
+
+            if (detail != null)
+            {
+                totalForAllCharges = actionManager->GetRecastTimeForGroup(group);
+                elapsed = detail->Elapsed;
+                groupActive = detail->IsActive;
+            }
+            else
+            {
+                totalForAllCharges = actionManager->GetRecastTime(ActionType.Action, id);
+                elapsed = actionManager->GetRecastTimeElapsed(ActionType.Action, id);
+                groupActive = actionManager->IsRecastTimerActive(ActionType.Action, id);
+            }
+
+            var perCharge = totalForAllCharges / maxCharges;
+
+            // Seconds until the next charge. It does not depend on the "active" flag: an ability with one charge
+            // spent and one left is still recharging, because its gauge is not full yet.
+            var remaining = 0f;
+            if (charges < maxCharges && perCharge > 0f && elapsed < totalForAllCharges)
+            {
+                remaining = maxCharges > 1
+                    ? perCharge - (elapsed % perCharge)
+                    : MathF.Max(0f, totalForAllCharges - elapsed);
+            }
+
+            result[requested] = new CooldownSnapshot(
+                requested, charges, maxCharges, remaining, perCharge, elapsed, totalForAllCharges, groupActive, group);
         }
 
         return result;

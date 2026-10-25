@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -18,8 +19,14 @@ internal sealed class LayoutElement
     }
 
     public string Id { get; }
-    public string Name { get; }
+    public string Name { get; set; }
     public ElementLayout Defaults { get; }
+
+    /// <summary>
+    /// True when something else (an aura group) decides where this element is.
+    /// Such elements keep their size but cannot be moved, so unlock mode and the Layout page skip them.
+    /// </summary>
+    public bool IsManaged { get; set; }
 
     /// <summary>The saved, editable layout (it lives inside the plugin configuration).</summary>
     public ElementLayout Layout { get; }
@@ -42,6 +49,9 @@ internal sealed class LayoutManager
     }
 
     public IReadOnlyList<LayoutElement> Elements => elements;
+
+    /// <summary>The elements the user can move by hand (those not placed by a group).</summary>
+    public IReadOnlyList<LayoutElement> Positionable => elements.Where(e => !e.IsManaged).ToList();
 
     /// <summary>True while the user is moving elements around.</summary>
     public bool UnlockMode { get; set; }
@@ -66,6 +76,16 @@ internal sealed class LayoutManager
         var element = new LayoutElement(id, name, defaults, saved);
         elements.Add(element);
         return element;
+    }
+
+    /// <summary>Removes an element and forgets its saved position (used when an aura is deleted).</summary>
+    public void Unregister(string id)
+    {
+        elements.RemoveAll(e => e.Id == id);
+        config.Layouts.Remove(id);
+
+        if (SelectedId == id)
+            SelectedId = null;
     }
 
     /// <summary>

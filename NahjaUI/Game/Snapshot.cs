@@ -16,6 +16,31 @@ internal sealed record StatusSnapshot(uint Id, uint SourceId, float RemainingTim
 /// <summary>An action a unit is casting right now.</summary>
 internal sealed record CastSnapshot(uint ActionId, float CurrentTime, float TotalTime, bool Interruptible);
 
+/// <summary>The cooldown state of one player action (an ability).</summary>
+/// <param name="ActionId">The action id that was asked for.</param>
+/// <param name="Charges">Charges available now. Actions without charges give 1 when ready and 0 when on cooldown.</param>
+/// <param name="MaxCharges">1 for normal actions, 2 or more for actions with charges.</param>
+/// <param name="Remaining">Seconds until the next charge (or until the action can be used again). 0 when fully ready.</param>
+/// <param name="Total">Seconds one charge takes to recharge.</param>
+/// <param name="RawElapsed">Diagnostics: the game's own gauge level (seconds), as read.</param>
+/// <param name="RawTotal">Diagnostics: seconds to fill the gauge from empty (all charges), as read.</param>
+/// <param name="GroupActive">Diagnostics: the game's "recast group is active" flag.</param>
+/// <param name="Group">Diagnostics: the recast group of the action.</param>
+internal sealed record CooldownSnapshot(
+    uint ActionId,
+    int Charges,
+    int MaxCharges,
+    float Remaining,
+    float Total,
+    float RawElapsed = 0f,
+    float RawTotal = 0f,
+    bool GroupActive = false,
+    int Group = -1)
+{
+    /// <summary>True when there is no charge to use right now.</summary>
+    public bool IsOnCooldown => Charges <= 0;
+}
+
 /// <summary>A character: the player, the target, a party member...</summary>
 internal sealed record UnitSnapshot(
     uint EntityId,
@@ -45,8 +70,10 @@ internal sealed record GameSnapshot(
     UnitSnapshot? TargetOfTarget,
     IReadOnlyList<UnitSnapshot> Party,
     ContextSnapshot Context,
+    IReadOnlyDictionary<uint, CooldownSnapshot> Cooldowns,
     long Frame)
 {
     public static readonly GameSnapshot Empty = new(
-        false, null, null, null, null, Array.Empty<UnitSnapshot>(), ContextSnapshot.None, 0);
+        false, null, null, null, null, Array.Empty<UnitSnapshot>(), ContextSnapshot.None,
+        new Dictionary<uint, CooldownSnapshot>(), 0);
 }
