@@ -6,6 +6,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
+using NahjaUI.Game;
 using NahjaUI.Modules;
 using NahjaUI.Windows;
 
@@ -20,12 +21,20 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
+    [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
 
     private const string CommandName = "/nui";
 
     public Configuration Configuration { get; init; }
 
     internal LayoutManager Layout { get; init; }
+
+    // The only reader of game data. Everything else uses its snapshot.
+    internal GameDataProvider GameData { get; init; }
 
     public readonly WindowSystem WindowSystem = new("NahjaUI");
 
@@ -39,6 +48,8 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+        GameData = new GameDataProvider();
 
         Layout = new LayoutManager(Configuration);
         LayoutDemo = new LayoutDemo(Configuration, Layout);
@@ -69,6 +80,7 @@ public sealed class Plugin : IDalamudPlugin
 
         WindowSystem.RemoveAllWindows();
         MainWindow.Dispose();
+        GameData.Dispose();
 
         CommandManager.RemoveHandler(CommandName);
 

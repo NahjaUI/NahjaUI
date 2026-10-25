@@ -7,6 +7,7 @@ using Dalamud.Interface.Windowing;
 using Lumina.Excel.Sheets;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
+using NahjaUI.Game;
 
 namespace NahjaUI.Windows;
 
@@ -396,38 +397,94 @@ public class MainWindow : Window, IDisposable
 
     // ---------------------------------------------------------------- debug page
 
-    private static void DrawDebug()
+    private void DrawDebug()
     {
-        Widgets.Card("##card_player", 6, () =>
+        var provider = plugin.GameData;
+        var snapshot = provider.Current;
+
+        Widgets.Card("##card_snapshot", 5, () =>
         {
-            Widgets.SectionLabel("Player state");
+            Widgets.SectionLabel("Snapshot");
+            ImGui.Text($"Frame: {snapshot.Frame}");
+            ImGui.Text($"Build time: {provider.LastBuildMs:0.000} ms");
+            ImGui.Text($"Logged in: {snapshot.IsLoggedIn}");
 
-            var playerState = Plugin.PlayerState;
-            if (!playerState.IsLoaded)
-            {
-                ImGui.Text("Not logged in.");
-                return;
-            }
+            if (provider.LastError is { } error)
+                ImGui.TextColored(Theme.Error, $"Last error: {error}");
+        });
 
-            if (!playerState.ClassJob.IsValid)
-            {
-                ImGui.Text("Current job is not valid.");
-                return;
-            }
+        Widgets.Card("##card_context", 6, () =>
+        {
+            Widgets.SectionLabel("Context");
 
-            ImGui.Text($"Job: {playerState.ClassJob.Value.Abbreviation.ToString()} [Level {playerState.Level}]");
-
-            var territoryId = Plugin.ClientState.TerritoryType;
-            if (Plugin.DataManager.GetExcelSheet<TerritoryType>().TryGetRow(territoryId, out var territoryRow))
-                ImGui.Text($"Location: {territoryRow.PlaceName.Value.Name.ToString()}");
+            var context = snapshot.Context;
+            if (Plugin.DataManager.GetExcelSheet<TerritoryType>().TryGetRow(context.TerritoryId, out var territoryRow))
+                ImGui.Text($"Location: {territoryRow.PlaceName.Value.Name.ToString()} ({context.TerritoryId})");
             else
-                ImGui.Text("Invalid territory.");
+                ImGui.Text($"Location: unknown ({context.TerritoryId})");
+
+            ImGui.Text($"In combat: {context.InCombat}");
+            ImGui.Text($"In duty: {context.InDuty}");
+            ImGui.Text($"Party size: {context.PartySize}");
+        });
+
+        DrawUnitCard("##card_player", "Player", snapshot.Player);
+        DrawUnitCard("##card_target", "Target", snapshot.Target);
+        DrawUnitCard("##card_focus", "Focus target", snapshot.Focus);
+        DrawUnitCard("##card_tot", "Target of target", snapshot.TargetOfTarget);
+
+        Widgets.Card("##card_party", snapshot.Party.Count + 2, () =>
+        {
+            Widgets.SectionLabel("Party");
+
+            if (snapshot.Party.Count == 0)
+            {
+                ImGui.TextColored(Theme.TextMuted, "Not in a party.");
+                return;
+            }
+
+            foreach (var member in snapshot.Party)
+            {
+                ImGui.Text($"{member.Name}  {GameNames.JobAbbreviation(member.JobId)} Lv {member.Level}   HP {member.Hp}/{member.MaxHp}   statuses: {member.Statuses.Count}");
+            }
         });
 
         Widgets.Card("##card_interface", 4, () =>
         {
             Widgets.SectionLabel("Interface");
             ImGui.Text($"UI scale: {ImGuiHelpers.GlobalScale:0.00}");
+        });
+    }
+
+    // One card with the live data of a unit: name, job, health, cast and every status.
+    private static void DrawUnitCard(string id, string title, UnitSnapshot? unit)
+    {
+        var lines = unit is null ? 2 : 5 + unit.Statuses.Count;
+
+        Widgets.Card(id, lines, () =>
+        {
+            Widgets.SectionLabel(title);
+
+            if (unit is null)
+            {
+                ImGui.TextColored(Theme.TextMuted, "None");
+                return;
+            }
+
+            var dead = unit.IsDead ? "  (dead)" : string.Empty;
+            ImGui.Text($"{unit.Name}   {GameNames.JobAbbreviation(unit.JobId)} Lv {unit.Level}{dead}");
+            ImGui.Text($"HP {unit.Hp} / {unit.MaxHp}      MP {unit.Mp} / {unit.MaxMp}");
+
+            if (unit.Cast is { } cast)
+                ImGui.Text($"Casting action {cast.ActionId}   {cast.CurrentTime:0.0} / {cast.TotalTime:0.0} s");
+            else
+                ImGui.TextColored(Theme.TextMuted, "Not casting");
+
+            ImGui.Text($"Statuses: {unit.Statuses.Count}");
+            foreach (var status in unit.Statuses)
+            {
+                ImGui.Text($"  {GameNames.StatusName(status.Id)} ({status.Id})   {status.RemainingTime:0.0} s   param {status.Param}   from {status.SourceId:X}");
+            }
         });
     }
 }
