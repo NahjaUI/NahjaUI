@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace NahjaUI.Game;
 
@@ -57,7 +58,8 @@ internal sealed record UnitSnapshot(
     IReadOnlyList<StatusSnapshot> Statuses,
     bool IsPlayer = false,
     byte ShieldPercent = 0,
-    bool IsHostile = false);
+    bool IsHostile = false,
+    bool IsCompanion = false);
 
 /// <summary>
 /// The White Mage job gauge. Only present while the player is a White Mage.
@@ -74,6 +76,11 @@ internal sealed record ContextSnapshot(uint TerritoryId, bool InCombat, bool InD
     public static readonly ContextSnapshot None = new(0, false, false, 0);
 }
 
+/// <summary>An enemy that has a nameplate in the game right now.</summary>
+/// <param name="Ndc">Where the game hangs the plate, in screen coordinates from -1 to 1 (x to the right, y UP). It already accounts for the height of the enemy.</param>
+/// <param name="Scale">Size of the plate the game would use, from 0 (far) to 1 (near).</param>
+internal sealed record NamePlateSnapshot(uint EntityId, string Name, int Level, uint Hp, uint MaxHp, Vector2 Ndc, float Scale);
+
 /// <summary>Everything the plugin knows about the game during one frame.</summary>
 internal sealed record GameSnapshot(
     bool IsLoggedIn,
@@ -86,7 +93,9 @@ internal sealed record GameSnapshot(
     IReadOnlyDictionary<uint, CooldownSnapshot> Cooldowns,
     long Frame,
     WhiteMageGaugeSnapshot? WhiteMage = null,
-    WarriorGaugeSnapshot? Warrior = null)
+    WarriorGaugeSnapshot? Warrior = null,
+    UnitSnapshot? Chocobo = null,
+    IReadOnlyList<NamePlateSnapshot>? NamePlates = null)
 {
     public static readonly GameSnapshot Empty = new(
         false, null, null, null, null, Array.Empty<UnitSnapshot>(), ContextSnapshot.None,

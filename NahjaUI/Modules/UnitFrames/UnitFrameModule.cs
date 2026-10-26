@@ -40,13 +40,6 @@ internal sealed class UnitFrameModule : IDisposable
     private static readonly UnitSnapshot SampleFocus = new(
         0, "Sensual Sandy", 0, 99, 250000, 650000, 0, 0, false, null, Array.Empty<StatusSnapshot>(), false, 0, true);
 
-    private static readonly Vector2[] OutlineOffsets =
-    {
-        new(-1f, -1f), new(0f, -1f), new(1f, -1f),
-        new(-1f, 0f), new(1f, 0f),
-        new(-1f, 1f), new(0f, 1f), new(1f, 1f)
-    };
-
     private readonly Plugin plugin;
 
     public UnitFrameModule(Plugin plugin)
@@ -204,6 +197,12 @@ internal sealed class UnitFrameModule : IDisposable
     private void HandleClicks(LayoutElement element, UnitSnapshot unit)
     {
         var (pos, size) = LayoutManager.GetRect(element.Layout);
+        HandleClicks(element.Id, pos, size, unit);
+    }
+
+    // The same, for a box that is not a layout element of its own (the bars of the party frames).
+    internal void HandleClicks(string id, Vector2 pos, Vector2 size, UnitSnapshot unit)
+    {
         if (size.X < 1f || size.Y < 1f)
             return;
 
@@ -221,9 +220,9 @@ internal sealed class UnitFrameModule : IDisposable
                     ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoBringToFrontOnFocus |
                     ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav;
 
-        var menuId = $"##nui_unit_menu_{element.Id}";
+        var menuId = $"##nui_unit_menu_{id}";
 
-        if (ImGui.Begin($"##nui_unit_click_{element.Id}", flags))
+        if (ImGui.Begin($"##nui_unit_click_{id}", flags))
         {
             ImGui.SetCursorPos(Vector2.Zero);
             ImGui.InvisibleButton("##click", size);
@@ -347,7 +346,7 @@ internal sealed class UnitFrameModule : IDisposable
     // If it fits, it goes right after the life. If life and shield together are more than the bar, the shield is drawn from the
     // right end of the bar over the life (the more shield, the further left it reaches), so there is always a visible block.
     // It is translucent: the life and the background show through it, so where it covers the life you still see it.
-    private static void DrawShield(ImDrawListPtr drawList, UnitFrameSettings settings, Vector2 pos, Vector2 size, float fraction, float rounding, byte shieldPercent)
+    internal static void DrawShield(ImDrawListPtr drawList, UnitFrameSettings settings, Vector2 pos, Vector2 size, float fraction, float rounding, byte shieldPercent)
     {
         var max = pos + size;
         var shieldFraction = Math.Min(shieldPercent / 100f, 1f);
@@ -378,7 +377,7 @@ internal sealed class UnitFrameModule : IDisposable
 
     // The colour of the life: the hostile colour for enemies, and for players the job's own colour when class colours
     // are chosen, the fixed one otherwise. Anything else (friendly NPCs) uses the fixed one.
-    private Vector4 LifeColor(UnitFrameSettings settings, UnitSnapshot unit, bool isPlayerFrame)
+    internal Vector4 LifeColor(UnitFrameSettings settings, UnitSnapshot unit, bool isPlayerFrame)
     {
         var isPlayer = isPlayerFrame || unit.IsPlayer;
 
@@ -411,7 +410,7 @@ internal sealed class UnitFrameModule : IDisposable
 
     // Draws a text attached to a point of the bar: the same point of the text is placed on it, then the offset moves it.
     // White (or the chosen colour) with a black outline, readable over any bar colour and over the game behind it.
-    private void DrawText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize)
+    internal void DrawText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize)
     {
         if (!settings.Enabled || string.IsNullOrEmpty(text))
             return;
@@ -427,13 +426,7 @@ internal sealed class UnitFrameModule : IDisposable
             var pos = boxPos + boxSize * fraction - textSize * fraction + new Vector2(settings.OffsetX, settings.OffsetY) * scale;
             pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
 
-            var outline = MathF.Max(1f, MathF.Round(1.5f * scale));
-            var black = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
-
-            foreach (var offset in OutlineOffsets)
-                drawList.AddText(pos + offset * outline, black, text);
-
-            drawList.AddText(pos, ImGui.GetColorU32(settings.Color), text);
+            OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(settings.Color));
         }
     }
 }

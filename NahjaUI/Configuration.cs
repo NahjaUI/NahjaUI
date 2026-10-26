@@ -7,6 +7,7 @@ using NahjaUI.Core.Ui;
 using NahjaUI.Modules.Auras;
 using NahjaUI.Modules.CastBars;
 using NahjaUI.Modules.JobGauges;
+using NahjaUI.Modules.NamePlates;
 using NahjaUI.Modules.UnitFrames;
 
 namespace NahjaUI;
@@ -44,6 +45,9 @@ public class Configuration : IPluginConfiguration
 
     // The unit frames (the player's for now).
     public UnitFramesSettings UnitFrames { get; set; } = new();
+
+    // The nameplates over the enemies (first step: life bar and name).
+    public NamePlateSettings NamePlates { get; set; } = new();
 
     // The top level of the Auras explorer, in the order the user chose: groups and loose auras mixed.
     // Entries look like "group:<id>" or "aura:<id>". Auras inside a group are not listed here.

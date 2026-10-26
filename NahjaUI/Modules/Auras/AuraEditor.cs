@@ -1034,6 +1034,13 @@ internal sealed class AuraEditor
                 changed = true;
             }
 
+            var cornerRadius = definition.CornerRadiusPx;
+            if (ImGui.SliderInt("Corner rounding (px)", ref cornerRadius, 0, 12))
+            {
+                definition.CornerRadiusPx = cornerRadius;
+                changed = true;
+            }
+
             if (isCooldown)
             {
                 ImGui.Spacing();

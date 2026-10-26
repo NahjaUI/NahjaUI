@@ -796,13 +796,6 @@ internal sealed class AuraEngine
 
     private static readonly Vector4 GlowColor = new(1f, 0.82f, 0.30f, 1f);
 
-    private static readonly Vector2[] OutlineOffsets =
-    {
-        new(-1f, -1f), new(0f, -1f), new(1f, -1f),
-        new(-1f, 0f), new(1f, 0f),
-        new(-1f, 1f), new(0f, 1f), new(1f, 1f)
-    };
-
     /// <summary>
     /// Draws one aura icon. A ghost is a faded preview (no text) used in unlock mode to show
     /// where the members of a group will be.
@@ -815,6 +808,10 @@ internal sealed class AuraEngine
         var drawList = ImGui.GetBackgroundDrawList();
 
         var isCooldown = definition.Trigger == AuraTriggerType.Cooldown;
+
+        // Rounded corners, like the unit frames. They can never be more than half of the shorter side.
+        var rounding = MathF.Min(MathF.Round(Math.Clamp(definition.CornerRadiusPx, 0, 24) * scale), MathF.Min(size.X, size.Y) / 2f);
+
         var cooling = !ghost && isCooldown && state.Phase == AuraPhase.Cooling;
         var missing = !ghost && !isCooldown && !state.StatusPresent;
         var redBorder = missing || (cooling && definition.CooldownLook == CooldownLook.Red);
@@ -853,22 +850,22 @@ internal sealed class AuraEngine
                 };
             }
 
-            drawList.AddImage(texture.Handle, pos, pos + size, uv0, uv1, ImGui.GetColorU32(tint));
+            drawList.AddImageRounded(texture.Handle, pos, pos + size, uv0, uv1, ImGui.GetColorU32(tint), rounding, ImDrawFlags.RoundCornersAll);
         }
         else
         {
-            drawList.AddRectFilled(pos, pos + size, ImGui.GetColorU32(Theme.WithAlpha(Theme.Card, 0.9f)), 0f);
+            drawList.AddRectFilled(pos, pos + size, ImGui.GetColorU32(Theme.WithAlpha(Theme.Card, 0.9f)), rounding);
         }
 
         // The dark sweep that covers the part of the icon that is still recharging.
         if (cooling && definition.ShowCooldownSweep && state.Total > 0f)
-            DrawSweep(drawList, pos, size, state.Remaining / state.Total);
+            DrawSweep(drawList, pos, size, state.Remaining / state.Total, rounding);
 
         // 1 px border (it grows with the UI scale so it always looks 1 px thick):
         // black, red when the status is missing or the ability is recharging in red, accent colour for a ghost.
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var border = ghost ? Theme.Accent : redBorder ? Theme.Error : new Vector4(0f, 0f, 0f, 1f);
-        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(border), 0f, ImDrawFlags.None, redBorder ? thickness * 2f : thickness);
+        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(border), rounding, ImDrawFlags.None, redBorder ? thickness * 2f : thickness);
 
         if (ghost)
             return;
@@ -880,7 +877,7 @@ internal sealed class AuraEngine
                        || (state.Phase == AuraPhase.Active && definition.GlowWhenActive);
 
             if (glow)
-                DrawGlow(drawList, pos, size);
+                DrawGlow(drawList, pos, size, rounding);
         }
 
         // Text size is a font size in LOGICAL pixels, chosen per aura. Dalamud already builds the fonts scaled by the
@@ -915,37 +912,63 @@ internal sealed class AuraEngine
 
     // A dark wedge over the part of the icon that is still recharging, like the game's own hotbar:
     // it starts at 12 o'clock and the icon is uncovered clockwise as time passes.
-    private static void DrawSweep(ImDrawListPtr drawList, Vector2 pos, Vector2 size, float fractionRemaining)
+    // The wedge follows the rounded corners of the icon: it is a fan of triangles from the centre to the edge of the
+    // rounded box (a rounded box is star-shaped from its centre, so a fan covers it exactly).
+    private static void DrawSweep(ImDrawListPtr drawList, Vector2 pos, Vector2 size, float fractionRemaining, float rounding)
     {
         var fraction = Math.Clamp(fractionRemaining, 0f, 1f);
         if (fraction <= 0f)
             return;
 
         var center = pos + size * 0.5f;
-        var radius = MathF.Sqrt(size.X * size.X + size.Y * size.Y);
         var color = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.6f));
 
         var startAngle = -MathF.PI / 2f + MathF.Tau * (1f - fraction);
-        var steps = Math.Max(2, (int)MathF.Ceiling(64f * fraction));
+        var steps = Math.Max(2, (int)MathF.Ceiling(96f * fraction));
 
-        // The wedge is drawn as a fan of triangles and clipped to the icon.
-        drawList.PushClipRect(pos, pos + size, true);
-
-        var previous = center + new Vector2(MathF.Cos(startAngle), MathF.Sin(startAngle)) * radius;
+        var previous = center + EdgeDirection(startAngle, size, rounding);
         for (var i = 1; i <= steps; i++)
         {
             var angle = startAngle + MathF.Tau * fraction * i / steps;
-            var point = center + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius;
+            var point = center + EdgeDirection(angle, size, rounding);
 
             drawList.AddTriangleFilled(center, previous, point, color);
             previous = point;
         }
+    }
 
-        drawList.PopClipRect();
+    // The vector from the centre of a rounded box to its edge, in the given direction.
+    // The edge is found by halving the distance a few times (the box is convex, so it always works).
+    private static Vector2 EdgeDirection(float angle, Vector2 size, float rounding)
+    {
+        var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+        var half = size * 0.5f;
+        var inner = new Vector2(MathF.Max(0f, half.X - rounding), MathF.Max(0f, half.Y - rounding));
+
+        var low = 0f;
+        var high = MathF.Sqrt(size.X * size.X + size.Y * size.Y);
+
+        for (var i = 0; i < 14; i++)
+        {
+            var middle = (low + high) * 0.5f;
+            var point = direction * middle;
+
+            // Distance to a rounded box: negative or zero means inside.
+            var q = new Vector2(MathF.Abs(point.X) - inner.X, MathF.Abs(point.Y) - inner.Y);
+            var outside = new Vector2(MathF.Max(q.X, 0f), MathF.Max(q.Y, 0f)).Length();
+            var distance = outside + MathF.Min(MathF.Max(q.X, q.Y), 0f) - rounding;
+
+            if (distance <= 0f)
+                low = middle;
+            else
+                high = middle;
+        }
+
+        return direction * low;
     }
 
     // A gold glow that pulses about once a second: a few fading frames around the icon and a bright edge.
-    private static void DrawGlow(ImDrawListPtr drawList, Vector2 pos, Vector2 size)
+    private static void DrawGlow(ImDrawListPtr drawList, Vector2 pos, Vector2 size, float rounding)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var pulse = 0.775f + 0.225f * MathF.Sin((float)(ImGui.GetTime() * MathF.Tau));
@@ -960,13 +983,13 @@ internal sealed class AuraEngine
                 pos - grow,
                 pos + size + grow,
                 ImGui.GetColorU32(Theme.WithAlpha(GlowColor, alpha)),
-                0f,
+                rounding > 0f ? rounding + grow.X : 0f,
                 ImDrawFlags.None,
                 1.5f * scale);
         }
 
         var edge = MathF.Max(1f, MathF.Round(scale)) + 1f;
-        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(Theme.WithAlpha(GlowColor, pulse)), 0f, ImDrawFlags.None, edge);
+        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(Theme.WithAlpha(GlowColor, pulse)), rounding, ImDrawFlags.None, edge);
     }
 
     // The part of the icon texture to show so that it fills a box of the given shape without distortion.
@@ -998,7 +1021,7 @@ internal sealed class AuraEngine
     }
 
     // The timer as a single plain text: "17m", "28" or "6.5". No spacing tricks: the font is drawn as it is.
-    private static string FormatTime(float seconds)
+    internal static string FormatTime(float seconds)
     {
         if (seconds >= 60f)
             return $"{(int)(seconds / 60f)}m";
@@ -1012,7 +1035,7 @@ internal sealed class AuraEngine
     // White text with a thick black outline, readable on any icon.
     // The text is attached to a point of the icon (the anchor): the same point of the text is placed on it,
     // so a right anchor right-justifies the text and a centre anchor centres it. The offset then moves it (in pixels).
-    private void DrawOverlayText(ImDrawListPtr drawList, string text, float wantedPx, OverlayFont font, Vector2 boxPos, Vector2 boxSize, AnchorPoint anchor, Vector2 offset)
+    internal void DrawOverlayText(ImDrawListPtr drawList, string text, float wantedPx, OverlayFont font, Vector2 boxPos, Vector2 boxSize, AnchorPoint anchor, Vector2 offset)
     {
         var scale = ImGuiHelpers.GlobalScale;
 
@@ -1024,14 +1047,7 @@ internal sealed class AuraEngine
             var pos = boxPos + boxSize * fraction - textSize * fraction + offset * scale;
             pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
 
-            var outline = MathF.Max(1f, MathF.Round(1.5f * scale));
-            var black = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
-            var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-
-            foreach (var outlineOffset in OutlineOffsets)
-                drawList.AddText(pos + outlineOffset * outline, black, text);
-
-            drawList.AddText(pos, white, text);
+            OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
         }
     }
 }

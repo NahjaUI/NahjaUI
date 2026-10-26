@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
+using NahjaUI.Modules.PartyFrames;
 
 namespace NahjaUI.Modules.UnitFrames;
 
@@ -28,14 +29,26 @@ internal sealed class UnitFrameEditor
 
     private static readonly string[] FrameNames = { "Player", "Target", "Target of target", "Focus" };
 
-    // The picker has one more button after the frames: the class colors, shared by all of them.
-    private const int ClassColorsPage = 4;
-    private static readonly string[] PickerNames = { "Player", "Target", "Target of target", "Focus", "Class colors" };
+    // The picker has two more buttons after the frames: the party frames, and the class colors shared by all of them.
+    private const int PartyPage = 4;
+    private const int ClassColorsPage = 5;
+    private static readonly string[] PickerNames = { "Player", "Target", "Target of target", "Focus", "Party", "Class colors" };
 
     private readonly Plugin plugin;
 
     // Which frame the cards below edit (an index into FrameNames).
     private int selectedFrame;
+
+    // The name search of the list of the buffs and the one of the debuffs of the party.
+    private sealed class StatusSearchState
+    {
+        public string Text = string.Empty;
+        public string Applied = string.Empty;
+        public IReadOnlyList<StatusSearchResult> Results = Array.Empty<StatusSearchResult>();
+    }
+
+    private readonly StatusSearchState buffSearch = new();
+    private readonly StatusSearchState debuffSearch = new();
 
     public UnitFrameEditor(Plugin plugin)
     {
@@ -59,6 +72,21 @@ internal sealed class UnitFrameEditor
         if (selectedFrame == ClassColorsPage)
         {
             DrawClassColors(frames.Player);
+            return;
+        }
+
+        // The party frames: the same cards as the other frames (their look), then the ones that are only about the party.
+        if (selectedFrame == PartyPage)
+        {
+            plugin.PartyFrameSystem.PreviewRequested = true;
+
+            var party = frames.Party;
+            DrawGeneral(party.Look, plugin.PartyFrameSystem.PartyElement, true);
+            DrawPartyOptions(party);
+            DrawPartyAuras("##card_pf_buffs", "Buffs", party.Buffs, true, buffSearch);
+            DrawPartyAuras("##card_pf_debuffs", "Debuffs", party.Debuffs, false, debuffSearch);
+            DrawName(party.Look);
+            DrawHealth(party.Look);
             return;
         }
 
@@ -106,7 +134,7 @@ internal sealed class UnitFrameEditor
     {
         Widgets.Card("##card_uf_general", 22, () =>
         {
-            Widgets.SectionLabel($"{FrameNames[selectedFrame]} frame");
+            Widgets.SectionLabel(selectedFrame == PartyPage ? "Party frames (the first bar; the others follow it downwards)" : $"{FrameNames[selectedFrame]} frame");
 
             var enabled = settings.Enabled;
             if (ImGui.Checkbox("Enabled", ref enabled))
@@ -128,6 +156,7 @@ internal sealed class UnitFrameEditor
                 0 => "Hide the game's life and mana bar",
                 1 => "Hide the game's target bar (and its target of target)",
                 3 => "Hide the game's focus bar",
+                PartyPage => "Hide the game's party list",
                 _ => null
             };
 
@@ -239,6 +268,441 @@ internal sealed class UnitFrameEditor
             }
         });
     }
+
+    // What is only about the party: space between bars, mana bar, and how the targeted member is marked.
+    private void DrawPartyOptions(PartyFrameSettings party)
+    {
+        Widgets.Card("##card_pf_options", 20, () =>
+        {
+            Widgets.SectionLabel("Party options");
+
+            var order = party.Order;
+            if (EnumCombo("Order of the bars", ref order, PartyOrderLabel))
+            {
+                party.Order = order;
+                plugin.RequestSave();
+            }
+
+            var showChocobo = party.ShowChocobo;
+            if (ImGui.Checkbox("Show my chocobo at the end", ref showChocobo))
+            {
+                party.ShowChocobo = showChocobo;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var spacing = party.RowSpacingPx;
+            if (ImGui.SliderInt("Space between bars (px)", ref spacing, 0, 30))
+            {
+                party.RowSpacingPx = spacing;
+                plugin.RequestSave();
+            }
+
+            var roleStripe = party.RoleStripe;
+            if (ImGui.Checkbox("Color stripe for the role (tank, healer, damage)", ref roleStripe))
+            {
+                party.RoleStripe = roleStripe;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var manaMode = party.ManaMode;
+            if (EnumCombo("Mana bar", ref manaMode, PartyManaLabel))
+            {
+                party.ManaMode = manaMode;
+                plugin.RequestSave();
+            }
+
+            var manaHeight = party.Look.ManaHeightPx;
+            if (ImGui.SliderInt("Mana bar height (px)", ref manaHeight, 2, 12))
+            {
+                party.Look.ManaHeightPx = manaHeight;
+                plugin.RequestSave();
+            }
+
+            var manaColor = party.Look.ManaColor;
+            if (ImGui.ColorEdit4("Mana color", ref manaColor, ImGuiColorEditFlags.NoAlpha))
+            {
+                party.Look.ManaColor = new Vector4(manaColor.X, manaColor.Y, manaColor.Z, 1f);
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var ring = party.SelectionRing;
+            if (ImGui.Checkbox("Ring around the member I have targeted", ref ring))
+            {
+                party.SelectionRing = ring;
+                plugin.RequestSave();
+            }
+
+            var arrow = party.SelectionArrow;
+            if (ImGui.Checkbox("Arrow next to the member I have targeted", ref arrow))
+            {
+                party.SelectionArrow = arrow;
+                plugin.RequestSave();
+            }
+
+            var selection = party.SelectionColor;
+            if (ImGui.ColorEdit4("Targeted member color", ref selection, ImGuiColorEditFlags.NoAlpha))
+            {
+                party.SelectionColor = new Vector4(selection.X, selection.Y, selection.Z, 1f);
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, "With no party, sample members are shown while this page is open or in unlock mode.");
+        });
+    }
+
+    // One row of icons of the party (buffs or debuffs): what it shows, where it goes, how big the icons are.
+    private void DrawPartyAuras(string cardId, string title, PartyAuraSettings row, bool isBuff, StatusSearchState search)
+    {
+        var kind = isBuff ? "buff" : "debuff";
+
+        // Run the name search only when the text changed.
+        if (search.Text != search.Applied)
+        {
+            search.Applied = search.Text;
+            search.Results = search.Text.Trim().Length >= 3
+                ? GameNames.SearchStatuses(search.Text.Trim(), 10)
+                : Array.Empty<StatusSearchResult>();
+        }
+
+        Widgets.Card(cardId, 34 + row.StatusIds.Count + search.Results.Count, () =>
+        {
+            Widgets.SectionLabel(title);
+
+            var enabled = row.Enabled;
+            if (ImGui.Checkbox($"Show {kind}s next to the bars", ref enabled))
+            {
+                row.Enabled = enabled;
+                plugin.RequestSave();
+            }
+
+            var onlyMine = row.OnlyMine;
+            if (ImGui.Checkbox("Only the ones I applied", ref onlyMine))
+            {
+                row.OnlyMine = onlyMine;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var filter = row.Filter;
+            if (EnumCombo("Which ones", ref filter, mode => PartyFilterLabel(mode, kind)))
+            {
+                row.Filter = filter;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var barAnchor = row.BarAnchor;
+            if (EnumCombo("Anchor on the bar", ref barAnchor, point => point.Label()))
+            {
+                row.BarAnchor = barAnchor;
+                plugin.RequestSave();
+            }
+
+            var iconAnchor = row.IconAnchor;
+            if (EnumCombo("Anchor of the first icon", ref iconAnchor, point => point.Label()))
+            {
+                row.IconAnchor = iconAnchor;
+                plugin.RequestSave();
+            }
+
+            var offsetX = row.OffsetX;
+            if (ImGui.InputInt("Offset X (px)", ref offsetX, 1, 5))
+            {
+                row.OffsetX = Math.Clamp(offsetX, -500, 500);
+                plugin.RequestSave();
+            }
+
+            var offsetY = row.OffsetY;
+            if (ImGui.InputInt("Offset Y (px)", ref offsetY, 1, 5))
+            {
+                row.OffsetY = Math.Clamp(offsetY, -500, 500);
+                plugin.RequestSave();
+            }
+
+            var growth = row.Growth;
+            if (EnumCombo("Grow towards", ref growth, PartyGrowthLabel))
+            {
+                row.Growth = growth;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var width = row.IconWidth;
+            if (ImGui.InputInt("Icon width (px)", ref width, 1, 4))
+            {
+                row.IconWidth = Math.Clamp(width, 8, 128);
+                plugin.RequestSave();
+            }
+
+            var height = row.IconHeight;
+            if (ImGui.InputInt("Icon height (px)", ref height, 1, 4))
+            {
+                row.IconHeight = Math.Clamp(height, 8, 128);
+                plugin.RequestSave();
+            }
+
+            var crop = row.CropPercent;
+            if (ImGui.SliderInt("Icon crop (%)", ref crop, 0, 30))
+            {
+                row.CropPercent = crop;
+                plugin.RequestSave();
+            }
+
+            var cornerRadius = row.CornerRadiusPx;
+            if (ImGui.SliderInt("Corner rounding (px)", ref cornerRadius, 0, 12))
+            {
+                row.CornerRadiusPx = cornerRadius;
+                plugin.RequestSave();
+            }
+
+            var spacing = row.SpacingPx;
+            if (ImGui.SliderInt("Space between icons (px)", ref spacing, 0, 20))
+            {
+                row.SpacingPx = spacing;
+                plugin.RequestSave();
+            }
+
+            var maxIcons = row.MaxIcons;
+            if (ImGui.SliderInt("Most icons shown", ref maxIcons, 1, 12))
+            {
+                row.MaxIcons = maxIcons;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var showTimer = row.ShowTimer;
+            if (ImGui.Checkbox("Show the time left", ref showTimer))
+            {
+                row.ShowTimer = showTimer;
+                plugin.RequestSave();
+            }
+
+            var timerSize = row.TimerSize;
+            if (SizeCombo("Time size (px)", ref timerSize))
+            {
+                row.TimerSize = timerSize;
+                plugin.RequestSave();
+            }
+
+            var timerAnchor = row.TimerAnchor;
+            if (EnumCombo("Time position", ref timerAnchor, point => point.Label()))
+            {
+                row.TimerAnchor = timerAnchor;
+                plugin.RequestSave();
+            }
+
+            var timerX = row.TimerOffsetX;
+            if (ImGui.InputInt("Time offset X (px)", ref timerX, 1, 5))
+            {
+                row.TimerOffsetX = timerX;
+                plugin.RequestSave();
+            }
+
+            var timerY = row.TimerOffsetY;
+            if (ImGui.InputInt("Time offset Y (px)", ref timerY, 1, 5))
+            {
+                row.TimerOffsetY = timerY;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var showStacks = row.ShowStacks;
+            if (ImGui.Checkbox("Show the stack count", ref showStacks))
+            {
+                row.ShowStacks = showStacks;
+                plugin.RequestSave();
+            }
+
+            // 0 = automatic (three quarters of the time size), as in the auras.
+            var stackSize = row.StackTextSize;
+            if (ImGui.SliderInt("Stack size (px, 0 = automatic)", ref stackSize, 0, 24))
+            {
+                row.StackTextSize = stackSize;
+                plugin.RequestSave();
+            }
+
+            var stacksAnchor = row.StacksAnchor;
+            if (EnumCombo("Stack position", ref stacksAnchor, point => point.Label()))
+            {
+                row.StacksAnchor = stacksAnchor;
+                plugin.RequestSave();
+            }
+
+            var stacksX = row.StacksOffsetX;
+            if (ImGui.InputInt("Stack offset X (px)", ref stacksX, 1, 5))
+            {
+                row.StacksOffsetX = stacksX;
+                plugin.RequestSave();
+            }
+
+            var stacksY = row.StacksOffsetY;
+            if (ImGui.InputInt("Stack offset Y (px)", ref stacksY, 1, 5))
+            {
+                row.StacksOffsetY = stacksY;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            var font = row.Font;
+            if (EnumCombo("Text font", ref font, FontLabel))
+            {
+                row.Font = font;
+                plugin.RequestSave();
+            }
+
+            if (row.Filter == PartyAuraFilter.All)
+            {
+                ImGui.Spacing();
+                ImGui.TextColored(Theme.TextMuted, $"Every {kind} is shown. Pick \"Only the ones in my list\" to choose them.");
+                return;
+            }
+
+            DrawPartyStatusList(row, isBuff, kind, search);
+        });
+    }
+
+    // The list of statuses of a row: what is in it, a way to add from what the party has right now, and a name search.
+    private void DrawPartyStatusList(PartyAuraSettings row, bool isBuff, string kind, StatusSearchState search)
+    {
+        ImGui.Spacing();
+        ImGui.TextColored(Theme.TextMuted, row.Filter == PartyAuraFilter.OnlyListed ? $"Only these {kind}s are shown:" : $"These {kind}s are hidden:");
+
+        if (row.StatusIds.Count == 0)
+            ImGui.TextColored(Theme.TextMuted, "  Nothing in the list yet.");
+
+        uint? toRemove = null;
+        for (var i = 0; i < row.StatusIds.Count; i++)
+        {
+            var id = row.StatusIds[i];
+            ImGui.Text($"  {GameNames.StatusName(id)} ({id})");
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton($"Remove##rm_{kind}_{id}"))
+                toRemove = id;
+        }
+
+        if (toRemove is not null)
+        {
+            row.StatusIds.Remove(toRemove.Value);
+            plugin.RequestSave();
+        }
+
+        // What the party has right now, to add with one click.
+        ImGui.Spacing();
+        ImGui.TextColored(Theme.TextMuted, $"On your party right now (click to add):");
+
+        var wanted = (byte)(isBuff ? 1 : 2);
+        var seen = new HashSet<uint>();
+
+        foreach (var member in plugin.GameData.Current.Party)
+        {
+            foreach (var status in member.Statuses)
+            {
+                if (seen.Count >= 10)
+                    break;
+
+                if (GameNames.StatusCategory(status.Id) != wanted || row.StatusIds.Contains(status.Id) || !seen.Add(status.Id))
+                    continue;
+
+                if (ImGui.Selectable($"{GameNames.StatusName(status.Id)} ({status.Id})##now_{kind}_{status.Id}"))
+                {
+                    row.StatusIds.Add(status.Id);
+                    plugin.RequestSave();
+                }
+            }
+        }
+
+        if (seen.Count == 0)
+            ImGui.TextColored(Theme.TextMuted, "  Nothing new at the moment.");
+
+        ImGui.Spacing();
+
+        var text = search.Text;
+        if (ImGui.InputText($"Search by name##search_{kind}", ref text, 64))
+            search.Text = text;
+
+        foreach (var result in search.Results)
+        {
+            if (row.StatusIds.Contains(result.Id))
+                continue;
+
+            var resultKind = result.Category switch
+            {
+                1 => "buff",
+                2 => "debuff",
+                _ => string.Empty
+            };
+
+            if (ImGui.Selectable($"{result.Name} ({result.Id})   {resultKind}##res_{kind}_{result.Id}"))
+            {
+                row.StatusIds.Add(result.Id);
+                plugin.RequestSave();
+            }
+        }
+    }
+
+    // A text size chosen from the fixed steps: each one is a real font, so the text is always sharp.
+    private static bool SizeCombo(string label, ref int value)
+    {
+        var changed = false;
+
+        if (ImGui.BeginCombo(label, $"{value} px", ImGuiComboFlags.None))
+        {
+            foreach (var size in OverlayFonts.AvailableSizes)
+            {
+                if (ImGui.Selectable($"{size} px", value == size))
+                {
+                    value = size;
+                    changed = true;
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        return changed;
+    }
+
+    private static string PartyFilterLabel(PartyAuraFilter mode, string kind) => mode switch
+    {
+        PartyAuraFilter.All => $"Every {kind}",
+        PartyAuraFilter.OnlyListed => "Only the ones in my list",
+        _ => "All except the ones in my list"
+    };
+
+    private static string PartyGrowthLabel(PartyAuraGrowth growth) => growth switch
+    {
+        PartyAuraGrowth.Left => "Left",
+        PartyAuraGrowth.Right => "Right",
+        PartyAuraGrowth.Up => "Up",
+        _ => "Down"
+    };
+
+    private static string PartyOrderLabel(PartyOrder order) => order switch
+    {
+        PartyOrder.GameOrder => "Same as the game's party list (follows its option)",
+        _ => "Me first, then the others"
+    };
+
+    private static string PartyManaLabel(PartyManaMode mode) => mode switch
+    {
+        PartyManaMode.Off => "No one",
+        PartyManaMode.Healers => "Healers",
+        PartyManaMode.HealersAndRaisers => "Healers and jobs that can raise",
+        _ => "Everyone"
+    };
 
     // One swatch per job. What is changed here is kept apart from the built-in colours, so it can always be reset.
     private void DrawClassColors(UnitFrameSettings settings)

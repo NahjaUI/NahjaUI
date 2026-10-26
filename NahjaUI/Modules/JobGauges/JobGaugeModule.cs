@@ -38,13 +38,6 @@ internal sealed class JobGaugeModule : IDisposable
     // Preview of the Warrior: enough gauge for one spender.
     private static readonly WarriorGaugeSnapshot WarriorSample = new(70);
 
-    private static readonly Vector2[] OutlineOffsets =
-    {
-        new(-1f, -1f), new(0f, -1f), new(1f, -1f),
-        new(-1f, 0f), new(1f, 0f),
-        new(-1f, 1f), new(0f, 1f), new(1f, 1f)
-    };
-
     private readonly Plugin plugin;
 
     public JobGaugeModule(Plugin plugin)
@@ -206,14 +199,7 @@ internal sealed class JobGaugeModule : IDisposable
             var textSize = ImGui.CalcTextSize(text);
             var textPos = new Vector2(MathF.Round(pos.X + (size.X - textSize.X) / 2f), MathF.Round(pos.Y + (size.Y - textSize.Y) / 2f));
 
-            var outline = MathF.Max(1f, MathF.Round(1.5f * scale));
-            var black = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
-            var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-
-            foreach (var offset in OutlineOffsets)
-                drawList.AddText(textPos + offset * outline, black, text);
-
-            drawList.AddText(textPos, white, text);
+            OutlinedText.Draw(drawList, textPos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
         }
     }
 
@@ -315,14 +301,7 @@ internal sealed class JobGaugeModule : IDisposable
             var textSize = ImGui.CalcTextSize(text);
             var textPos = new Vector2(MathF.Round(centerX - textSize.X / 2f), MathF.Round(pos.Y + (size.Y - textSize.Y) / 2f));
 
-            var outline = MathF.Max(1f, MathF.Round(1.5f * scale));
-            var black = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
-            var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-
-            foreach (var offset in OutlineOffsets)
-                drawList.AddText(textPos + offset * outline, black, text);
-
-            drawList.AddText(textPos, white, text);
+            OutlinedText.Draw(drawList, textPos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
         }
     }
 }

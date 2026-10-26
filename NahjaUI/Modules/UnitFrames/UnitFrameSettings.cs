@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
+using NahjaUI.Modules.PartyFrames;
 
 namespace NahjaUI.Modules.UnitFrames;
 
@@ -128,6 +129,9 @@ public class UnitFramesSettings
     public UnitFrameSettings TargetOfTarget { get; set; } = UnitFrameSettings.CreateSmall();
 
     public UnitFrameSettings Focus { get; set; } = UnitFrameSettings.CreateSmall();
+
+    /// <summary>The party frames: one bar per member. Its look is a normal frame look, the rest is only about the party.</summary>
+    public PartyFrameSettings Party { get; set; } = new();
 
     /// <summary>The job colours the user changed (class job id to colour), shared by every frame. The others use the built-in ones, see JobColors.</summary>
     public Dictionary<uint, Vector4> JobColorOverrides { get; set; } = new();

@@ -10,10 +10,6 @@
 Type /nui to open it.</Description>
 <Tags>ui;auras;hud</Tags>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Remove="Modules\NewFolder\**" />
-    <EmbeddedResource Remove="Modules\NewFolder\**" />
-  </ItemGroup>
 
   <ItemGroup>
     <Content Include="..\Data\goat.png">

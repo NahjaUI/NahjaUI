@@ -10,6 +10,8 @@ using NahjaUI.Game;
 using NahjaUI.Modules.Auras;
 using NahjaUI.Modules.CastBars;
 using NahjaUI.Modules.JobGauges;
+using NahjaUI.Modules.NamePlates;
+using NahjaUI.Modules.PartyFrames;
 using NahjaUI.Modules.UnitFrames;
 using NahjaUI.Windows;
 
@@ -31,6 +33,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
     [PluginService] internal static IJobGauges JobGauges { get; private set; } = null!;
+    [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
+    [PluginService] internal static INamePlateGui NamePlateGui { get; private set; } = null!;
 
     private const string CommandName = "/nui";
 
@@ -55,6 +59,8 @@ public sealed class Plugin : IDalamudPlugin
     internal JobGaugeEditor JobGaugeEditorPage { get; init; }
     internal UnitFrameModule UnitFrameSystem { get; init; }
     internal UnitFrameEditor UnitFrameEditorPage { get; init; }
+    internal PartyFrameModule PartyFrameSystem { get; init; }
+    internal NamePlateModule NamePlateSystem { get; init; }
 
     // Set when something changed; the configuration is written once the mouse button is released.
     private bool saveRequested;
@@ -80,6 +86,8 @@ public sealed class Plugin : IDalamudPlugin
         JobGaugeEditorPage = new JobGaugeEditor(this);
         UnitFrameSystem = new UnitFrameModule(this);
         UnitFrameEditorPage = new UnitFrameEditor(this);
+        PartyFrameSystem = new PartyFrameModule(this);
+        NamePlateSystem = new NamePlateModule(this);
         UnlockOverlay = new UnlockOverlay(this, Layout);
 
         MainWindow = new MainWindow(this);
@@ -114,6 +122,8 @@ public sealed class Plugin : IDalamudPlugin
         CastBarSystem.Dispose();
         JobGaugeSystem.Dispose();
         UnitFrameSystem.Dispose();
+        PartyFrameSystem.Dispose();
+        NamePlateSystem.Dispose();
         GameData.Dispose();
         Fonts.Dispose();
 
@@ -132,6 +142,8 @@ public sealed class Plugin : IDalamudPlugin
 
         WindowSystem.Draw();
         UnitFrameSystem.Draw();
+        PartyFrameSystem.Draw();
+        NamePlateSystem.Draw();
         AuraSystem.Draw();
         CastBarSystem.Draw();
         JobGaugeSystem.Draw();
@@ -175,6 +187,12 @@ public sealed class Plugin : IDalamudPlugin
         if (args.Trim().ToLowerInvariant() == "unlock")
         {
             Layout.UnlockMode = !Layout.UnlockMode;
+            return;
+        }
+
+        if (args.Trim().ToLowerInvariant() == "nameplates")
+        {
+            NamePlateSystem.Toggle();
             return;
         }
 
@@ -233,7 +251,8 @@ public sealed class Plugin : IDalamudPlugin
                      Configuration.UnitFrames.Player,
                      Configuration.UnitFrames.Target,
                      Configuration.UnitFrames.TargetOfTarget,
-                     Configuration.UnitFrames.Focus
+                     Configuration.UnitFrames.Focus,
+                     Configuration.UnitFrames.Party.Look
                  })
         {
             frame.Name.Font = OverlayFont.NahjaDisplay;

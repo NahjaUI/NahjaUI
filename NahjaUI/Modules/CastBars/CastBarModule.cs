@@ -26,13 +26,6 @@ internal sealed class CastBarModule : IDisposable
 
     private static readonly string[] NativeBars = { NativePlayerBar, NativeTargetBar };
 
-    private static readonly Vector2[] OutlineOffsets =
-    {
-        new(-1f, -1f), new(0f, -1f), new(1f, -1f),
-        new(-1f, 0f), new(1f, 0f),
-        new(-1f, 1f), new(0f, 1f), new(1f, 1f)
-    };
-
     private readonly Plugin plugin;
 
     public CastBarModule(Plugin plugin)
@@ -274,14 +267,6 @@ internal sealed class CastBarModule : IDisposable
 
     private static void DrawOutlined(ImDrawListPtr drawList, Vector2 pos, string text)
     {
-        var scale = ImGuiHelpers.GlobalScale;
-        var outline = MathF.Max(1f, MathF.Round(1.5f * scale));
-        var black = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
-        var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-
-        foreach (var offset in OutlineOffsets)
-            drawList.AddText(pos + offset * outline, black, text);
-
-        drawList.AddText(pos, white, text);
+        OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
     }
 }

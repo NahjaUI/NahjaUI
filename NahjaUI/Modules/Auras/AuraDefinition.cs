@@ -145,6 +145,9 @@ public class AuraDefinition
     /// </summary>
     public int IconCropPercent { get; set; } = 13;
 
+    /// <summary>Corner rounding of the icon, in pixels. The same idea as the unit frames, so the interface looks consistent. 0 = square.</summary>
+    public int CornerRadiusPx { get; set; } = 3;
+
     // Load conditions
     public AuraLoadConditions Load { get; set; } = new();
 
@@ -155,6 +158,7 @@ public class AuraDefinition
     public void CopyStyleFrom(AuraDefinition other)
     {
         IconCropPercent = other.IconCropPercent;
+        CornerRadiusPx = other.CornerRadiusPx;
         ShowTimer = other.ShowTimer;
         ShowStacks = other.ShowStacks;
         TextSize = other.TextSize;
