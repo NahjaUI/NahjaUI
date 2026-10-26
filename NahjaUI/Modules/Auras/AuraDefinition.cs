@@ -118,8 +118,14 @@ public class AuraDefinition
     /// <summary>Font size of the timer, in pixels. One of the sizes in OverlayFonts.AvailableSizes.</summary>
     public int TextSize { get; set; } = 12;
 
+    /// <summary>
+    /// Font size of the charges / stack count, in pixels. 0 means automatic: three quarters of the timer size
+    /// (how it always was), so existing auras look the same.
+    /// </summary>
+    public int StackTextSize { get; set; } = 0;
+
     /// <summary>Font family of the timer and stack text.</summary>
-    public OverlayFont Font { get; set; } = OverlayFont.GameNumbers;
+    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
 
     // Where the texts sit on the icon. The anchor is a point of the icon (corner, edge or centre): the same
     // point of the text is attached to it, so a right anchor right-justifies the text and a centre anchor centres it.
@@ -152,6 +158,7 @@ public class AuraDefinition
         ShowTimer = other.ShowTimer;
         ShowStacks = other.ShowStacks;
         TextSize = other.TextSize;
+        StackTextSize = other.StackTextSize;
         Font = other.Font;
         TimerAnchor = other.TimerAnchor;
         TimerOffsetX = other.TimerOffsetX;

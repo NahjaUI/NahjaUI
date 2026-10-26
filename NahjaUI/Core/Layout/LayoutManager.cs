@@ -28,6 +28,19 @@ internal sealed class LayoutElement
     /// </summary>
     public bool IsManaged { get; set; }
 
+    /// <summary>
+    /// True when the element belongs to something that does not apply right now (an aura or gauge of another job).
+    /// Hidden elements are left out of unlock mode and the Layout page, so only what you can use is shown.
+    /// Their saved position is kept.
+    /// </summary>
+    public bool IsHidden { get; set; }
+
+    /// <summary>
+    /// Set every frame by a module whose drawn area is not the same as its layout box (an aura group: the box that
+    /// unlock mode shows is the whole area covered by its icons). Physical pixels. Null means "use the layout".
+    /// </summary>
+    public (Vector2 Pos, Vector2 Size)? DisplayRect { get; set; }
+
     /// <summary>The saved, editable layout (it lives inside the plugin configuration).</summary>
     public ElementLayout Layout { get; }
 
@@ -50,8 +63,8 @@ internal sealed class LayoutManager
 
     public IReadOnlyList<LayoutElement> Elements => elements;
 
-    /// <summary>The elements the user can move by hand (those not placed by a group).</summary>
-    public IReadOnlyList<LayoutElement> Positionable => elements.Where(e => !e.IsManaged).ToList();
+    /// <summary>The elements the user can move by hand (those not placed by a group and not belonging to another job).</summary>
+    public IReadOnlyList<LayoutElement> Positionable => elements.Where(e => !e.IsManaged && !e.IsHidden).ToList();
 
     /// <summary>True while the user is moving elements around.</summary>
     public bool UnlockMode { get; set; }
@@ -78,6 +91,15 @@ internal sealed class LayoutManager
         return element;
     }
 
+    /// <summary>Removes an element from the list but keeps its saved position (used when auras are reloaded).</summary>
+    public void Detach(string id)
+    {
+        elements.RemoveAll(e => e.Id == id);
+
+        if (SelectedId == id)
+            SelectedId = null;
+    }
+
     /// <summary>Removes an element and forgets its saved position (used when an aura is deleted).</summary>
     public void Unregister(string id)
     {
@@ -87,6 +109,10 @@ internal sealed class LayoutManager
         if (SelectedId == id)
             SelectedId = null;
     }
+
+    /// <summary>The box unlock mode draws for an element: its display rect if the module gave one, else its layout box.</summary>
+    public static (Vector2 Pos, Vector2 Size) GetDisplayRect(LayoutElement element) =>
+        element.DisplayRect ?? GetRect(element.Layout);
 
     /// <summary>
     /// Final position and size in physical screen pixels, rounded to whole pixels

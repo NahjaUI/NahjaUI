@@ -48,9 +48,15 @@ internal sealed class ThemeScope : IDisposable
     private int varCount;
     private bool disposed;
 
+    // The font of the menus. Pushed before the window starts, so the title bar uses it too.
+    private readonly IDisposable? fontScope;
+
     public ThemeScope(Configuration config)
     {
         var scale = ImGuiHelpers.GlobalScale;
+
+        // Logical pixels: the fonts are already built for the UI scale.
+        fontScope = OverlayFonts.Current?.PushClosest(OverlayFont.NahjaText, config.MenuTextSize);
         var accent = config.AccentColor;
         Theme.Accent = accent;
 
@@ -136,6 +142,7 @@ internal sealed class ThemeScope : IDisposable
         disposed = true;
         ImGui.PopStyleVar(varCount);
         ImGui.PopStyleColor(colorCount);
+        fontScope?.Dispose();
     }
 }
 

@@ -14,7 +14,8 @@ namespace NahjaUI.Game;
 internal sealed record StatusSnapshot(uint Id, uint SourceId, float RemainingTime, ushort Param);
 
 /// <summary>An action a unit is casting right now.</summary>
-internal sealed record CastSnapshot(uint ActionId, float CurrentTime, float TotalTime, bool Interruptible);
+/// <param name="ActionType">What is being cast: 1 = an action (spell or ability), 2 = an item, 5 = a general action, 13 = a mount.</param>
+internal sealed record CastSnapshot(uint ActionId, float CurrentTime, float TotalTime, bool Interruptible, byte ActionType = 1);
 
 /// <summary>The cooldown state of one player action (an ability).</summary>
 /// <param name="ActionId">The action id that was asked for.</param>
@@ -53,7 +54,19 @@ internal sealed record UnitSnapshot(
     uint MaxMp,
     bool IsDead,
     CastSnapshot? Cast,
-    IReadOnlyList<StatusSnapshot> Statuses);
+    IReadOnlyList<StatusSnapshot> Statuses,
+    bool IsPlayer = false,
+    byte ShieldPercent = 0,
+    bool IsHostile = false);
+
+/// <summary>
+/// The White Mage job gauge. Only present while the player is a White Mage.
+/// LilyTimerMs is the raw timer of the game, in milliseconds (it counts up towards the next lily).
+/// </summary>
+internal sealed record WhiteMageGaugeSnapshot(byte Lily, byte BloodLily, float LilyTimerMs);
+
+/// <summary>The Warrior job gauge (Beast Gauge, 0 to 100). Only present while the player is a Warrior.</summary>
+internal sealed record WarriorGaugeSnapshot(byte BeastGauge);
 
 /// <summary>General situation: where we are and what we are doing.</summary>
 internal sealed record ContextSnapshot(uint TerritoryId, bool InCombat, bool InDuty, int PartySize)
@@ -71,7 +84,9 @@ internal sealed record GameSnapshot(
     IReadOnlyList<UnitSnapshot> Party,
     ContextSnapshot Context,
     IReadOnlyDictionary<uint, CooldownSnapshot> Cooldowns,
-    long Frame)
+    long Frame,
+    WhiteMageGaugeSnapshot? WhiteMage = null,
+    WarriorGaugeSnapshot? Warrior = null)
 {
     public static readonly GameSnapshot Empty = new(
         false, null, null, null, null, Array.Empty<UnitSnapshot>(), ContextSnapshot.None,

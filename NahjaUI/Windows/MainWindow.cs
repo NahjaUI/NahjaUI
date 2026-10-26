@@ -1,11 +1,13 @@
 using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Lumina.Excel.Sheets;
 using NahjaUI.Core.Layout;
+using NahjaUI.Core.Profiles;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 
@@ -13,19 +15,43 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly string[] Pages = { "General", "Auras", "Appearance", "Layout", "Debug" };
+    private static readonly string[] Pages = { "General", "Auras", "Unit frames", "Cast bars", "Job gauges", "Appearance", "Profiles", "Layout", "Debug" };
 
     private readonly Plugin plugin;
+    private readonly ProfilesPage profilesPage;
     private ThemeScope? themeScope;
 
     // Only used by the preview card on the Appearance page.
     private bool previewToggle = true;
     private int previewValue = 46;
 
+    // The tool that lists the game's own windows (Debug page).
+    private string windowFilter = "Target";
+    private bool windowOnlyVisible = true;
+
+    // Where the window must appear when it is opened from the small bar (its top right corner), and the corner as of the last frame.
+    private Vector2 wantedTopRight;
+    private int placeFrames;
+    private Vector2 lastSize;
+
     public MainWindow(Plugin plugin)
-        : base("NahjaUI###NahjaUIMainWindow", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+        // The spaces in front of the title keep the first letter clear of the rounded corner.
+        // The game's own collapse arrow is off: the minimize button below turns the window into a small bar instead.
+        : base("   NahjaUI###NahjaUIMainWindow", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse)
     {
         this.plugin = plugin;
+        profilesPage = new ProfilesPage(plugin);
+
+        TitleBarButtons.Add(new TitleBarButton
+        {
+            Icon = FontAwesomeIcon.WindowMinimize,
+            ShowTooltip = () => ImGui.SetTooltip("Minimize to a small bar"),
+            Click = button =>
+            {
+                if (button == ImGuiMouseButton.Left)
+                    plugin.MinimizeMainWindow();
+            }
+        });
 
         Size = new Vector2(860, 560);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -38,11 +64,37 @@ public class MainWindow : Window, IDisposable
 
     public void Dispose() { }
 
+    /// <summary>The top right corner of the window, in screen pixels, as of the last frame.</summary>
+    public Vector2 TopRight { get; private set; }
+
+    /// <summary>Opens the window with its top right corner at the given point (it is kept inside the screen).</summary>
+    public void ShowAt(Vector2 topRight)
+    {
+        wantedTopRight = topRight;
+        placeFrames = 3;
+        IsOpen = true;
+    }
+
     // The theme must be pushed before the window begins and popped after it ends.
     public override void PreDraw()
     {
         themeScope?.Dispose();
         themeScope = new ThemeScope(plugin.Configuration);
+
+        // Coming back from the small bar: the window opens where the bar was.
+        if (placeFrames > 0 && lastSize.X > 0f)
+        {
+            placeFrames--;
+
+            var viewport = ImGui.GetMainViewport();
+            var maxX = Math.Max(viewport.Pos.X, viewport.Pos.X + viewport.Size.X - lastSize.X);
+            var maxY = Math.Max(viewport.Pos.Y, viewport.Pos.Y + viewport.Size.Y - lastSize.Y);
+
+            var x = Math.Clamp(wantedTopRight.X - lastSize.X, viewport.Pos.X, maxX);
+            var y = Math.Clamp(wantedTopRight.Y, viewport.Pos.Y, maxY);
+
+            ImGui.SetNextWindowPos(new Vector2(MathF.Round(x), MathF.Round(y)), ImGuiCond.Always);
+        }
     }
 
     public override void PostDraw()
@@ -59,6 +111,11 @@ public class MainWindow : Window, IDisposable
     public override void Draw()
     {
         var scale = ImGuiHelpers.GlobalScale;
+
+        // Remember where the window is, for the small bar to appear in the same corner.
+        var windowPos = ImGui.GetWindowPos();
+        lastSize = ImGui.GetWindowSize();
+        TopRight = new Vector2(windowPos.X + lastSize.X, windowPos.Y);
 
         // Padding of buttons and fields goes here, not in PreDraw, so the title bar buttons do not overlap.
         using var contentStyle = new ContentStyleScope();
@@ -178,8 +235,20 @@ public class MainWindow : Window, IDisposable
             case "Auras":
                 plugin.AuraEditorPage.Draw();
                 break;
+            case "Unit frames":
+                plugin.UnitFrameEditorPage.Draw();
+                break;
+            case "Cast bars":
+                plugin.CastBarEditorPage.Draw();
+                break;
+            case "Job gauges":
+                plugin.JobGaugeEditorPage.Draw();
+                break;
             case "Appearance":
                 DrawAppearance();
+                break;
+            case "Profiles":
+                profilesPage.Draw();
                 break;
             case "Layout":
                 DrawLayout();
@@ -198,7 +267,11 @@ public class MainWindow : Window, IDisposable
     private static string PageSubtitle(string page) => page switch
     {
         "Auras" => "Track the buffs and debuffs you care about",
+        "Unit frames" => "Life, name and mana of you and your targets",
+        "Cast bars" => "Your cast and your target's cast",
+        "Job gauges" => "The gauge of your job, drawn by NahjaUI",
         "Appearance" => "Theme and look of the interface",
+        "Profiles" => "Back up, move and share your settings",
         "Layout" => "Position and size of every element",
         "Debug" => "Live game data and diagnostics",
         _ => "Overview and status"
@@ -245,6 +318,32 @@ public class MainWindow : Window, IDisposable
                 config.AccentColor = Theme.DefaultAccent;
                 plugin.RequestSave();
             }
+        });
+
+        Widgets.Card("##card_fonts", 6, () =>
+        {
+            Widgets.SectionLabel("Fonts");
+
+            if (ImGui.BeginCombo("Menu text size (px)", $"{config.MenuTextSize} px"))
+            {
+                foreach (var size in OverlayFonts.MenuTextSizes)
+                {
+                    if (ImGui.Selectable($"{size} px", size == config.MenuTextSize))
+                    {
+                        config.MenuTextSize = size;
+                        plugin.RequestSave();
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+
+            ImGui.Spacing();
+            if (ImGui.Button("Use the NahjaUI font everywhere"))
+                plugin.UseNahjaFontEverywhere();
+
+            ImGui.TextColored(Theme.TextMuted, "Sets the font of every aura, aura group and cast bar to Saira.");
+            ImGui.TextColored(Theme.TextMuted, "New auras and cast bars already start with it.");
         });
 
         Widgets.Card("##card_preview", 6, () =>
@@ -444,6 +543,59 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.Text($"{member.Name}  {GameNames.JobAbbreviation(member.JobId)} Lv {member.Level}   HP {member.Hp}/{member.MaxHp}   statuses: {member.Statuses.Count}");
             }
+        });
+
+        Widgets.Card("##card_game_windows", 16, () =>
+        {
+            Widgets.SectionLabel("Game windows");
+            ImGui.TextColored(Theme.TextMuted, "To find the names of the game's own bars: select a target, a focus and a target of target,");
+            ImGui.TextColored(Theme.TextMuted, "then look for \"Target\" and \"Focus\" here. Only needed once, to hide them.");
+            ImGui.Spacing();
+
+            ImGui.InputText("Name contains", ref windowFilter, 32);
+            ImGui.Checkbox("Only visible windows", ref windowOnlyVisible);
+            ImGui.Spacing();
+
+            foreach (var (name, visible) in GameWindowList.Read())
+            {
+                if (windowOnlyVisible && !visible)
+                    continue;
+
+                if (windowFilter.Length > 0 && !name.Contains(windowFilter, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                ImGui.TextColored(visible ? Theme.Text : Theme.TextMuted, name);
+            }
+        });
+
+        Widgets.Card("##card_gauge_whm_raw", 6, () =>
+        {
+            Widgets.SectionLabel("White Mage gauge (raw)");
+
+            var whm = snapshot.WhiteMage;
+            if (whm is null)
+            {
+                ImGui.TextColored(Theme.TextMuted, "Not a White Mage right now.");
+                return;
+            }
+
+            ImGui.Text($"Lilies: {whm.Lily}");
+            ImGui.Text($"Blood lilies: {whm.BloodLily}");
+            ImGui.Text($"Lily timer (raw): {whm.LilyTimerMs:0} ms");
+        });
+
+        Widgets.Card("##card_gauge_war_raw", 4, () =>
+        {
+            Widgets.SectionLabel("Warrior gauge (raw)");
+
+            var war = snapshot.Warrior;
+            if (war is null)
+            {
+                ImGui.TextColored(Theme.TextMuted, "Not a Warrior right now.");
+                return;
+            }
+
+            ImGui.Text($"Beast Gauge: {war.BeastGauge}");
         });
 
         Widgets.Card("##card_cooldowns", snapshot.Cooldowns.Count * 2 + 3, () =>

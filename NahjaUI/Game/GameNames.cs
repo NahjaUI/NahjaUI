@@ -26,6 +26,8 @@ internal static class GameNames
     private static readonly Dictionary<uint, string> JobNames = new();
     private static readonly Dictionary<uint, string> ActionNames = new();
     private static readonly Dictionary<uint, uint> ActionIcons = new();
+    private static readonly Dictionary<(byte Type, uint Id), string> CastNames = new();
+    private static readonly Dictionary<(byte Type, uint Id), uint> CastIcons = new();
 
     public static string StatusName(uint statusId)
     {
@@ -206,6 +208,83 @@ internal static class GameNames
         }
 
         return results;
+    }
+
+    // ---------------------------------------------------------------- what is being cast
+
+    /// <summary>
+    /// The name of what a character is casting. Spells and abilities have their own sheet; items, general actions
+    /// and mounts are handled too. Anything else is just called "Casting".
+    /// </summary>
+    public static string CastName(byte actionType, uint id)
+    {
+        if (actionType == 1)
+            return ActionName(id);
+
+        if (CastNames.TryGetValue((actionType, id), out var cached))
+            return cached;
+
+        var name = string.Empty;
+
+        switch (actionType)
+        {
+            case 2: // an item (high quality items add 1,000,000 to the id)
+                if (Plugin.DataManager.GetExcelSheet<Item>().TryGetRow(id % 1_000_000, out var item))
+                    name = item.Name.ToString();
+                break;
+
+            case 5: // a general action
+                if (Plugin.DataManager.GetExcelSheet<GeneralAction>().TryGetRow(id, out var general))
+                    name = general.Name.ToString();
+                break;
+
+            case 13: // a mount
+                if (Plugin.DataManager.GetExcelSheet<Mount>().TryGetRow(id, out var mount))
+                {
+                    var singular = mount.Singular.ToString();
+                    name = singular.Length > 0 ? char.ToUpperInvariant(singular[0]) + singular[1..] : string.Empty;
+                }
+                break;
+        }
+
+        if (string.IsNullOrEmpty(name))
+            name = "Casting";
+
+        CastNames[(actionType, id)] = name;
+        return name;
+    }
+
+    /// <summary>The icon id of what a character is casting, or 0 if there is none.</summary>
+    public static uint CastIconId(byte actionType, uint id)
+    {
+        if (actionType == 1)
+            return ActionIconId(id);
+
+        if (CastIcons.TryGetValue((actionType, id), out var cached))
+            return cached;
+
+        uint icon = 0;
+
+        switch (actionType)
+        {
+            case 2:
+                if (Plugin.DataManager.GetExcelSheet<Item>().TryGetRow(id % 1_000_000, out var item))
+                    icon = item.Icon;
+                break;
+
+            case 5:
+                if (Plugin.DataManager.GetExcelSheet<GeneralAction>().TryGetRow(id, out var general))
+                    icon = (uint)general.Icon;
+                break;
+
+            case 13:
+                if (Plugin.DataManager.GetExcelSheet<Mount>().TryGetRow(id, out var mount))
+                    icon = mount.Icon;
+                break;
+        }
+
+        CastIcons[(actionType, id)] = icon;
+        return icon;
     }
 
     public static string JobAbbreviation(uint jobId)

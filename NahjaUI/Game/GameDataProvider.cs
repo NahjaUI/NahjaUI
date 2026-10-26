@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.JobGauge.Types;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Game.ClientState.Statuses;
@@ -95,16 +97,54 @@ internal sealed class GameDataProvider : IDisposable
             Plugin.Condition[ConditionFlag.BoundByDuty],
             Plugin.PartyList.Length);
 
+        var player = ToUnit(localPlayer);
+
         return new GameSnapshot(
             true,
-            ToUnit(localPlayer),
+            player,
             ToUnit(target),
             ToUnit(Plugin.TargetManager.FocusTarget),
-            ToUnit(target?.TargetObject),
+            ToUnit(TargetOfTarget(target, localPlayer)),
             BuildParty(),
             context,
             BuildCooldowns(),
-            frame);
+            frame,
+            BuildWhiteMageGauge(player),
+            BuildWarriorGauge(player));
+    }
+
+    // The White Mage gauge (class job 24). Nobody else has one, and the game only fills it for White Mages.
+    private const uint WhiteMageJobId = 24;
+
+    private static WhiteMageGaugeSnapshot? BuildWhiteMageGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != WhiteMageJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<WHMGauge>();
+        return new WhiteMageGaugeSnapshot(gauge.Lily, gauge.BloodLily, Math.Max((short)0, gauge.LilyTimer));
+    }
+
+    // The Warrior gauge. Warrior is class job 21 (Marauder, its first class, is 3 and has no Beast Gauge).
+    private const uint WarriorJobId = 21;
+
+    private static WarriorGaugeSnapshot? BuildWarriorGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != WarriorJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<WARGauge>();
+        return new WarriorGaugeSnapshot(gauge.BeastGauge);
+    }
+
+    // The target of the target. For your own character the game keeps the target somewhere else than for the rest, so the
+    // usual reading comes back empty when you target yourself. In that case your target's target is you.
+    private static IGameObject? TargetOfTarget(IGameObject? target, IGameObject localPlayer)
+    {
+        if (target is null)
+            return null;
+
+        return target.EntityId == localPlayer.EntityId ? target : target.TargetObject;
     }
 
     // ---------------------------------------------------------------- conversion helpers
@@ -126,7 +166,10 @@ internal sealed class GameDataProvider : IDisposable
             chara.MaxMp,
             chara.IsDead,
             ToCast(chara),
-            ToStatuses(chara.StatusList));
+            ToStatuses(chara.StatusList),
+            chara.ObjectKind == ObjectKind.Pc,
+            chara.ShieldPercentage,
+            chara.StatusFlags.HasFlag(StatusFlags.Hostile));
     }
 
     private static UnitSnapshot ToUnit(IPartyMember member)
@@ -154,7 +197,7 @@ internal sealed class GameDataProvider : IDisposable
         if (!chara.IsCasting)
             return null;
 
-        return new CastSnapshot(chara.CastActionId, chara.CurrentCastTime, chara.TotalCastTime, chara.IsCastInterruptible);
+        return new CastSnapshot(chara.CastActionId, chara.CurrentCastTime, chara.TotalCastTime, chara.IsCastInterruptible, chara.CastActionType);
     }
 
     private static IReadOnlyList<StatusSnapshot> ToStatuses(StatusList statusList)

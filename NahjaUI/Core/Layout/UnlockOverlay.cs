@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -7,9 +9,9 @@ using NahjaUI.Core.Ui;
 namespace NahjaUI.Core.Layout;
 
 /// <summary>
-/// Unlock mode, in the style of ElvUI movers:
-/// every element is a box with a tag outside it (name and coordinates), and the selected element
-/// gets a small panel next to it with exact X/Y fields, Locked and Reset position.
+/// Unlock mode, in the style of ElvUI movers: every element is a plain box. The panel with the name, the exact
+/// X/Y fields, Locked and Reset position only appears next to the box under the mouse, or next to the selected one,
+/// so the screen stays clean and every box is easy to find and click.
 /// </summary>
 internal sealed class UnlockOverlay
 {
@@ -22,6 +24,24 @@ internal sealed class UnlockOverlay
     private int dragStartX;
     private int dragStartY;
 
+    // Which box is being dragged, or is under the mouse, this frame (filled while the boxes are drawn).
+    private string? activeId;
+    private string? hoveredId;
+
+    // The panel: whose it was last frame, where it is, and for how long it stays after the mouse leaves a box
+    // (so the mouse has time to travel from the box to the panel).
+    private string? panelId;
+    private bool panelShown;
+    private bool panelBusy;
+    private double keepPanelUntil;
+    private Vector2 panelPos;
+    private Vector2 panelSize;
+
+    private const double PanelGraceSeconds = 0.4;
+
+    // Frames since unlock mode opened, to center the top bar a few times (see DrawToolbar).
+    private int toolbarFrames;
+
     public UnlockOverlay(Plugin plugin, LayoutManager layout)
     {
         this.plugin = plugin;
@@ -32,7 +52,10 @@ internal sealed class UnlockOverlay
     public void Draw()
     {
         if (!layout.UnlockMode)
+        {
+            toolbarFrames = 0;
             return;
+        }
 
         using var theme = new ThemeScope(config);
         using var contentStyle = new ContentStyleScope();
@@ -40,15 +63,18 @@ internal sealed class UnlockOverlay
         DrawGuides();
 
         // Elements placed by a group are not moved by hand: the group's own box is.
-        var movable = layout.Positionable;
+        // The biggest boxes are drawn first, so the small ones sit on top of them and can always be clicked.
+        var movable = layout.Positionable
+            .OrderByDescending(element => (long)element.Layout.Width * element.Layout.Height)
+            .ToList();
+
+        activeId = null;
+        hoveredId = null;
 
         foreach (var element in movable)
             DrawElement(element);
 
-        foreach (var element in movable)
-            DrawTag(element);
-
-        DrawInspector();
+        DrawInspector(movable);
         DrawToolbar();
     }
 
@@ -75,12 +101,12 @@ internal sealed class UnlockOverlay
 
     // ---------------------------------------------------------------- elements
 
-    // The draggable box of one element. It has no text: the tag is drawn outside, so any size works.
+    // The draggable box of one element. It has no text, so any size works.
     private void DrawElement(LayoutElement element)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var data = element.Layout;
-        var (pos, size) = LayoutManager.GetRect(data);
+        var (pos, size) = LayoutManager.GetDisplayRect(element);
         var selected = layout.SelectedId == element.Id;
 
         // A bare window with no padding or border, exactly the size of the element.
@@ -96,13 +122,23 @@ internal sealed class UnlockOverlay
         var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove |
                     ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse |
                     ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings |
-                    ImGuiWindowFlags.NoBackground;
+                    ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoBringToFrontOnFocus;
 
         var open = true;
         if (ImGui.Begin($"##nui_layout_{element.Id}", ref open, flags))
         {
             ImGui.SetCursorPos(Vector2.Zero);
             ImGui.InvisibleButton("##drag", size);
+
+            // The box being dragged wins over the one under the mouse.
+            if (ImGui.IsItemActive())
+                activeId = element.Id;
+            else if (ImGui.IsItemHovered())
+                hoveredId = element.Id;
+
+            // Right click on the selected box lets go of it, so the panel can follow the mouse again.
+            if (selected && ImGui.IsItemClicked(ImGuiMouseButton.Right))
+                layout.SelectedId = null;
 
             if (ImGui.IsItemActivated())
             {
@@ -133,51 +169,57 @@ internal sealed class UnlockOverlay
         ImGui.PopStyleVar(4);
     }
 
-    // A small label with the name and coordinates, always outside the box, whatever its size.
-    private void DrawTag(LayoutElement element)
-    {
-        var scale = ImGuiHelpers.GlobalScale;
-        var data = element.Layout;
-        var (pos, size) = LayoutManager.GetRect(data);
-        var selected = layout.SelectedId == element.Id;
-        var viewport = ImGui.GetMainViewport();
-
-        var text = $"{element.Name}   X {data.OffsetX}   Y {data.OffsetY}";
-        if (data.Locked)
-            text += "   (locked)";
-
-        var padding = new Vector2(6f, 3f) * scale;
-        var tagSize = ImGui.CalcTextSize(text) + padding * 2f;
-
-        // Above the box; below it when there is no room at the top of the screen.
-        var y = pos.Y - tagSize.Y - 3f * scale;
-        if (y < viewport.Pos.Y)
-            y = pos.Y + size.Y + 3f * scale;
-
-        var maxX = Math.Max(viewport.Pos.X, viewport.Pos.X + viewport.Size.X - tagSize.X);
-        var x = Math.Clamp(pos.X, viewport.Pos.X, maxX);
-
-        var tagPos = new Vector2(MathF.Round(x), MathF.Round(y));
-        var accent = data.Locked ? Theme.Warning : (selected ? Theme.Accent : Theme.Info);
-
-        var drawList = ImGui.GetBackgroundDrawList();
-        drawList.AddRectFilled(tagPos, tagPos + tagSize, ImGui.GetColorU32(Theme.WithAlpha(Theme.Card, 0.95f)), 4f * scale);
-        drawList.AddRect(tagPos, tagPos + tagSize, ImGui.GetColorU32(accent), 4f * scale, ImDrawFlags.None, 1f);
-        drawList.AddText(tagPos + padding, ImGui.GetColorU32(Theme.Text), text);
-    }
-
     // ---------------------------------------------------------------- inspector
 
-    // Panel next to the selected element: exact X/Y fields, Locked and Reset position.
-    private void DrawInspector()
+    // Panel next to one box: its name, exact X/Y fields, Locked and Reset position.
+    // It belongs to the box being dragged or under the mouse. When the mouse is on neither, it stays for a moment
+    // (and while the mouse is on the panel or a field is being edited), and then it falls back to the selected box.
+    // With nothing selected and nothing under the mouse there is no panel at all.
+    private void DrawInspector(List<LayoutElement> movable)
     {
-        var selected = layout.SelectedElement;
-        if (selected is null || selected.IsManaged)
+        var now = ImGui.GetTime();
+        var pointedId = activeId ?? hoveredId;
+
+        LayoutElement? selected = null;
+
+        // Once a box has been clicked, the panel stays with it, even when the mouse passes over other boxes on its way
+        // to the panel. Right click on the box (or click another box) to change.
+        var chosenBox = layout.SelectedElement;
+        if (chosenBox is not null && movable.Contains(chosenBox))
+        {
+            selected = chosenBox;
+            keepPanelUntil = now + PanelGraceSeconds;
+        }
+        else if (pointedId is not null)
+        {
+            selected = movable.FirstOrDefault(element => element.Id == pointedId);
+            keepPanelUntil = now + PanelGraceSeconds;
+        }
+        else if (panelShown && panelId is not null && (panelBusy || MouseOverPanel() || now < keepPanelUntil))
+        {
+            selected = movable.FirstOrDefault(element => element.Id == panelId);
+        }
+
+        if (selected is null)
+        {
+            var chosen = layout.SelectedElement;
+            if (chosen is not null && !chosen.IsManaged)
+                selected = chosen;
+        }
+
+        if (selected is null)
+        {
+            panelShown = false;
+            panelId = null;
+            panelBusy = false;
             return;
+        }
+
+        panelId = selected.Id;
 
         var scale = ImGuiHelpers.GlobalScale;
         var data = selected.Layout;
-        var (pos, size) = LayoutManager.GetRect(data);
+        var (pos, size) = LayoutManager.GetDisplayRect(selected);
         var viewport = ImGui.GetMainViewport();
 
         // Where to put the panel: under the box (and its tag), or above it when the box is near the bottom.
@@ -244,9 +286,22 @@ internal sealed class UnlockOverlay
                 selected.ResetToDefaults();
                 plugin.RequestSave();
             }
+
+            // Remember where the panel is and whether a field is in use, for the next frame.
+            panelPos = ImGui.GetWindowPos();
+            panelSize = ImGui.GetWindowSize();
+            panelBusy = ImGui.IsAnyItemActive() && activeId is null;
+            panelShown = true;
         }
 
         ImGui.End();
+    }
+
+    // True while the mouse is on the panel of the last frame (with a little margin).
+    private bool MouseOverPanel()
+    {
+        var margin = new Vector2(8f, 8f) * ImGuiHelpers.GlobalScale;
+        return ImGui.IsMouseHoveringRect(panelPos - margin, panelPos + panelSize + margin, false);
     }
 
     // ---------------------------------------------------------------- toolbar
@@ -257,11 +312,18 @@ internal sealed class UnlockOverlay
         var scale = ImGuiHelpers.GlobalScale;
         var viewport = ImGui.GetMainViewport();
 
+        // Centered at the top each time unlock mode opens. The window sizes itself to its text, and the centering
+        // uses the size of the previous frame, so it is repeated for the first few frames until the size settles.
+        // After that the bar stays where the user drags it.
         ImGuiHelpers.ForceNextWindowMainViewport();
-        ImGui.SetNextWindowPos(
-            new Vector2(viewport.Pos.X + viewport.Size.X * 0.5f, viewport.Pos.Y + 24f * scale),
-            ImGuiCond.FirstUseEver,
-            new Vector2(0.5f, 0f));
+        if (toolbarFrames < 5)
+        {
+            ImGui.SetNextWindowPos(
+                new Vector2(viewport.Pos.X + viewport.Size.X * 0.5f, viewport.Pos.Y + 24f * scale),
+                ImGuiCond.Always,
+                new Vector2(0.5f, 0f));
+            toolbarFrames++;
+        }
 
         var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize |
                     ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse;
@@ -270,7 +332,7 @@ internal sealed class UnlockOverlay
         if (ImGui.Begin("##nui_unlock_bar", ref open, flags))
         {
             ImGui.TextColored(Theme.Accent, "Unlock mode");
-            ImGui.TextColored(Theme.TextMuted, "Click a box to select it. Drag to move it, or type exact values in the panel.");
+            ImGui.TextColored(Theme.TextMuted, "Point at a box to see its name and position. Click it to keep its panel open, drag it to move it, or type exact values. Right click lets go.");
             ImGui.Spacing();
 
             if (Widgets.PrimaryButton("Done"))

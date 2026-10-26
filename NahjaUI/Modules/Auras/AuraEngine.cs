@@ -104,7 +104,30 @@ internal sealed class AuraEngine
     public AuraEngine(Plugin plugin)
     {
         this.plugin = plugin;
+        LoadFromConfiguration();
+    }
 
+    /// <summary>
+    /// Forgets every aura and group in memory and builds them again from the configuration. Used after a profile is
+    /// imported. Saved positions are kept (only the elements are detached, not forgotten).
+    /// </summary>
+    public void ReloadFromConfiguration()
+    {
+        foreach (var runtime in runtimes)
+            plugin.Layout.Detach(runtime.Element.Id);
+
+        foreach (var group in groups)
+            plugin.Layout.Detach(group.Element.Id);
+
+        runtimes.Clear();
+        groups.Clear();
+        shown.Clear();
+
+        LoadFromConfiguration();
+    }
+
+    private void LoadFromConfiguration()
+    {
         foreach (var definition in plugin.Configuration.AuraGroups)
             RegisterGroup(definition);
 
@@ -448,6 +471,9 @@ internal sealed class AuraEngine
             group.Element.Name = $"Group: {(string.IsNullOrWhiteSpace(group.Definition.Name) ? "unnamed" : group.Definition.Name)}";
         }
 
+        // The job of the player, to leave the auras of other jobs out of unlock mode (null while unknown: show all).
+        uint? currentJob = snapshot.IsLoggedIn ? snapshot.Player?.JobId : null;
+
         // 1. Evaluate every aura and sort the enabled ones into their groups.
         foreach (var runtime in runtimes)
         {
@@ -460,6 +486,7 @@ internal sealed class AuraEngine
 
             // An aura inside a group has no position of its own: the group places it.
             runtime.Element.IsManaged = group is not null;
+            runtime.Element.IsHidden = group is null && !AppliesToJob(definition, currentJob);
 
             if (!definition.Enabled || runtime.ConsecutiveErrors >= MaxConsecutiveErrors)
             {
@@ -493,17 +520,30 @@ internal sealed class AuraEngine
         // 3. Line up and draw the groups.
         foreach (var group in groups)
         {
+            // A group whose auras all belong to other jobs is not offered for positioning.
+            var anyApplies = group.Members.Count == 0;
+            foreach (var member in group.Members)
+            {
+                if (AppliesToJob(member.Definition, currentJob))
+                    anyApplies = true;
+            }
+
+            group.Element.IsHidden = !anyApplies;
+
             // In unlock mode every enabled member is drawn as a ghost, so the group can be placed
             // even when nothing is active. Otherwise only the visible auras take a slot.
             shown.Clear();
             foreach (var member in group.Members)
             {
-                if (unlock || member.State.Visible)
+                if ((unlock && AppliesToJob(member.Definition, currentJob)) || member.State.Visible)
                     shown.Add(member);
             }
 
             if (shown.Count == 0)
+            {
+                group.Element.DisplayRect = null;
                 continue;
+            }
 
             var (anchorPos, anchorSize) = LayoutManager.GetRect(group.Element.Layout);
 
@@ -512,6 +552,17 @@ internal sealed class AuraEngine
                 sizes[i] = LayoutManager.GetRect(shown[i].Element.Layout).Size;
 
             var positions = Arrange(group.Definition, anchorPos, anchorSize, sizes);
+
+            // The box unlock mode shows for the group is the whole area its icons cover.
+            var boxMin = positions[0];
+            var boxMax = positions[0] + sizes[0];
+            for (var i = 1; i < shown.Count; i++)
+            {
+                boxMin = Vector2.Min(boxMin, positions[i]);
+                boxMax = Vector2.Max(boxMax, positions[i] + sizes[i]);
+            }
+
+            group.Element.DisplayRect = (boxMin, boxMax - boxMin);
 
             for (var i = 0; i < shown.Count; i++)
                 SafeDraw(shown[i], positions[i], sizes[i], unlock);
@@ -720,6 +771,10 @@ internal sealed class AuraEngine
         return true;
     }
 
+    // Does the aura load on this job? (Only the job part of the load conditions; combat does not matter for placing.)
+    private static bool AppliesToJob(AuraDefinition aura, uint? job) =>
+        job is null || aura.Load.JobIds.Count == 0 || aura.Load.JobIds.Contains(job.Value);
+
     private static bool IsLoaded(AuraLoadConditions load, UnitSnapshot player, ContextSnapshot context)
     {
         if (load.JobIds.Count > 0 && !load.JobIds.Contains(player.JobId))
@@ -828,8 +883,12 @@ internal sealed class AuraEngine
                 DrawGlow(drawList, pos, size);
         }
 
-        // Text size is a font size in pixels (it follows the UI scale), chosen per aura.
-        var textPx = Math.Clamp(definition.TextSize, 8, 64) * scale;
+        // Text size is a font size in LOGICAL pixels, chosen per aura. Dalamud already builds the fonts scaled by the
+        // user's UI scale, so it must NOT be multiplied by the scale again.
+        var textPx = Math.Clamp(definition.TextSize, 8, 64);
+
+        // The charges / stack count have their own size; 0 = automatic (three quarters of the timer size).
+        var stackPx = definition.StackTextSize > 0 ? Math.Clamp(definition.StackTextSize, 8, 64) : textPx * 0.75f;
 
         var showTimer = definition.ShowTimer && state.Remaining > 0f && (isCooldown || state.StatusPresent);
         if (showTimer)
@@ -840,7 +899,7 @@ internal sealed class AuraEngine
         {
             // Charges left, for abilities that have more than one.
             if (definition.ShowStacks && state.MaxCharges > 1)
-                DrawOverlayText(drawList, state.Charges.ToString(), textPx * 0.75f, definition.Font, pos, size,
+                DrawOverlayText(drawList, state.Charges.ToString(), stackPx, definition.Font, pos, size,
                     definition.StacksAnchor, new Vector2(definition.StacksOffsetX, definition.StacksOffsetY));
         }
         else if (state.StatusPresent && definition.ShowStacks)
@@ -849,7 +908,7 @@ internal sealed class AuraEngine
             // there, for example the +30 % of Sprint.)
             var maxStacks = GameNames.MaxStacks(definition.StatusId);
             if (maxStacks > 1 && state.Stacks > 1 && state.Stacks <= maxStacks)
-                DrawOverlayText(drawList, state.Stacks.ToString(), textPx * 0.75f, definition.Font, pos, size,
+                DrawOverlayText(drawList, state.Stacks.ToString(), stackPx, definition.Font, pos, size,
                     definition.StacksAnchor, new Vector2(definition.StacksOffsetX, definition.StacksOffsetY));
         }
     }

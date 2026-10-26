@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -14,44 +15,69 @@ internal static class Widgets
 {
     private const float RightMargin = 16f;
 
+    // Height each box needed the last time it was drawn (logical pixels times the UI scale, so physical), by id.
+    private static readonly Dictionary<string, float> MeasuredHeights = new();
+
+    // Space the theme leaves around the content of a box (see ThemeScope: WindowPadding and ItemSpacing).
+    private const float PaddingY = 12f;
+    private const float ItemSpacingY = 8f;
+
     /// <summary>
-    /// A rounded panel with a fixed height of <paramref name="lines"/> text lines.
-    /// If the content is taller than expected, the card scrolls instead of overflowing.
+    /// A rounded panel that takes exactly the height of its content, so it never needs a scroll bar of its own and the
+    /// mouse wheel always scrolls the page. The height is measured while drawing and used from the next frame on;
+    /// the very first frame uses <paramref name="lines"/> text lines as a guess.
     /// </summary>
     public static void Card(string id, int lines, Action content)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var width = ImGui.GetContentRegionAvail().X - RightMargin * scale;
-        var height = lines * ImGui.GetTextLineHeightWithSpacing() + 24f * scale;
+        var estimate = lines * ImGui.GetTextLineHeightWithSpacing() + 24f * scale;
 
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Card))
-        using (var child = ImRaii.Child(id, new Vector2(width, height), true))
-        {
-            if (child.Success)
-                content();
-        }
+            DrawBox(id, estimate, content);
 
         ImGui.Spacing();
     }
 
     /// <summary>
     /// A highlighted message box. The colour (Theme.Info, Theme.Warning...) tints the background and the border.
+    /// Its height follows the text, like a card.
     /// </summary>
     public static void Callout(string id, string text, Vector4 color, int lines = 2)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var width = ImGui.GetContentRegionAvail().X - RightMargin * scale;
-        var height = lines * ImGui.GetTextLineHeightWithSpacing() + 20f * scale;
+        var estimate = lines * ImGui.GetTextLineHeightWithSpacing() + 20f * scale;
 
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.WithAlpha(color, 0.16f)))
         using (ImRaii.PushColor(ImGuiCol.Border, Theme.WithAlpha(color, 0.60f)))
-        using (var child = ImRaii.Child(id, new Vector2(width, height), true))
-        {
-            if (child.Success)
-                ImGui.TextWrapped(text);
-        }
+            DrawBox(id, estimate, () => ImGui.TextWrapped(text));
 
         ImGui.Spacing();
+    }
+
+    // The shared box: a bordered child window with no scrolling, sized from the last measurement.
+    private static void DrawBox(string id, float estimate, Action content)
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        var width = ImGui.GetContentRegionAvail().X - RightMargin * scale;
+        var height = MeasuredHeights.TryGetValue(id, out var known) ? known : estimate;
+        var measured = 0f;
+
+        const ImGuiWindowFlags flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+
+        using (var child = ImRaii.Child(id, new Vector2(width, height), true, flags))
+        {
+            if (child.Success)
+            {
+                content();
+
+                // The cursor sits one item spacing below the last item; the box needs the padding below it instead.
+                measured = MathF.Ceiling(ImGui.GetCursorPosY() - ItemSpacingY * scale + PaddingY * scale);
+            }
+        }
+
+        // Remember it for the next frame (only real changes, so the height never jitters).
+        if (measured > 0f && MathF.Abs(measured - height) >= 1f)
+            MeasuredHeights[id] = measured;
     }
 
     /// <summary>The main action of a page: filled with the accent colour.</summary>

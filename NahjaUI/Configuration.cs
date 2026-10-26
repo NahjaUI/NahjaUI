@@ -5,6 +5,9 @@ using Dalamud.Configuration;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Modules.Auras;
+using NahjaUI.Modules.CastBars;
+using NahjaUI.Modules.JobGauges;
+using NahjaUI.Modules.UnitFrames;
 
 namespace NahjaUI;
 
@@ -21,6 +24,9 @@ public class Configuration : IPluginConfiguration
     // The single accent colour of the theme.
     public Vector4 AccentColor { get; set; } = Theme.DefaultAccent;
 
+    // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
+    public int MenuTextSize { get; set; } = 15;
+
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
 
@@ -29,6 +35,15 @@ public class Configuration : IPluginConfiguration
 
     // The groups that line up auras automatically.
     public List<AuraGroupDefinition> AuraGroups { get; set; } = new();
+
+    // The cast bars (yours and your target's).
+    public CastBarsSettings CastBars { get; set; } = new();
+
+    // The job gauges (White Mage for now).
+    public JobGaugesSettings JobGauges { get; set; } = new();
+
+    // The unit frames (the player's for now).
+    public UnitFramesSettings UnitFrames { get; set; } = new();
 
     // The top level of the Auras explorer, in the order the user chose: groups and loose auras mixed.
     // Entries look like "group:<id>" or "aura:<id>". Auras inside a group are not listed here.

@@ -987,7 +987,7 @@ internal sealed class AuraEditor
         var elementLayout = runtime?.Element.Layout;
         var isSquare = elementLayout is null || elementLayout.Width == elementLayout.Height;
 
-        var lines = (isSquare ? 12 : 13) + (isCooldown ? 6 : 0) + (isGroup ? 4 : 0) + 9;
+        var lines = (isSquare ? 12 : 13) + (isCooldown ? 6 : 0) + (isGroup ? 4 : 0) + 10;
         var changed = false;
 
         Widgets.Card(isGroup ? "##card_group_display" : "##card_aura_display", lines, () =>
@@ -1098,6 +1098,28 @@ internal sealed class AuraEditor
                     if (ImGui.Selectable($"{size} px", definition.TextSize == size))
                     {
                         definition.TextSize = size;
+                        changed = true;
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+
+            // The charges / stack count can have their own size. Automatic keeps it at three quarters of the time size.
+            var stackPreview = definition.StackTextSize > 0 ? $"{definition.StackTextSize} px" : "Automatic";
+            if (ImGui.BeginCombo("Stack text size (px)", stackPreview, ImGuiComboFlags.None))
+            {
+                if (ImGui.Selectable("Automatic (3/4 of the time size)", definition.StackTextSize == 0))
+                {
+                    definition.StackTextSize = 0;
+                    changed = true;
+                }
+
+                foreach (var size in OverlayFonts.AvailableSizes)
+                {
+                    if (ImGui.Selectable($"{size} px", definition.StackTextSize == size))
+                    {
+                        definition.StackTextSize = size;
                         changed = true;
                     }
                 }
@@ -1455,6 +1477,9 @@ internal sealed class AuraEditor
         OverlayFont.GameUi => "Game interface (Axis)",
         OverlayFont.GameUiBold => "Game interface, bold (Axis)",
         OverlayFont.Condensed => "Condensed (Trump Gothic)",
+        OverlayFont.NahjaDisplay => "NahjaUI display (Saira Condensed)",
+        OverlayFont.NahjaDisplayBold => "NahjaUI numbers (Saira Condensed, bold)",
+        OverlayFont.NahjaText => "NahjaUI text (Saira)",
         _ => font.ToString()
     };
 
