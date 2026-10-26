@@ -79,7 +79,8 @@ internal sealed record ContextSnapshot(uint TerritoryId, bool InCombat, bool InD
 /// <summary>An enemy that has a nameplate in the game right now.</summary>
 /// <param name="Ndc">Where the game hangs the plate, in screen coordinates from -1 to 1 (x to the right, y UP). It already accounts for the height of the enemy.</param>
 /// <param name="Scale">Size of the plate the game would use, from 0 (far) to 1 (near).</param>
-internal sealed record NamePlateSnapshot(uint EntityId, string Name, int Level, uint Hp, uint MaxHp, Vector2 Ndc, float Scale);
+/// <param name="Cast">What the enemy is casting, or null.</param>
+internal sealed record NamePlateSnapshot(uint EntityId, string Name, int Level, uint Hp, uint MaxHp, Vector2 Ndc, float Scale, CastSnapshot? Cast);
 
 /// <summary>Everything the plugin knows about the game during one frame.</summary>
 internal sealed record GameSnapshot(

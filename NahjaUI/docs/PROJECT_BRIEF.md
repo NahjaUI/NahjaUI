@@ -156,7 +156,9 @@ Nameplates step 1 (DONE and tested in game 2026-10-26): `/nui nameplates` toggle
 - The game's own enemy plate is hidden with Dalamud `INamePlateGui.OnDataUpdate` and `handler.VisibilityFlags = 0` for kind 3 (BattleNpcEnemy); turning it off with `RequestRedraw()` brings the native plates back. No duplicated plates.
 - Plates are read from `NamePlateNumberArray.Instance()` (per plate: `NamePlateKind`, `EntityId`, `Scale` 0-100, in `ObjectData`, which is a Span in the user's ClientStructs: read by index, NOT `GetPointer`) and `UI3DModule.NamePlateObjectInfoPointers[i]` (same index). `info->NamePlatePos` is NOT a world position: x,y are screen coordinates from -1 to 1 (y UP), z is depth (<=0 = behind the camera). Pixel = ((x+1)/2*W, (1-y)/2*H), same as the game's `ObjectData.X/Y`. It already includes the height of the enemy (flying mobs are right). `WorldToScreen` on the object position is wrong for tall or flying enemies.
 - Entity id 0 or 0xE0000000 = empty plate. `Scale` makes far plates smaller (we use 60% to 100%).
-- Still missing: settings page and unlock element, friendly players/party/NPC/pets plates, cast frame (native `CastBarEnemy` still visible), buff/debuff/stun rows, click to target, class colors, distance limit and "only in combat" option.
+- Step 2 DONE and tested: enemy cast frame under the life bar (same width, spell icon inside at the left, amber glow = interruptible, steel gray + lock = not, name and time inside). Native `CastBarEnemy` hidden with PreDraw + PreventOriginal + `IsVisible=false` while our plates are on.
+- Step 3 DONE and tested: click on a plate (name + bar area) targets the enemy, right click opens the NahjaUI unit menu; reuses `UnitFrameModule.HandleClicks`. Setting `Clickable`.
+- Still missing: settings page and unlock element, friendly players/party/NPC/pets plates, buff/debuff/stun rows, class colors, distance limit and "only in combat" option.
 
 ## Code rules
 

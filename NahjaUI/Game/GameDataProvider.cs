@@ -223,7 +223,7 @@ internal sealed class GameDataProvider : IDisposable
                 continue;
 
             var scale = Math.Clamp(plateData[i].Scale / 100f, 0f, 1f);
-            result.Add(new NamePlateSnapshot(entityId, chara.Name.ToString(), chara.Level, chara.CurrentHp, chara.MaxHp, new Vector2(point.X, point.Y), scale));
+            result.Add(new NamePlateSnapshot(entityId, chara.Name.ToString(), chara.Level, chara.CurrentHp, chara.MaxHp, new Vector2(point.X, point.Y), scale, ToCast(chara)));
         }
 
         return result;
