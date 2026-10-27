@@ -15,7 +15,7 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly string[] Pages = { "General", "Auras", "Unit frames", "Cast bars", "Job gauges", "Appearance", "Profiles", "Layout", "Debug" };
+    private static readonly string[] Pages = { "General", "Auras", "Unit frames", "Nameplates", "Enemy list", "Tooltip", "Cast bars", "Job gauges", "Appearance", "Profiles", "Layout", "Debug" };
 
     private readonly Plugin plugin;
     private readonly ProfilesPage profilesPage;
@@ -116,6 +116,21 @@ public class MainWindow : Window, IDisposable
         var windowPos = ImGui.GetWindowPos();
         lastSize = ImGui.GetWindowSize();
         TopRight = new Vector2(windowPos.X + lastSize.X, windowPos.Y);
+
+        // Double click on the title bar: minimize to the small bar (a double click on the bar brings the window back).
+        // The right end is left out so the title bar buttons keep working.
+        if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows))
+        {
+            var titleHeight = ImGui.GetFrameHeight();
+            var mouse = ImGui.GetIO().MousePos;
+
+            if (mouse.Y >= windowPos.Y && mouse.Y <= windowPos.Y + titleHeight
+                && mouse.X >= windowPos.X && mouse.X <= windowPos.X + lastSize.X - titleHeight * 3f)
+            {
+                plugin.MinimizeMainWindow();
+                return;
+            }
+        }
 
         // Padding of buttons and fields goes here, not in PreDraw, so the title bar buttons do not overlap.
         using var contentStyle = new ContentStyleScope();
@@ -238,6 +253,15 @@ public class MainWindow : Window, IDisposable
             case "Unit frames":
                 plugin.UnitFrameEditorPage.Draw();
                 break;
+            case "Nameplates":
+                plugin.NamePlateEditorPage.Draw();
+                break;
+            case "Enemy list":
+                plugin.EnemyListEditorPage.Draw();
+                break;
+            case "Tooltip":
+                plugin.TooltipEditorPage.Draw();
+                break;
             case "Cast bars":
                 plugin.CastBarEditorPage.Draw();
                 break;
@@ -268,6 +292,9 @@ public class MainWindow : Window, IDisposable
     {
         "Auras" => "Track the buffs and debuffs you care about",
         "Unit frames" => "Life, name and mana of you and your targets",
+        "Nameplates" => "Plates over the enemies: life, name and cast",
+        "Enemy list" => "The enemies fighting you: life, aggro and casts",
+        "Tooltip" => "The description box of buffs and debuffs",
         "Cast bars" => "Your cast and your target's cast",
         "Job gauges" => "The gauge of your job, drawn by NahjaUI",
         "Appearance" => "Theme and look of the interface",
@@ -320,7 +347,7 @@ public class MainWindow : Window, IDisposable
             }
         });
 
-        Widgets.Card("##card_fonts", 6, () =>
+        Widgets.Card("##card_fonts", 7, () =>
         {
             Widgets.SectionLabel("Fonts");
 
@@ -336,6 +363,13 @@ public class MainWindow : Window, IDisposable
                 }
 
                 ImGui.EndCombo();
+            }
+
+            var decimals = config.TimerDecimalsBelowSeconds;
+            if (ImGui.SliderInt("Timer tenths below (s, 0 = never)", ref decimals, 0, 10))
+            {
+                config.TimerDecimalsBelowSeconds = decimals;
+                plugin.RequestSave();
             }
 
             ImGui.Spacing();
@@ -493,10 +527,96 @@ public class MainWindow : Window, IDisposable
 
     // ---------------------------------------------------------------- debug page
 
+    // ---------------------------------------------------------------- font lab
+
+    private int labSize = 14;
+
+    private static readonly (OverlayFont Font, string Name)[] LabFonts =
+    {
+        (OverlayFont.NahjaDisplay, "Saira Cond. SemiBold"),
+        (OverlayFont.NahjaDisplayBold, "Saira Cond. Bold"),
+        (OverlayFont.NahjaText, "Saira Regular"),
+
+        (OverlayFont.GameUi, "Game Axis"),
+        (OverlayFont.GameUiBold, "Game Axis bold"),
+        (OverlayFont.GameNumbers, "Game Meidinger"),
+        (OverlayFont.Condensed, "Game Trump Gothic")
+    };
+
+    private static readonly (OutlinedText.Style Style, string Name)[] LabStyles =
+    {
+        (OutlinedText.Style.None, "No outline"),
+        (OutlinedText.Style.Px1Cross, "1 px, 4 dir"),
+        (OutlinedText.Style.Px1Eight, "1 px, 8 dir (now)"),
+        (OutlinedText.Style.Px15Twelve, "1.5 px, 12 dir"),
+        (OutlinedText.Style.Px2Sixteen, "2 px, 16 dir")
+    };
+
+    // The same text in every font and with every outline, side by side at the real UI scale, to choose by eye.
+    private void DrawFontLab()
+    {
+        Widgets.Card("##card_fontlab", 40, () =>
+        {
+            Widgets.SectionLabel("Font lab");
+            ImGui.TextColored(Theme.TextMuted, "Same text in each font (rows) and outline (columns). Outline sizes are real screen pixels.");
+
+            ImGui.SliderInt("Text size (px)##lab", ref labSize, 10, 28);
+
+            const string sample = "Maim 47 | 98% 2.5";
+            var scale = ImGuiHelpers.GlobalScale;
+            var drawList = ImGui.GetWindowDrawList();
+            var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
+            var labelHeight = ImGui.GetTextLineHeight();
+
+            // Measure once to size the cells: text, a margin and a small label with the outline name under it.
+            Vector2 cell;
+            using (plugin.Fonts.PushClosest(OverlayFont.NahjaDisplayBold, labSize))
+                cell = ImGui.CalcTextSize(sample) + new Vector2(20f * scale, 10f * scale + labelHeight);
+
+            var available = ImGui.GetContentRegionAvail().X;
+            var gap = 4f * scale;
+
+            foreach (var (font, name) in LabFonts)
+            {
+                ImGui.Spacing();
+                ImGui.Text(name);
+
+                var used = 0f;
+                for (var i = 0; i < LabStyles.Length; i++)
+                {
+                    // Wrap to the next line when the next cell does not fit.
+                    if (i > 0 && used + cell.X + gap <= available)
+                        ImGui.SameLine(0f, gap);
+                    else
+                        used = 0f;
+
+                    var min = ImGui.GetCursorScreenPos();
+                    ImGui.Dummy(cell);
+                    used += cell.X + gap;
+
+                    // A mid grey, like a life bar or the game behind it.
+                    drawList.AddRectFilled(min, min + cell, ImGui.GetColorU32(new Vector4(0.30f, 0.33f, 0.40f, 1f)), 3f * scale);
+
+                    using (plugin.Fonts.PushClosest(font, labSize))
+                    {
+                        var textSize = ImGui.CalcTextSize(sample);
+                        var textPos = new Vector2(MathF.Round(min.X + 10f * scale), MathF.Round(min.Y + 5f * scale));
+                        OutlinedText.Draw(drawList, textPos, sample, white, LabStyles[i].Style);
+                    }
+
+                    drawList.AddText(new Vector2(min.X + 10f * scale, min.Y + cell.Y - labelHeight - 3f * scale),
+                        ImGui.GetColorU32(Theme.TextMuted), LabStyles[i].Name);
+                }
+            }
+        });
+    }
+
     private void DrawDebug()
     {
         var provider = plugin.GameData;
         var snapshot = provider.Current;
+
+        DrawFontLab();
 
         Widgets.Card("##card_snapshot", 5, () =>
         {

@@ -7,7 +7,9 @@ using NahjaUI.Core.Ui;
 using NahjaUI.Modules.Auras;
 using NahjaUI.Modules.CastBars;
 using NahjaUI.Modules.JobGauges;
+using NahjaUI.Modules.EnemyList;
 using NahjaUI.Modules.NamePlates;
+using NahjaUI.Modules.Tooltip;
 using NahjaUI.Modules.UnitFrames;
 
 namespace NahjaUI;
@@ -24,6 +26,9 @@ public class Configuration : IPluginConfiguration
 
     // The single accent colour of the theme.
     public Vector4 AccentColor { get; set; } = Theme.DefaultAccent;
+
+    // Timers (auras, icons next to the bars) show tenths of a second only below this many seconds. 0 = never.
+    public int TimerDecimalsBelowSeconds { get; set; } = 3;
 
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
@@ -48,6 +53,12 @@ public class Configuration : IPluginConfiguration
 
     // The nameplates over the enemies (first step: life bar and name).
     public NamePlateSettings NamePlates { get; set; } = new();
+
+    // The list of enemies that fight you.
+    public EnemyListSettings EnemyList { get; set; } = new();
+
+    // The box that describes a buff or debuff under the mouse.
+    public TooltipSettings Tooltip { get; set; } = new();
 
     // The top level of the Auras explorer, in the order the user chose: groups and loose auras mixed.
     // Entries look like "group:<id>" or "aura:<id>". Auras inside a group are not listed here.

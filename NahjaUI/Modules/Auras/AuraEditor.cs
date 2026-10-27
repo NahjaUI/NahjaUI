@@ -41,6 +41,7 @@ internal sealed class AuraEditor
 
     // Status search
     private string search = string.Empty;
+    private bool addAsExtraEffect;
     private string appliedSearch = string.Empty;
     private IReadOnlyList<StatusSearchResult> searchResults = Array.Empty<StatusSearchResult>();
 
@@ -808,7 +809,7 @@ internal sealed class AuraEditor
         var isCooldown = definition.Trigger == AuraTriggerType.Cooldown;
 
         // A cooldown aura has no "watch" or "only mine" here: those belong to its optional effect (see the effect card).
-        Widgets.Card("##card_aura_general", isCooldown ? 8 : 10, () =>
+        Widgets.Card("##card_aura_general", isCooldown ? 11 : 10, () =>
         {
             Widgets.SectionLabel("General");
 
@@ -859,6 +860,21 @@ internal sealed class AuraEditor
                 {
                     definition.CooldownShow = show;
                     plugin.RequestSave();
+                }
+
+                var comboStep = definition.OnlyAsComboStep;
+                if (ImGui.Checkbox("Only while it is the next step of my combo", ref comboStep))
+                {
+                    definition.OnlyAsComboStep = comboStep;
+                    plugin.RequestSave();
+                }
+
+                if (definition.OnlyAsComboStep)
+                {
+                    var parent = GameNames.ComboParent(definition.ActionId);
+                    ImGui.TextColored(Theme.TextMuted, parent == 0
+                        ? "This ability is not a combo step: the icon will never show."
+                        : $"Shows after {GameNames.ActionName(parent)}; the timer is the combo time left.");
                 }
             }
             else
@@ -987,7 +1003,7 @@ internal sealed class AuraEditor
         var elementLayout = runtime?.Element.Layout;
         var isSquare = elementLayout is null || elementLayout.Width == elementLayout.Height;
 
-        var lines = (isSquare ? 12 : 13) + (isCooldown ? 6 : 0) + (isGroup ? 4 : 0) + 10;
+        var lines = (isSquare ? 12 : 13) + (isCooldown ? 6 : 1) + (isGroup ? 4 : 0) + 10;
         var changed = false;
 
         Widgets.Card(isGroup ? "##card_group_display" : "##card_aura_display", lines, () =>
@@ -1041,6 +1057,17 @@ internal sealed class AuraEditor
                 changed = true;
             }
 
+            if (!isCooldown)
+            {
+                // Same setting as "Glow while the effect is active" of the cooldown auras.
+                var glowPresent = definition.GlowWhenActive;
+                if (ImGui.Checkbox("Glow while the status is on (a proc)", ref glowPresent))
+                {
+                    definition.GlowWhenActive = glowPresent;
+                    changed = true;
+                }
+            }
+
             if (isCooldown)
             {
                 ImGui.Spacing();
@@ -1072,6 +1099,15 @@ internal sealed class AuraEditor
                     definition.GlowWhenActive = glowActive;
                     changed = true;
                 }
+
+                var glowHighlighted = definition.GlowWhenHighlighted;
+                if (ImGui.Checkbox("Glow when the game highlights it", ref glowHighlighted))
+                {
+                    definition.GlowWhenHighlighted = glowHighlighted;
+                    changed = true;
+                }
+
+                ImGui.TextColored(Theme.TextMuted, "The same signal the game uses to light up the button (Goring Blade, procs).");
 
                 var ignoreGcd = definition.IgnoreGlobalCooldown;
                 if (ImGui.Checkbox("Ignore the global cooldown", ref ignoreGcd))
@@ -1209,7 +1245,7 @@ internal sealed class AuraEditor
                 : Array.Empty<StatusSearchResult>();
         }
 
-        var lines = 8 + currentCount + searchResults.Count + (isCooldown ? 7 : 0);
+        var lines = 8 + currentCount + searchResults.Count + (isCooldown ? 9 + definition.ExtraEffectIds.Count : 0);
 
         Widgets.Card("##card_aura_status", lines, () =>
         {
@@ -1247,9 +1283,30 @@ internal sealed class AuraEditor
                     if (ImGui.SmallButton("Clear##clear_effect"))
                     {
                         definition.StatusId = 0;
+                        definition.ExtraEffectIds.Clear();
                         plugin.RequestSave();
                     }
                 }
+            }
+
+            if (isCooldown && definition.StatusId != 0)
+            {
+                // More effects: the first one that is on shows its time (Fight or Flight, then Goring Blade Ready...).
+                for (var i = 0; i < definition.ExtraEffectIds.Count; i++)
+                {
+                    var extraId = definition.ExtraEffectIds[i];
+                    ImGui.Text($"Then: {GameNames.StatusName(extraId)} ({extraId})");
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton($"Remove##remove_extra_{i}"))
+                    {
+                        definition.ExtraEffectIds.RemoveAt(i);
+                        plugin.RequestSave();
+                        break;
+                    }
+                }
+
+                ImGui.Checkbox("The next one I click is an extra effect (does not replace the first)", ref addAsExtraEffect);
+                ImGui.TextColored(Theme.TextMuted, "If several are on, the first of the list is the one shown.");
             }
 
             ImGui.Spacing();
@@ -1268,7 +1325,7 @@ internal sealed class AuraEditor
                         break;
 
                     var label = $"{GameNames.StatusName(status.Id)} ({status.Id})   {status.RemainingTime:0}s##cur_{shown}";
-                    if (ImGui.Selectable(label, definition.StatusId == status.Id))
+                    if (ImGui.Selectable(label, definition.StatusId == status.Id || definition.ExtraEffectIds.Contains(status.Id)))
                         PickStatus(definition, status.Id);
 
                     shown++;
@@ -1291,7 +1348,7 @@ internal sealed class AuraEditor
                 };
 
                 var label = $"{result.Name} ({result.Id})   {kind}##res_{result.Id}";
-                if (ImGui.Selectable(label, definition.StatusId == result.Id))
+                if (ImGui.Selectable(label, definition.StatusId == result.Id || definition.ExtraEffectIds.Contains(result.Id)))
                     PickStatus(definition, result.Id);
             }
 
@@ -1312,7 +1369,19 @@ internal sealed class AuraEditor
 
     private void PickStatus(AuraDefinition definition, uint statusId)
     {
+        // Cooldown auras can keep several effects: with the box ticked, the click adds one more (or removes it if it was there).
+        if (definition.Trigger == AuraTriggerType.Cooldown && addAsExtraEffect && definition.StatusId != 0 && definition.StatusId != statusId)
+        {
+            if (!definition.ExtraEffectIds.Remove(statusId))
+                definition.ExtraEffectIds.Add(statusId);
+
+            addAsExtraEffect = false;
+            plugin.RequestSave();
+            return;
+        }
+
         definition.StatusId = statusId;
+        definition.ExtraEffectIds.Remove(statusId);
 
         // A brand new status aura takes the name of the status it watches.
         if (definition.Trigger == AuraTriggerType.Status && definition.Name == DefaultName)
@@ -1325,12 +1394,110 @@ internal sealed class AuraEditor
 
     // The load conditions of one aura, or of a whole group (group given, definition = its template).
     // For a group, every change is copied to all the auras of the group.
+    // The jobs of the game by role, to choose which ones an aura loads on.
+    private static readonly (string Role, uint[] Jobs)[] JobsByRole =
+    {
+        ("Tanks", new uint[] { 19, 21, 32, 37 }),
+        ("Healers", new uint[] { 24, 28, 33, 40 }),
+        ("Melee", new uint[] { 20, 22, 30, 34, 39, 41 }),
+        ("Ranged", new uint[] { 23, 31, 38 }),
+        ("Casters", new uint[] { 25, 27, 35, 42, 36 }),
+        ("Crafters", new uint[] { 8, 9, 10, 11, 12, 13, 14, 15 }),
+        ("Gatherers", new uint[] { 16, 17, 18 })
+    };
+
+    // Beastmaster (a melee, after Viper): its id is read from the game's job list by its abbreviation. 0 until it is found.
+    private static uint beastmasterId;
+    private static bool beastmasterLooked;
+
+    // The roles with their jobs in the order of the game, with Beastmaster after Viper.
+    private static List<(string Role, uint[] Jobs)> RolesWithBeastmaster()
+    {
+        if (!beastmasterLooked)
+        {
+            beastmasterId = GameNames.JobIdByAbbreviation("BST");
+            beastmasterLooked = true;
+        }
+
+        var roles = new List<(string Role, uint[] Jobs)>(JobsByRole);
+
+        if (beastmasterId != 0)
+        {
+            for (var i = 0; i < roles.Count; i++)
+            {
+                if (roles[i].Role == "Melee")
+                    roles[i] = (roles[i].Role, roles[i].Jobs.Append(beastmasterId).ToArray());
+            }
+        }
+
+        return roles;
+    }
+
+    // The content of the job menu: a row of checkboxes for each role, with All / None for the whole role.
+    private static bool DrawJobPicker(List<uint> selected)
+    {
+        var changed = false;
+
+        var roles = RolesWithBeastmaster();
+
+        foreach (var (role, jobs) in roles)
+        {
+            ImGui.TextColored(Theme.TextMuted, role);
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton($"All##all_{role}"))
+            {
+                foreach (var jobId in jobs)
+                {
+                    if (!selected.Contains(jobId))
+                        selected.Add(jobId);
+                }
+
+                changed = true;
+            }
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"None##none_{role}"))
+            {
+                foreach (var jobId in jobs)
+                    changed |= selected.Remove(jobId);
+            }
+
+            foreach (var jobId in jobs)
+            {
+                var on = selected.Contains(jobId);
+                if (ImGui.Checkbox($"{GameNames.JobAbbreviation(jobId)}##pick_{jobId}", ref on))
+                {
+                    if (on)
+                        selected.Add(jobId);
+                    else
+                        selected.Remove(jobId);
+
+                    changed = true;
+                }
+
+                ImGui.SameLine();
+            }
+
+            ImGui.NewLine();
+            ImGui.Spacing();
+        }
+
+        if (ImGui.Button("Clear (every job)##clear_jobs"))
+        {
+            selected.Clear();
+            changed = true;
+        }
+
+        return changed;
+    }
+
     private void DrawLoad(AuraEngine engine, AuraDefinition definition, GameSnapshot snapshot, AuraGroupRuntime? group)
     {
         var isGroup = group is not null;
         var changed = false;
 
-        Widgets.Card(isGroup ? "##card_group_load" : "##card_aura_load", isGroup ? 9 : 7, () =>
+        Widgets.Card(isGroup ? "##card_group_load" : "##card_aura_load", isGroup ? 10 : 8, () =>
         {
             Widgets.SectionLabel(isGroup ? "Load conditions (every aura in the group)" : "Load conditions");
 
@@ -1365,14 +1532,17 @@ internal sealed class AuraEditor
                 changed = true;
             }
 
-            var currentJob = snapshot.Player?.JobId;
-            if (currentJob is { } job && !definition.Load.JobIds.Contains(job))
+            // A menu to pick any jobs, by role (no need to be playing them).
+            var popupId = isGroup ? "##jobs_popup_group" : "##jobs_popup_aura";
+            if (ImGui.Button("Choose jobs..."))
+                ImGui.OpenPopup(popupId);
+
+            if (ImGui.BeginPopup(popupId))
             {
-                if (ImGui.Button($"Add my current job ({GameNames.JobAbbreviation(job)})"))
-                {
-                    definition.Load.JobIds.Add(job);
+                if (DrawJobPicker(definition.Load.JobIds))
                     changed = true;
-                }
+
+                ImGui.EndPopup();
             }
 
             if (isGroup)

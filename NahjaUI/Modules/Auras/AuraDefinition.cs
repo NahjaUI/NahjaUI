@@ -95,6 +95,12 @@ public class AuraDefinition
     public AuraUnit Unit { get; set; } = AuraUnit.Player;
     public uint StatusId { get; set; }
 
+    /// <summary>
+    /// Cooldown auras: more effects that count as "the effect is active" (for abilities that give two buffs one after
+    /// the other, like Fight or Flight and Goring Blade Ready). The first one found, in this order after StatusId, is shown.
+    /// </summary>
+    public List<uint> ExtraEffectIds { get; set; } = new();
+
     // Cooldown triggers
     public uint ActionId { get; set; }
     public CooldownShowMode CooldownShow { get; set; } = CooldownShowMode.Always;
@@ -102,6 +108,15 @@ public class AuraDefinition
     public bool ShowCooldownSweep { get; set; } = true;
     public bool GlowWhenReady { get; set; }
     public bool GlowWhenActive { get; set; }
+
+    /// <summary>Glow while the game itself makes the button of the ability glow (follow-ups like Goring Blade, procs).</summary>
+    public bool GlowWhenHighlighted { get; set; }
+
+    /// <summary>
+    /// Cooldown auras: show the icon only while this ability is the next step of a combo (the game's own combo: you just used
+    /// the ability it follows, and the combo timer is still running). The timer shows the seconds left to continue the combo.
+    /// </summary>
+    public bool OnlyAsComboStep { get; set; }
 
     /// <summary>Treat the global cooldown (about 2.5 s) as "ready".</summary>
     public bool IgnoreGlobalCooldown { get; set; } = true;
@@ -174,6 +189,8 @@ public class AuraDefinition
         ShowCooldownSweep = other.ShowCooldownSweep;
         GlowWhenReady = other.GlowWhenReady;
         GlowWhenActive = other.GlowWhenActive;
+        GlowWhenHighlighted = other.GlowWhenHighlighted;
+        ExtraEffectIds = new List<uint>(other.ExtraEffectIds);
         IgnoreGlobalCooldown = other.IgnoreGlobalCooldown;
 
         Load = new AuraLoadConditions

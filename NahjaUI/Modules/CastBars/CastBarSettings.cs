@@ -37,6 +37,9 @@ public class CastBarSettings
 
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplay;
 
+    /// <summary>Corner rounding of the bar, in logical pixels (0 = square corners).</summary>
+    public int RoundingPx { get; set; } = 4;
+
     public Vector4 BarColor { get; set; }
 
     public Vector4 BackgroundColor { get; set; } = new(0.07f, 0.08f, 0.13f, 0.85f);
@@ -66,5 +69,6 @@ public class CastBarsSettings
 {
     public CastBarSettings Player { get; set; } = new() { BarColor = new Vector4(0.55f, 0.49f, 1f, 1f) };
 
+    // The icon only shows when the target is an ally: the icons of enemy actions mean nothing.
     public CastBarSettings Target { get; set; } = new() { BarColor = new Vector4(0.92f, 0.36f, 0.36f, 1f) };
 }

@@ -9,6 +9,7 @@ using Dalamud.Interface.Textures;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NahjaUI.Modules.Auras;
 using Dalamud.Interface.Utility;
+using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 
@@ -27,12 +28,6 @@ internal sealed class NamePlateModule : IDisposable
     private static readonly Vector4 BorderColor = new(0f, 0f, 0f, 1f);
     private static readonly Vector4 EnemyColor = new(0.79f, 0.29f, 0.27f, 1f);
 
-    // Cast frame: amber when you can interrupt the cast, steel gray when you cannot.
-    private static readonly Vector4 CastAmber = new(0.91f, 0.69f, 0.29f, 1f);
-    private static readonly Vector4 CastAmberGlow = new(1f, 0.89f, 0.64f, 1f);
-    private static readonly Vector4 CastSteel = new(0.43f, 0.47f, 0.60f, 1f);
-    private static readonly Vector4 CastSteelBorder = new(0.71f, 0.74f, 0.84f, 1f);
-
     // The game's own cast bars of enemies, found in the game's addon list.
     private static readonly string[] NativeCastBars = { "CastBarEnemy" };
 
@@ -50,16 +45,6 @@ internal sealed class NamePlateModule : IDisposable
         Plugin.NamePlateGui.OnDataUpdate -= OnDataUpdate;
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeCastBars, OnNativeCastPreDraw);
         Plugin.NamePlateGui.RequestRedraw();
-    }
-
-    /// <summary>Turns the plates on or off and makes the game redraw its own plates.</summary>
-    public void Toggle()
-    {
-        var settings = plugin.Configuration.NamePlates;
-        settings.Enabled = !settings.Enabled;
-        Plugin.NamePlateGui.RequestRedraw();
-        plugin.RequestSave();
-        Plugin.Log.Information("NahjaUI nameplates: {State}", settings.Enabled ? "on" : "off");
     }
 
     // The game is about to draw its plates: switch off the name and the life bar of the enemies.
@@ -108,13 +93,14 @@ internal sealed class NamePlateModule : IDisposable
         var targetId = snapshot.Target?.EntityId;
 
         foreach (var plate in snapshot.NamePlates)
-            DrawPlate(drawList, scale, settings, plate, plate.EntityId == targetId);
+            DrawPlate(drawList, scale, settings, plate, plate.EntityId == targetId, snapshot.Player?.Level ?? 0);
     }
 
-    private void DrawPlate(ImDrawListPtr drawList, float scale, NamePlateSettings settings, NamePlateSnapshot plate, bool isTarget)
+    private void DrawPlate(ImDrawListPtr drawList, float scale, NamePlateSettings settings, NamePlateSnapshot plate, bool isTarget, int playerLevel)
     {
-        // Far enemies get a smaller plate, like in the game (never smaller than 60%).
-        scale *= 0.6f + 0.4f * plate.Scale;
+        // Optional: far enemies get a smaller plate, like in the game (never smaller than 60%).
+        if (settings.ScaleWithDistance)
+            scale *= 0.6f + 0.4f * plate.Scale;
 
         var width = MathF.Round(settings.WidthPx * scale);
         var height = MathF.Round(settings.HeightPx * scale);
@@ -148,12 +134,32 @@ internal sealed class NamePlateModule : IDisposable
             drawList.AddRect(min - ring, max + ring, ImGui.GetColorU32(Theme.Accent), rounding + 2f * scale, ImDrawFlags.None, 2f * scale);
         }
 
-        var text = settings.ShowLevel ? $"{plate.Name}  Lv {plate.Level}" : plate.Name;
-        using (plugin.Fonts.PushClosest(OverlayFont.NahjaDisplay, settings.NameSize))
+        if (settings.ShowName)
         {
-            var pos = min + new Vector2(settings.NameOffsetX, settings.NameOffsetY) * scale;
-            pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
-            OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
+            var showLevel = settings.LevelMode != NamePlateLevelMode.Hidden
+                            && !(settings.HideSameLevel && plate.Level == playerLevel);
+            var levelText = settings.LevelMode == NamePlateLevelMode.WithPrefix ? $"Lv {plate.Level}" : plate.Level.ToString();
+            var text = showLevel ? $"{plate.Name}  {levelText}" : plate.Name;
+            using (plugin.Fonts.PushClosest(settings.NameFont, settings.NameSize))
+            {
+                // The same point of the text is placed on the chosen point of the bar, then the offset moves it.
+                var textSize = ImGui.CalcTextSize(text);
+                var anchorFraction = settings.NameAnchor.Fraction();
+                var pos = min + (max - min) * anchorFraction - textSize * anchorFraction + new Vector2(settings.NameOffsetX, settings.NameOffsetY) * scale;
+                pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
+                if (showLevel)
+                {
+                    // The name and the level are two pieces, so the level can have its own color.
+                    var namePart = $"{plate.Name}  ";
+                    OutlinedText.Draw(drawList, pos, namePart, ImGui.GetColorU32(settings.NameColor));
+                    var levelPos = new Vector2(MathF.Round(pos.X + ImGui.CalcTextSize(namePart).X), pos.Y);
+                    OutlinedText.Draw(drawList, levelPos, levelText, ImGui.GetColorU32(settings.LevelColor));
+                }
+                else
+                {
+                    OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(settings.NameColor));
+                }
+            }
         }
 
         // Clicks: a see-through window over the name and the bar, like the unit frames use.
@@ -171,86 +177,46 @@ internal sealed class NamePlateModule : IDisposable
             DrawCast(drawList, scale, settings, plate.Cast, min.X, max.Y + MathF.Round(settings.CastGapPx * scale), width);
     }
 
-    // The cast frame: the spell icon is INSIDE it at the left (a square as tall as the frame), then the fill, the spell name
-    // and the time. Amber glow = you can interrupt it. Steel gray frame with a lock = you cannot.
+    // The cast frame: the fill, the spell name and the time. It looks like the cast bar of the target (same colors, from the
+    // Cast bars page): the color of the fill says if you can interrupt the cast or not.
     private void DrawCast(ImDrawListPtr drawList, float scale, NamePlateSettings settings, CastSnapshot cast, float left, float top, float width)
     {
+        var look = plugin.Configuration.CastBars.Target;
         var height = MathF.Round(settings.CastHeightPx * scale);
         var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), height / 2f);
         var min = new Vector2(left, top);
         var max = min + new Vector2(width, height);
-        var interruptible = cast.Interruptible;
-        var color = interruptible ? CastAmber : CastSteel;
+        var color = cast.Interruptible ? look.BarColor : look.UninterruptibleColor;
 
-        if (interruptible)
-            drawList.AddRect(min - new Vector2(1f), max + new Vector2(1f), ImGui.GetColorU32(CastAmberGlow), rounding + 1f, ImDrawFlags.None, 1f);
+        drawList.AddRectFilled(min, max, ImGui.GetColorU32(look.BackgroundColor), rounding);
 
-        drawList.AddRectFilled(min, max, ImGui.GetColorU32(BackgroundColor), rounding);
-
-        // Everything inside is cut by the rounded shape of the frame, so nothing sticks out of the corners.
-        var iconRight = min.X + height;
+        // The fill is the full rounded frame cut by a clip rectangle, so it never sticks out of the corners.
         var fraction = Math.Clamp(cast.CurrentTime / cast.TotalTime, 0f, 1f);
-        var fillRight = MathF.Round(iconRight + (max.X - iconRight) * fraction);
+        var fillRight = MathF.Round(min.X + width * fraction);
 
-        if (fillRight > iconRight)
+        if (fillRight > min.X)
         {
-            drawList.PushClipRect(new Vector2(iconRight, min.Y), new Vector2(fillRight, max.Y), true);
+            drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
             drawList.AddRectFilled(min, max, ImGui.GetColorU32(color), rounding);
             drawList.PopClipRect();
         }
 
-        var iconId = GameNames.CastIconId(cast.ActionType, cast.ActionId);
-        if (iconId != 0)
-        {
-            var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
-            var (uv0, uv1) = AuraEngine.IconUv(new Vector2(height, height), 1f, 0.08f);
-            drawList.AddImageRounded(texture.Handle, min, new Vector2(iconRight, max.Y), uv0, uv1, 0xFFFFFFFFu, rounding, ImDrawFlags.RoundCornersLeft);
-        }
-
-        var border = interruptible ? BorderColor : CastSteelBorder;
-        drawList.AddRect(min, max, ImGui.GetColorU32(border), rounding, ImDrawFlags.None, 1f);
-        drawList.AddLine(new Vector2(iconRight, min.Y), new Vector2(iconRight, max.Y), ImGui.GetColorU32(BorderColor), 1f);
+        drawList.AddRect(min, max, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, 1f);
 
         var padding = 6f * scale;
-        using (plugin.Fonts.PushClosest(OverlayFont.NahjaDisplay, settings.CastTextSize))
+        using (plugin.Fonts.PushClosest(settings.CastFont, settings.CastTextSize))
         {
             var y = MathF.Round((min.Y + max.Y - ImGui.GetTextLineHeight()) / 2f);
             var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
 
-            // The time is at the right; the lock goes before it when the cast cannot be interrupted.
+            // The time is at the right, the spell name at the left (shortened with "..." if it does not fit).
             var timeText = MathF.Max(0f, cast.TotalTime - cast.CurrentTime).ToString("0.0");
             var timeWidth = ImGui.CalcTextSize(timeText).X;
-            var textRight = max.X - padding;
-            OutlinedText.Draw(drawList, new Vector2(MathF.Round(textRight - timeWidth), y), timeText, white);
-            textRight -= timeWidth + padding;
+            OutlinedText.Draw(drawList, new Vector2(MathF.Round(max.X - padding - timeWidth), y), timeText, white);
 
-            if (!interruptible)
-            {
-                var lockHeight = MathF.Round(height * 0.6f);
-                var lockWidth = MathF.Round(lockHeight * 0.8f);
-                DrawLock(drawList, new Vector2(MathF.Round(textRight - lockWidth), MathF.Round((min.Y + max.Y - lockHeight) / 2f)), lockWidth, lockHeight, scale);
-                textRight -= lockWidth + padding;
-            }
-
-            // The spell name is shortened with "..." if it does not fit.
-            var name = Fit(GameNames.CastName(cast.ActionType, cast.ActionId), textRight - (iconRight + padding));
-            OutlinedText.Draw(drawList, new Vector2(MathF.Round(iconRight + padding), y), name, white);
+            var name = Fit(GameNames.CastName(cast.ActionType, cast.ActionId), width - padding * 3f - timeWidth);
+            OutlinedText.Draw(drawList, new Vector2(MathF.Round(min.X + padding), y), name, white);
         }
-    }
-
-    // A small padlock: a body and a shackle on top.
-    private static void DrawLock(ImDrawListPtr drawList, Vector2 pos, float width, float height, float scale)
-    {
-        var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-        var black = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
-        var bodyTop = pos.Y + height * 0.42f;
-        var thickness = MathF.Max(1f, MathF.Round(scale));
-        var inset = width * 0.22f;
-
-        drawList.AddRect(new Vector2(pos.X + inset, pos.Y), new Vector2(pos.X + width - inset, bodyTop + thickness), black, width * 0.3f, ImDrawFlags.RoundCornersTop, thickness * 3f);
-        drawList.AddRect(new Vector2(pos.X + inset, pos.Y), new Vector2(pos.X + width - inset, bodyTop + thickness), white, width * 0.3f, ImDrawFlags.RoundCornersTop, thickness);
-        drawList.AddRectFilled(new Vector2(pos.X - 1f, bodyTop) , new Vector2(pos.X + width + 1f, pos.Y + height), black, 1f);
-        drawList.AddRectFilled(new Vector2(pos.X, bodyTop + 1f), new Vector2(pos.X + width, pos.Y + height - 1f), white, 1f);
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.

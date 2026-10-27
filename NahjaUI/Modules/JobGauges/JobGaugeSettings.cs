@@ -4,13 +4,15 @@ using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Modules.JobGauges;
 
-/// <summary>The settings of every job gauge (White Mage and Warrior for now).</summary>
+/// <summary>The settings of every job gauge (White Mage, Warrior and Paladin for now).</summary>
 [Serializable]
 public class JobGaugesSettings
 {
     public WhiteMageGaugeSettings WhiteMage { get; set; } = new();
 
     public WarriorGaugeSettings Warrior { get; set; } = new();
+
+    public PaladinGaugeSettings Paladin { get; set; } = new();
 }
 
 /// <summary>
@@ -56,11 +58,11 @@ public class WhiteMageGaugeSettings
 }
 
 /// <summary>
-/// The Warrior gauge: the Beast Gauge, a bar from 0 to 100. Fell Cleave and Decimation cost 50, so the bar has a mark
-/// at the halfway point. Position and size belong to the layout system.
+/// A gauge that is one bar from 0 to 100 with a spender at 50 (Warrior's Beast Gauge, Paladin's Oath Gauge). The mark at
+/// the halfway point is where one spender can be used. Position and size belong to the layout system.
 /// </summary>
 [Serializable]
-public class WarriorGaugeSettings
+public class BarGaugeSettings
 {
     public bool Enabled { get; set; } = true;
 
@@ -92,4 +94,21 @@ public class WarriorGaugeSettings
     public Vector4 BorderColor { get; set; } = new(0f, 0f, 0f, 1f);
 
     public Vector4 ThresholdColor { get; set; } = new(0f, 0f, 0f, 0.9f);
+}
+
+/// <summary>The Warrior gauge: the Beast Gauge. Fell Cleave and Decimation cost 50.</summary>
+[Serializable]
+public class WarriorGaugeSettings : BarGaugeSettings
+{
+}
+
+/// <summary>The Paladin gauge: the Oath Gauge. Holy Sheltron and Intervention cost 50.</summary>
+[Serializable]
+public class PaladinGaugeSettings : BarGaugeSettings
+{
+    public PaladinGaugeSettings()
+    {
+        BarColor = new Vector4(0.30f, 0.52f, 0.95f, 1f);
+        ReadyColor = new Vector4(0.72f, 0.86f, 1f, 1f);
+    }
 }

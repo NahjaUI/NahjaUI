@@ -152,11 +152,11 @@ Research (verified in source, shell `git clone` of ClientStructs, Dalamud; datam
 - Two ways to hide the game's plates: (a) Dalamud `INamePlateGui` (official service, `OnNamePlateUpdate` handlers with `RemoveName()`, `VisibilityFlags`, `GameObject`) or (b) same trick as other native windows (PreDraw + PreventOriginal + hide `NamePlate` and `CastBarEnemy`). To test in game which one is safer; (b) must be checked to not stop the number array updates.
 - Plan: read positions from `NamePlateNumberArray` (or WorldToScreen on the object), draw our plate with ImGui, keep click-through and targeting in mind (clicks on a plate should target the unit, as the unit frames do).
 
-Nameplates step 1 (DONE and tested in game 2026-10-26): `/nui nameplates` toggles our plates for ENEMIES only (life bar + name with level, target ring, rounded, Saira). Files: `Modules/NamePlates/NamePlateModule.cs` and `NamePlateSettings.cs`; `GameDataProvider.BuildNamePlates()` reads the plates; `NamePlateSnapshot`. Verified facts:
+Nameplates step 1 (DONE and tested in game 2026-10-26): the Nameplates page (Enabled) turns on our plates for ENEMIES only (no commands for settings that are in the menu: owner's rule) (life bar + name with level, target ring, rounded, Saira). Files: `Modules/NamePlates/NamePlateModule.cs` and `NamePlateSettings.cs`; `GameDataProvider.BuildNamePlates()` reads the plates; `NamePlateSnapshot`. Verified facts:
 - The game's own enemy plate is hidden with Dalamud `INamePlateGui.OnDataUpdate` and `handler.VisibilityFlags = 0` for kind 3 (BattleNpcEnemy); turning it off with `RequestRedraw()` brings the native plates back. No duplicated plates.
 - Plates are read from `NamePlateNumberArray.Instance()` (per plate: `NamePlateKind`, `EntityId`, `Scale` 0-100, in `ObjectData`, which is a Span in the user's ClientStructs: read by index, NOT `GetPointer`) and `UI3DModule.NamePlateObjectInfoPointers[i]` (same index). `info->NamePlatePos` is NOT a world position: x,y are screen coordinates from -1 to 1 (y UP), z is depth (<=0 = behind the camera). Pixel = ((x+1)/2*W, (1-y)/2*H), same as the game's `ObjectData.X/Y`. It already includes the height of the enemy (flying mobs are right). `WorldToScreen` on the object position is wrong for tall or flying enemies.
 - Entity id 0 or 0xE0000000 = empty plate. `Scale` makes far plates smaller (we use 60% to 100%).
-- Step 2 DONE and tested: enemy cast frame under the life bar (same width, spell icon inside at the left, amber glow = interruptible, steel gray + lock = not, name and time inside). Native `CastBarEnemy` hidden with PreDraw + PreventOriginal + `IsVisible=false` while our plates are on.
+- Step 2 DONE and tested: enemy cast frame under the life bar (same width, no spell icon: enemy action icons mean nothing; color of the fill = interruptible or not, same colors as the target cast bar (Cast bars page), no icon and no lock, name and time inside). Native `CastBarEnemy` hidden with PreDraw + PreventOriginal + `IsVisible=false` while our plates are on.
 - Step 3 DONE and tested: click on a plate (name + bar area) targets the enemy, right click opens the NahjaUI unit menu; reuses `UnitFrameModule.HandleClicks`. Setting `Clickable`.
 - Still missing: settings page and unlock element, friendly players/party/NPC/pets plates, buff/debuff/stun rows, class colors, distance limit and "only in combat" option.
 
@@ -189,3 +189,82 @@ Move to the next milestone only when the previous one is stable and committed in
 1. Which milestone are we on? (see above)
 2. Paste any file you want changed, plus the exact compiler error if there is one.
 3. Ask for one small step.
+
+## Buffs and debuffs on the unit frames (step 1 done, needs testing)
+- `Modules/UnitFrames/StatusRowRenderer.cs` (`plugin.StatusRows`) draws a row of status icons; party frames and the Player/Target/Focus frames share it.
+- `UnitFrameSettings.Buffs` / `.Debuffs` are `PartyAuraSettings` (off by default; buffs above the bar, debuffs under it, debuffs "only mine").
+- `PartyAuraSettings.ExtraStatusIds`: always shown, whoever applied them (overrides "only mine").
+- Target frame: `HideNativeStatuses` hides `_TargetInfoBuffDebuff` while one of our rows is on.
+- Not on the target of target. Editor: cards Buffs/Debuffs per frame (same widgets as the party page).
+- To do: ordering/cap for player buffs, Esuna-removable highlight, stun row.
+
+## Paladin gauge (done, needs testing)
+- Oath Gauge (0-100) via `PLDGauge.OathGauge`, native addon `JobHudPLD0`, job id 19. Mark/ready colour at 50 (Holy Sheltron / Intervention).
+- Warrior and Paladin share `BarGaugeSettings`, `JobGaugeModule.DrawBar` and `JobGaugeEditor.DrawBarGauge`. New bar-type jobs (DRK Blood? GNB cartridges are pips, not bars) should reuse them when they fit.
+- Fix: the mana bar sample in its own box is only drawn for jobs set to "own box".
+
+## Target kinds (done, needs testing)
+- `UnitSnapshot.Kind` (`UnitKind`: Character, Pet, Npc, Object). `ToUnit(IGameObject)` now also returns non-battle objects (no life, no statuses) so the target frame is no longer empty for furniture/chests/aetherytes.
+- Object kinds by number (ObjectKind): 3 EventNpc and 10 Retainer = Npc; 9 Companion = Pet; the rest = Object. Battle NPCs with SubKind 2 (Pet) or 3 (Buddy) = Pet.
+- Colours per frame: `PetColor`, `ObjectColor` (grey). Objects: full bar in grey, name only, no life text, no buff rows.
+
+## Combo auras (done, needs testing)
+- `ComboSnapshot(Action, Timer)` from `ActionManager.Instance()->Combo` (last combo action used + seconds left).
+- Cooldown auras have `OnlyAsComboStep`: shown only while `Combo.Action == Action sheet ActionCombo of the aura's ActionId` and the timer runs; the timer shows the combo time. The "comes after" action is read from the game data (no picker needed).
+- Procs that are statuses (Primal Rend Ready...) use normal status auras. Idea for later: `IsActionHighlighted` for procs that are not statuses.
+
+## Font lab (done)
+- Debug page > "Font lab": every font x several outline shapes (`OutlinedText.Style`) at the real UI scale, size slider.
+- Eight extra fonts were tried (Barlow, Fira Sans Condensed, PT Sans Narrow, Rajdhani, Titillium Web, Saira Semi Condensed) and the user did not like any: removed. We keep Saira Condensed (SemiBold / Bold) and Saira Regular.
+- The outline stays 1 physical px, 8 directions (`OutlinedText.Draw`). If it is revisited: the lab has 4 dir, 1.5 px x12 and 2 px x16 variants.
+
+## Aura icon follows the game's action swap (needs testing)
+- `CooldownSnapshot.CurrentActionId` (= `GetAdjustedActionId`) -> `AuraState.IconActionId`: a cooldown aura draws the icon of the form the game shows now (Inner Release -> Primal Wrath). The cooldown data already used that form.
+- Not verified in game which buttons swap and when; name on the aura stays the chosen one.
+
+## Game window cover, tooltips, mouse (needs testing)
+- `Game/GameWindowCover.cs` (`plugin.GameCover`, updated at the start of `Plugin.Draw`): rects of game windows that cover the screen (for now `ContextMenu`; add names in `CoverNames`; rect = addon X/Y + RootNode size * Scale, unverified). `Draw(pos,size,margin,action)` runs the drawing once per uncovered part of the screen with a clip rect, so frames are not drawn over the game's menu. Used by unit frames and party rows.
+- Right click on a frame opens the game's own menu via `AgentHUD.OpenContextMenuFromTarget`. Click areas step aside while a cover is on screen.
+- Buff/debuff tooltip (`StatusRowRenderer.ShowTooltip`): hover test with `IsMouseHoveringRect` (no window), `ImGui.BeginTooltip`; description from the Status sheet evaluated with `ISeStringEvaluator`. Option `UnitFrames.ShowStatusTooltips`.
+- `UnitFrames.AlternateClicks` (experimental, off): no click window, `SetNextFrameWantCaptureMouse(true)` while hovering + `IsMouseClicked` (DelvUI's technique; DelvUI is AGPL: only used as a reference, no code copied). To see if the game's cursor stays.
+- Idea: add more cover windows (all windows with a WindowNode, like DelvUI's ClipRectsHelper) and use `GameCover.Draw` in auras, gauges, cast bars, nameplates.
+
+## Nameplate level color
+- `NamePlateSettings.LevelColor` (default yellow 1, 0.82, 0.25), editor "Level color" in the Name card. The name and the level are drawn as two texts (level after the name + two spaces), so NPC names with numbers are not confused with the level.
+
+## Glow when the game highlights the ability
+- Cooldown auras: `GlowWhenHighlighted`; `CooldownSnapshot.Highlighted` = `ActionManager.IsActionHighlighted(Action, adjustedId)` (what the hotbar uses for its glow; DelvUI uses it for Viper). Works with the icon swap (Fight or Flight -> Goring Blade), so the aura tracks Fight or Flight, changes its icon and glows when the game lights the button. Untested in game.
+
+## Cast bar rounding
+- `CastBarSettings.RoundingPx` (default 4, slider 0-12 in the Colors card of each cast bar). Background, border and icon (left corners) are rounded; fill and slidecast tint are the rounded shape cut by a clip rect (right corners only when the icon is shown). Same rule as unit frames / nameplates.
+
+## Several effects on a cooldown aura
+- `AuraDefinition.ExtraEffectIds`: extra statuses that count as "the effect is active" (Fight or Flight + Goring Blade Ready). `TryFindStatus` checks StatusId first, then the extras in order; the first present one gives the timer. Editor: tick "The next one I click is an extra effect", then click a status (clicking one already in the list removes it). Clear on the main effect also clears the extras.
+
+## Job icons on party frames
+- Option `PartyFrameSettings.ShowJobIcon` (+ `JobIconStyle` Plain/Light, `JobIconSizePx`): the game's own job icon (62000 + jobId, or 62100 + jobId) drawn inside the bar at its left, vertically centered; the name text shifts right. Replaces the role stripe. Hidden for chocobos. Covers all jobs incl. crafters/gatherers (ids 8-18), not verified in game.
+- No icon files are bundled or downloaded: they are Square Enix artwork, so we read them from the game at runtime with `TextureProvider.GetFromGameIcon` (same as action/status icons).
+
+## Enemy list (phase 1, needs testing)
+- New module `Modules/EnemyList` (settings, module, editor page "Enemy list"). Source: the game's own list `EnemyListNumberArray` (up to 8 entity ids, same enemies and order as the native `_EnemyList`), resolved through the ObjectTable into `EnemyEntrySnapshot(Unit, TargetsMe)` (`GameSnapshot.EnemyList`, read only while `GameData.WantEnemyList`). `TargetsMe` = enemy `TargetObjectId == player GameObjectId`.
+- One bar per enemy: name, life %, aggro dot (red = attacking me, green = attacking someone else), target ring, cast bar under the bar using the Cast bars page target colors (different fill = cannot be interrupted). Native `_EnemyList` hidden by PreDraw (option). Clickable like the nameplates. Wrapped in `GameCover.Draw`. Element "enemylist" in Layout (box = first bar).
+- Phase 2 planned: debuff filter (count how many enemies of the list have my debuffs, e.g. Bard DoTs) and stun tracking (which enemies are stunned / can be stunned).
+
+## Party list alone (follows the game's option)
+- Reads `Plugin.GameConfig.UiControl.TryGet("PartyListSoloOff", out uint)` every frame (`ContextSnapshot.PartyListWhenSolo`, `SoloOptionRaw`). Assumption: 0 = list shown alone (the name says "off"); the Party options card shows the raw value so it can be checked in game and flipped if backwards.
+- No checkbox of our own: the game decides. With no party and the option on, the party frames show you (+ chocobo, `BuildChocobo` also allowed alone). A read-out line in Party options shows what the plugin reads (remove it once the 0 = shown assumption is confirmed).
+
+## Game cursor in alternate click mode
+- Dalamud hooks `SetCursor`: while ImGui captures the mouse and `UiBuilder.OverrideGameCursor` is true, the game's cursor is replaced by the Windows one. In alternate click mode `UnitFrameModule.HandleClicks` sets `cursorWanted` while hovering a frame and `UpdateCursor()` (end of `Plugin.Draw`) sets `OverrideGameCursor = false` only then, back to true when the mouse leaves (it is a global setting). DelvUI sets it false too. Needs testing.
+
+## Tooltip page
+- New left menu page "Tooltip" (`Modules/Tooltip`: `TooltipSettings`, `TooltipEditor`, `Configuration.Tooltip`). Replaces `UnitFrames.ShowStatusTooltips` (removed). Choose where it shows (buffs/debuffs of Player, Target, Focus, Party; `Allows(place, isBuff)`), what it says (name and description always; optional ID and who applied it) and the look (text size, max width, rounding, name accent/color, description/detail/background/border colors, Reset).
+- `StatusRowRenderer.DrawRow(..., place)` gets "player"/"target"/"focus"/"party" from the frame that draws it; `ShowTooltip` reads `Configuration.Tooltip`.
+- Idea: the same tooltip for the status auras of the Auras page and the nameplates (not hoverable yet).
+
+## Job menu in the load conditions
+- Auras and groups: "Choose jobs..." button in the Load conditions card opens a popup (`DrawJobPicker`) with every job by role (tanks, healers, melee, ranged, casters, crafters, gatherers), checkboxes and All / None per role, plus Clear (= every job). It edits `Load.JobIds`; "Add my current job" stays.
+- "Add my current job" removed (the menu is enough). Job order as in the game: Blue Mage (36) last of the casters (after Pictomancer) and Beastmaster in the melee row after Viper; its id is looked up in the game's ClassJob sheet by abbreviation "BST" (`GameNames.JobIdByAbbreviation`), so no id is hardcoded. Beastmaster was added in patch 7.56 (melee DPS, limited job).
+
+## Clicks without a window are now the only method
+- Removed `UnitFrames.AlternateClicks`, the "Mouse (all frames)" card, the see-through click windows and the small NahjaUI right-click menu (`DrawUnitMenu`). `UnitFrameModule.HandleClicks` always uses `IsMouseHoveringRect` + `SetNextFrameWantCaptureMouse` + `OverrideGameCursor = false` while hovering (cursor of the game kept), left click targets, right click opens the game's menu (`OpenGameMenu`). Used by unit frames, party, nameplates and enemy list.

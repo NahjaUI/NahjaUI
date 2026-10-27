@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Dalamud.Utility;
 using Lumina.Excel.Sheets;
 using ActionSheet = Lumina.Excel.Sheets.Action;
 
@@ -26,8 +27,34 @@ internal static class GameNames
     private static readonly Dictionary<uint, string> JobNames = new();
     private static readonly Dictionary<uint, string> ActionNames = new();
     private static readonly Dictionary<uint, uint> ActionIcons = new();
+    private static readonly Dictionary<uint, uint> ComboParents = new();
     private static readonly Dictionary<(byte Type, uint Id), string> CastNames = new();
     private static readonly Dictionary<(byte Type, uint Id), uint> CastIcons = new();
+
+    private static readonly Dictionary<uint, string> StatusDescriptions = new();
+
+    /// <summary>The description of a status as the game shows it (formatting codes resolved, plain text). Empty if it has none.</summary>
+    public static string StatusDescription(uint statusId)
+    {
+        if (StatusDescriptions.TryGetValue(statusId, out var cached))
+            return cached;
+
+        var text = string.Empty;
+        if (Plugin.DataManager.GetExcelSheet<Status>().TryGetRow(statusId, out var row))
+        {
+            try
+            {
+                text = Plugin.SeStringEvaluator.Evaluate(row.Description).ExtractText();
+            }
+            catch
+            {
+                text = row.Description.ExtractText();
+            }
+        }
+
+        StatusDescriptions[statusId] = text;
+        return text;
+    }
 
     public static string StatusName(uint statusId)
     {
@@ -127,6 +154,20 @@ internal static class GameNames
 
         ActionNames[actionId] = name;
         return name;
+    }
+
+    /// <summary>The action that must be used right before this one for the combo to continue, or 0 if it is not a combo step.</summary>
+    public static uint ComboParent(uint actionId)
+    {
+        if (ComboParents.TryGetValue(actionId, out var cached))
+            return cached;
+
+        var parent = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row)
+            ? row.ActionCombo.RowId
+            : 0;
+
+        ComboParents[actionId] = parent;
+        return parent;
     }
 
     /// <summary>The icon id of an action, or 0 if it has none.</summary>
@@ -285,6 +326,18 @@ internal static class GameNames
 
         CastIcons[(actionType, id)] = icon;
         return icon;
+    }
+
+    // The id of a job from its abbreviation ("BST"), read from the game's own job list, so new jobs need no update. 0 if none.
+    public static uint JobIdByAbbreviation(string abbreviation)
+    {
+        foreach (var row in Plugin.DataManager.GetExcelSheet<ClassJob>())
+        {
+            if (row.Abbreviation.ToString() == abbreviation)
+                return row.RowId;
+        }
+
+        return 0;
     }
 
     public static string JobAbbreviation(uint jobId)

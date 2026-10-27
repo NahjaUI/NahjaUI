@@ -22,6 +22,16 @@ public enum PartyManaMode
 }
 
 /// <summary>The order of the bars.</summary>
+/// <summary>Which of the game's own job icons is used (the game draws them; nothing is copied into the plugin).</summary>
+public enum PartyJobIconStyle
+{
+    /// <summary>Icon 62000 + job (plain).</summary>
+    Plain,
+
+    /// <summary>Icon 62100 + job (the lighter set).</summary>
+    Light
+}
+
 public enum PartyOrder
 {
     /// <summary>The same order as the game's own party list, and it follows the game's option (you first, by role...) by itself.</summary>
@@ -66,6 +76,12 @@ public class PartyAuraSettings
 
     /// <summary>The statuses of the filter (status ids).</summary>
     public List<uint> StatusIds { get; set; } = new();
+
+    /// <summary>
+    /// Statuses that are always shown, whoever applied them (a raid debuff you want to see even if it is not yours).
+    /// They count even when "only the ones I applied" is on.
+    /// </summary>
+    public List<uint> ExtraStatusIds { get; set; } = new();
 
     /// <summary>Only the statuses that you applied.</summary>
     public bool OnlyMine { get; set; }
@@ -124,6 +140,31 @@ public class PartyAuraSettings
 
     public int StacksOffsetY { get; set; } = -1;
 
+    /// <summary>The buffs row of the player, target and focus frames: above the bar, growing to the right. Off until it is switched on.</summary>
+    public static PartyAuraSettings CreateFrameBuffs() => new()
+    {
+        Enabled = false,
+        BarAnchor = AnchorPoint.TopLeft,
+        IconAnchor = AnchorPoint.BottomLeft,
+        OffsetX = 0,
+        OffsetY = -14,
+        Growth = PartyAuraGrowth.Right,
+        MaxIcons = 12
+    };
+
+    /// <summary>The debuffs row of the player, target and focus frames: under the bar, growing to the right, only the ones you applied.</summary>
+    public static PartyAuraSettings CreateFrameDebuffs() => new()
+    {
+        Enabled = false,
+        BarAnchor = AnchorPoint.BottomLeft,
+        IconAnchor = AnchorPoint.TopLeft,
+        OffsetX = 0,
+        OffsetY = 6,
+        Growth = PartyAuraGrowth.Right,
+        OnlyMine = true,
+        MaxIcons = 12
+    };
+
     /// <summary>Buffs go at the left of the bar and grow to the left.</summary>
     public static PartyAuraSettings CreateBuffs() => new();
 
@@ -168,6 +209,14 @@ public class PartyFrameSettings
 
     /// <summary>A thin stripe at the left edge of each bar: blue for tanks, green for healers, red for damage dealers.</summary>
     public bool RoleStripe { get; set; } = true;
+
+    /// <summary>The job icon of each member, inside the bar at its left. It works for every job, crafters and gatherers too.</summary>
+    public bool ShowJobIcon { get; set; }
+
+    public PartyJobIconStyle JobIconStyle { get; set; } = PartyJobIconStyle.Plain;
+
+    /// <summary>Size of the icon in pixels; it never goes over the height of the bar.</summary>
+    public int JobIconSizePx { get; set; } = 16;
 
     /// <summary>The buffs of each member, at the left of the bar by default.</summary>
     public PartyAuraSettings Buffs { get; set; } = PartyAuraSettings.CreateBuffs();

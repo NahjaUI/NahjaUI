@@ -36,6 +36,8 @@ internal enum AuraPhase
 /// <param name="Total">Cooldown auras: seconds one charge takes to recharge (for the sweep).</param>
 /// <param name="Charges">Cooldown auras: charges available.</param>
 /// <param name="MaxCharges">Cooldown auras: charges the ability can hold.</param>
+/// <param name="Highlighted">Cooldown auras: the game is making the button of the current form glow.</param>
+/// <param name="IconActionId">Cooldown auras: the action whose icon is shown (the form the game shows now; 0 = the chosen one).</param>
 internal readonly record struct AuraState(
     bool Visible,
     bool StatusPresent,
@@ -44,7 +46,9 @@ internal readonly record struct AuraState(
     AuraPhase Phase = AuraPhase.None,
     float Total = 0f,
     int Charges = 0,
-    int MaxCharges = 1)
+    int MaxCharges = 1,
+    uint IconActionId = 0,
+    bool Highlighted = false)
 {
     public static readonly AuraState Hidden = new(false, false, 0f, 0);
 }
@@ -454,6 +458,8 @@ internal sealed class AuraEngine
         var snapshot = plugin.GameData.Current;
         var unlock = plugin.Layout.UnlockMode;
 
+        DecimalsBelowSeconds = plugin.Configuration.TimerDecimalsBelowSeconds;
+
         // Tell the game data layer which ability cooldowns are needed. They arrive in the next snapshot.
         watchedActions.Clear();
         foreach (var runtime in runtimes)
@@ -707,6 +713,18 @@ internal sealed class AuraEngine
         var onCooldown = cooldown.IsOnCooldown;
         var remaining = cooldown.Remaining;
 
+        // Combo step: only while the ability this one follows was the last one used and the combo is still running.
+        var combo = snapshot.Combo;
+        var comboTimer = 0f;
+        if (aura.OnlyAsComboStep)
+        {
+            var parent = GameNames.ComboParent(aura.ActionId);
+            if (parent == 0 || combo is null || combo.Action != parent || combo.Timer <= 0f)
+                return AuraState.Hidden;
+
+            comboTimer = combo.Timer;
+        }
+
         // The global cooldown is not a real cooldown: abilities used with it count as ready.
         if (aura.IgnoreGlobalCooldown && cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds)
         {
@@ -733,9 +751,9 @@ internal sealed class AuraEngine
         if (!visible)
             return AuraState.Hidden;
 
-        var timer = phase == AuraPhase.Active ? effect?.RemainingTime ?? 0f : remaining;
+        var timer = phase == AuraPhase.Active ? effect?.RemainingTime ?? 0f : aura.OnlyAsComboStep ? comboTimer : remaining;
 
-        return new AuraState(true, effect is not null, timer, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges);
+        return new AuraState(true, effect is not null, timer, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges, cooldown.CurrentActionId, cooldown.Highlighted);
     }
 
     // Looks for the aura's status on the unit it watches.
@@ -756,16 +774,22 @@ internal sealed class AuraEngine
         if (unit is null)
             return false;
 
-        foreach (var status in unit.Statuses)
+        // The main status first, then the extra effects in the order they were added.
+        for (var i = -1; i < aura.ExtraEffectIds.Count && found is null; i++)
         {
-            if (status.Id != aura.StatusId)
-                continue;
+            var wanted = i < 0 ? aura.StatusId : aura.ExtraEffectIds[i];
 
-            if (aura.OnlyMine && status.SourceId != player.EntityId)
-                continue;
+            foreach (var status in unit.Statuses)
+            {
+                if (status.Id != wanted)
+                    continue;
 
-            found = status;
-            break;
+                if (aura.OnlyMine && status.SourceId != player.EntityId)
+                    continue;
+
+                found = status;
+                break;
+            }
         }
 
         return true;
@@ -794,8 +818,6 @@ internal sealed class AuraEngine
     // so the edge is cropped away.
     internal const float StatusIconAspect = 24f / 32f;
 
-    private static readonly Vector4 GlowColor = new(1f, 0.82f, 0.30f, 1f);
-
     /// <summary>
     /// Draws one aura icon. A ghost is a faded preview (no text) used in unlock mode to show
     /// where the members of a group will be.
@@ -818,7 +840,7 @@ internal sealed class AuraEngine
 
         // Cooldown auras show the ability's own icon, status auras the icon of the status.
         var iconId = isCooldown
-            ? GameNames.ActionIconId(definition.ActionId)
+            ? GameNames.ActionIconId(state.IconActionId != 0 ? state.IconActionId : definition.ActionId)
             : GameNames.StatusIconId(definition.StatusId);
 
         if (iconId != 0)
@@ -874,10 +896,16 @@ internal sealed class AuraEngine
         if (isCooldown)
         {
             var glow = (state.Phase == AuraPhase.Ready && definition.GlowWhenReady)
-                       || (state.Phase == AuraPhase.Active && definition.GlowWhenActive);
+                       || (state.Phase == AuraPhase.Active && definition.GlowWhenActive)
+                       || (state.Highlighted && definition.GlowWhenHighlighted);
 
             if (glow)
                 DrawGlow(drawList, pos, size, rounding);
+        }
+        else if (state.StatusPresent && definition.GlowWhenActive)
+        {
+            // A buff or debuff aura: glows while the status is there (a proc like Wrathful, like a lit hotbar button).
+            DrawGlow(drawList, pos, size, rounding);
         }
 
         // Text size is a font size in LOGICAL pixels, chosen per aura. Dalamud already builds the fonts scaled by the
@@ -967,29 +995,139 @@ internal sealed class AuraEngine
         return direction * low;
     }
 
-    // A gold glow that pulses about once a second: a few fading frames around the icon and a bright edge.
+    // Reused every frame (the interface is drawn from one thread), so the glow does not create garbage.
+    private static readonly List<Vector2> GlowPath = new();
+    private static readonly List<float> GlowLengths = new();
+    private static readonly List<Vector2> GlowDash = new();
+
+    // The "proc" glow of the game's hotbar: short golden dashes with gaps that run around the edge of the icon.
+    // The dashes follow the rounded corners. Their size is in logical pixels, so it looks the same at any UI scale.
     private static void DrawGlow(ImDrawListPtr drawList, Vector2 pos, Vector2 size, float rounding)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var pulse = 0.775f + 0.225f * MathF.Sin((float)(ImGui.GetTime() * MathF.Tau));
 
-        const int layers = 4;
-        for (var i = 1; i <= layers; i++)
+        // The path runs just outside the border of the icon.
+        var grow = MathF.Max(1f, MathF.Round(scale));
+        var min = pos - new Vector2(grow);
+        var max = pos + size + new Vector2(grow);
+        var radius = MathF.Min(rounding + grow, MathF.Min(max.X - min.X, max.Y - min.Y) / 2f);
+
+        BuildRoundedPath(min, max, radius);
+
+        var total = GlowLengths[^1];
+        if (total < 8f)
+            return;
+
+        // About 9 logical pixels per dash and gap, adjusted so a whole number of them fits the perimeter.
+        var count = Math.Max(4, (int)MathF.Round(total / (9f * scale)));
+        var period = total / count;
+        var dashLength = period * 0.55f;
+
+        // They run clockwise, about 30 logical pixels per second.
+        var offset = (float)(ImGui.GetTime() * 30.0 * scale) % period;
+
+        var thickness = MathF.Max(2f, MathF.Round(2f * scale));
+        var dark = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.65f));
+        var gold = ImGui.GetColorU32(new Vector4(1f, 0.88f, 0.45f, 1f));
+
+        // A dark line under each dash keeps it readable over any icon.
+        for (var pass = 0; pass < 2; pass++)
         {
-            var grow = new Vector2(i * 1.5f * scale);
-            var alpha = pulse * (1f - (i - 1) / (float)layers) * 0.55f;
+            var color = pass == 0 ? dark : gold;
+            var width = pass == 0 ? thickness + 2f : thickness;
 
-            drawList.AddRect(
-                pos - grow,
-                pos + size + grow,
-                ImGui.GetColorU32(Theme.WithAlpha(GlowColor, alpha)),
-                rounding > 0f ? rounding + grow.X : 0f,
-                ImDrawFlags.None,
-                1.5f * scale);
+            for (var i = 0; i < count; i++)
+            {
+                var start = offset + i * period;
+                AddPathPiece(drawList, start, start + dashLength, total, color, width);
+            }
+        }
+    }
+
+    // The outline of a rounded box as a closed list of points, starting at the top edge and going clockwise,
+    // with the running length at each point.
+    private static void BuildRoundedPath(Vector2 min, Vector2 max, float radius)
+    {
+        GlowPath.Clear();
+        GlowLengths.Clear();
+
+        const int arcSteps = 6;
+
+        void Corner(Vector2 center, float startAngle)
+        {
+            for (var i = 0; i <= arcSteps; i++)
+            {
+                var angle = startAngle + MathF.PI / 2f * i / arcSteps;
+                GlowPath.Add(center + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius);
+            }
         }
 
-        var edge = MathF.Max(1f, MathF.Round(scale)) + 1f;
-        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(Theme.WithAlpha(GlowColor, pulse)), rounding, ImDrawFlags.None, edge);
+        // Clockwise on the screen (y goes down): top-left, top-right, bottom-right, bottom-left corners.
+        Corner(new Vector2(min.X + radius, min.Y + radius), MathF.PI);
+        Corner(new Vector2(max.X - radius, min.Y + radius), MathF.PI * 1.5f);
+        Corner(new Vector2(max.X - radius, max.Y - radius), 0f);
+        Corner(new Vector2(min.X + radius, max.Y - radius), MathF.PI * 0.5f);
+
+        // Close the shape.
+        GlowPath.Add(GlowPath[0]);
+
+        var run = 0f;
+        GlowLengths.Add(0f);
+        for (var i = 1; i < GlowPath.Count; i++)
+        {
+            run += Vector2.Distance(GlowPath[i - 1], GlowPath[i]);
+            GlowLengths.Add(run);
+        }
+    }
+
+    // Draws the part of the path between two distances. The path is a loop, so a piece can cross the end and continue at the start.
+    private static void AddPathPiece(ImDrawListPtr drawList, float from, float to, float total, uint color, float width)
+    {
+        var length = to - from;
+        from %= total;
+        to = from + length;
+
+        if (to <= total)
+        {
+            DrawPathInterval(drawList, from, to, color, width);
+            return;
+        }
+
+        DrawPathInterval(drawList, from, total, color, width);
+        DrawPathInterval(drawList, 0f, to - total, color, width);
+    }
+
+    private static void DrawPathInterval(ImDrawListPtr drawList, float from, float to, uint color, float width)
+    {
+        GlowDash.Clear();
+        GlowDash.Add(PointAt(from));
+
+        for (var i = 1; i < GlowPath.Count; i++)
+        {
+            if (GlowLengths[i] > from && GlowLengths[i] < to)
+                GlowDash.Add(GlowPath[i]);
+        }
+
+        GlowDash.Add(PointAt(to));
+
+        for (var i = 1; i < GlowDash.Count; i++)
+            drawList.AddLine(GlowDash[i - 1], GlowDash[i], color, width);
+    }
+
+    // The point of the path at a given distance from its start.
+    private static Vector2 PointAt(float distance)
+    {
+        for (var i = 1; i < GlowPath.Count; i++)
+        {
+            if (GlowLengths[i] >= distance)
+            {
+                var segment = GlowLengths[i] - GlowLengths[i - 1];
+                var t = segment <= 0f ? 0f : (distance - GlowLengths[i - 1]) / segment;
+                return Vector2.Lerp(GlowPath[i - 1], GlowPath[i], t);
+            }
+        }
+
+        return GlowPath[^1];
     }
 
     // The part of the icon texture to show so that it fills a box of the given shape without distortion.
@@ -1020,16 +1158,19 @@ internal sealed class AuraEngine
         return (new Vector2(u0, v0), new Vector2(u1, v1));
     }
 
-    // The timer as a single plain text: "17m", "28" or "6.5". No spacing tricks: the font is drawn as it is.
+    /// <summary>Below this many seconds the timers show tenths. Copied from the settings every frame. 0 = never.</summary>
+    internal static int DecimalsBelowSeconds { get; private set; } = 3;
+
+    // The timer as a single plain text: "17m", "28" or "2.5" (tenths only in the last seconds). No spacing tricks.
     internal static string FormatTime(float seconds)
     {
         if (seconds >= 60f)
             return $"{(int)(seconds / 60f)}m";
 
-        if (seconds >= 10f)
-            return ((int)MathF.Ceiling(seconds)).ToString();
+        if (seconds < DecimalsBelowSeconds)
+            return seconds.ToString("0.0");
 
-        return seconds.ToString("0.0");
+        return ((int)MathF.Ceiling(seconds)).ToString();
     }
 
     // White text with a thick black outline, readable on any icon.

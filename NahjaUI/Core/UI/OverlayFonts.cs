@@ -125,6 +125,7 @@ internal sealed class OverlayFonts : IDisposable
             {
                 OverlayFont.NahjaDisplay => EmbeddedFonts.DisplaySemiBold(),
                 OverlayFont.NahjaDisplayBold => EmbeddedFonts.DisplayBold(),
+                OverlayFont.NahjaText => EmbeddedFonts.TextRegular(),
                 _ => EmbeddedFonts.TextRegular()
             };
 

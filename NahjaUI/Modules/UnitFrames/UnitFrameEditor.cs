@@ -49,6 +49,11 @@ internal sealed class UnitFrameEditor
 
     private readonly StatusSearchState buffSearch = new();
     private readonly StatusSearchState debuffSearch = new();
+    private readonly StatusSearchState frameBuffSearch = new();
+    private readonly StatusSearchState frameDebuffSearch = new();
+
+    // The search of the "always show" list of each card of icons, by card.
+    private readonly Dictionary<string, StatusSearchState> extraSearches = new();
 
     public UnitFrameEditor(Plugin plugin)
     {
@@ -101,6 +106,15 @@ internal sealed class UnitFrameEditor
         var isPlayer = selectedFrame == 0;
 
         DrawGeneral(settings, element, isPlayer);
+
+        // Buffs and debuffs next to the bar (not on the target of target).
+        if (selectedFrame != 2)
+        {
+            DrawFrameStatusOptions(settings);
+            DrawPartyAuras($"##card_uf{selectedFrame}_buffs", "Buffs", settings.Buffs, true, frameBuffSearch);
+            DrawPartyAuras($"##card_uf{selectedFrame}_debuffs", "Debuffs", settings.Debuffs, false, frameDebuffSearch);
+        }
+
         DrawName(settings);
         DrawHealth(settings);
 
@@ -132,7 +146,7 @@ internal sealed class UnitFrameEditor
 
     private void DrawGeneral(UnitFrameSettings settings, LayoutElement element, bool isPlayer)
     {
-        Widgets.Card("##card_uf_general", 22, () =>
+        Widgets.Card("##card_uf_general", 25, () =>
         {
             Widgets.SectionLabel(selectedFrame == PartyPage ? "Party frames (the first bar; the others follow it downwards)" : $"{FrameNames[selectedFrame]} frame");
 
@@ -230,6 +244,24 @@ internal sealed class UnitFrameEditor
                 }
             }
 
+            // Pets, minions and objects (furniture, chests, aetherytes...) have their own colours.
+            if (!isPlayer)
+            {
+                var pet = settings.PetColor;
+                if (ImGui.ColorEdit4("Pet / minion life color", ref pet, ImGuiColorEditFlags.NoAlpha))
+                {
+                    settings.PetColor = new Vector4(pet.X, pet.Y, pet.Z, 1f);
+                    plugin.RequestSave();
+                }
+
+                var obj = settings.ObjectColor;
+                if (ImGui.ColorEdit4("Object color", ref obj, ImGuiColorEditFlags.NoAlpha))
+                {
+                    settings.ObjectColor = new Vector4(obj.X, obj.Y, obj.Z, 1f);
+                    plugin.RequestSave();
+                }
+            }
+
             var background = settings.BackgroundColor;
             if (ImGui.ColorEdit4("Background color", ref background, ImGuiColorEditFlags.None))
             {
@@ -272,7 +304,7 @@ internal sealed class UnitFrameEditor
     // What is only about the party: space between bars, mana bar, and how the targeted member is marked.
     private void DrawPartyOptions(PartyFrameSettings party)
     {
-        Widgets.Card("##card_pf_options", 20, () =>
+        Widgets.Card("##card_pf_options", 24, () =>
         {
             Widgets.SectionLabel("Party options");
 
@@ -304,6 +336,35 @@ internal sealed class UnitFrameEditor
             {
                 party.RoleStripe = roleStripe;
                 plugin.RequestSave();
+            }
+
+            var soloRaw = plugin.GameData.Current.Context.SoloOptionRaw;
+            ImGui.TextColored(Theme.TextMuted, soloRaw < 0
+                ? "The game's option could not be read."
+                : $"Alone, the game shows its party list: {(soloRaw == 0 ? "yes" : "no")} (raw value {soloRaw}).");
+
+            var showJobIcon = party.ShowJobIcon;
+            if (ImGui.Checkbox("Job icon inside the bar (replaces the stripe)", ref showJobIcon))
+            {
+                party.ShowJobIcon = showJobIcon;
+                plugin.RequestSave();
+            }
+
+            if (party.ShowJobIcon)
+            {
+                var iconStyle = party.JobIconStyle;
+                if (EnumCombo("Icon set", ref iconStyle, style => style == PartyJobIconStyle.Plain ? "Plain" : "Light"))
+                {
+                    party.JobIconStyle = iconStyle;
+                    plugin.RequestSave();
+                }
+
+                var iconSize = party.JobIconSizePx;
+                if (ImGui.SliderInt("Icon size (px)", ref iconSize, 8, 40))
+                {
+                    party.JobIconSizePx = iconSize;
+                    plugin.RequestSave();
+                }
             }
 
             ImGui.Spacing();
@@ -356,6 +417,25 @@ internal sealed class UnitFrameEditor
         });
     }
 
+    // Options shared by the two rows of a frame.
+    private void DrawFrameStatusOptions(UnitFrameSettings settings)
+    {
+        if (selectedFrame != 1)
+            return;
+
+        Widgets.Card($"##card_uf{selectedFrame}_native_status", 3, () =>
+        {
+            Widgets.SectionLabel("Buffs and debuffs of the game");
+
+            var hide = settings.HideNativeStatuses;
+            if (ImGui.Checkbox("Hide the game's buffs and debuffs of the target while mine are on", ref hide))
+            {
+                settings.HideNativeStatuses = hide;
+                plugin.RequestSave();
+            }
+        });
+    }
+
     // One row of icons of the party (buffs or debuffs): what it shows, where it goes, how big the icons are.
     private void DrawPartyAuras(string cardId, string title, PartyAuraSettings row, bool isBuff, StatusSearchState search)
     {
@@ -370,12 +450,23 @@ internal sealed class UnitFrameEditor
                 : Array.Empty<StatusSearchResult>();
         }
 
-        Widgets.Card(cardId, 34 + row.StatusIds.Count + search.Results.Count, () =>
+        if (!extraSearches.TryGetValue(cardId, out var extra))
+            extraSearches[cardId] = extra = new StatusSearchState();
+
+        if (extra.Text != extra.Applied)
+        {
+            extra.Applied = extra.Text;
+            extra.Results = extra.Text.Trim().Length >= 3
+                ? GameNames.SearchStatuses(extra.Text.Trim(), 10)
+                : Array.Empty<StatusSearchResult>();
+        }
+
+        Widgets.Card(cardId, 40 + row.StatusIds.Count + search.Results.Count + row.ExtraStatusIds.Count + extra.Results.Count, () =>
         {
             Widgets.SectionLabel(title);
 
             var enabled = row.Enabled;
-            if (ImGui.Checkbox($"Show {kind}s next to the bars", ref enabled))
+            if (ImGui.Checkbox($"Show {kind}s next to the bar", ref enabled))
             {
                 row.Enabled = enabled;
                 plugin.RequestSave();
@@ -566,11 +657,56 @@ internal sealed class UnitFrameEditor
             {
                 ImGui.Spacing();
                 ImGui.TextColored(Theme.TextMuted, $"Every {kind} is shown. Pick \"Only the ones in my list\" to choose them.");
-                return;
+            }
+            else
+            {
+                DrawPartyStatusList(row, isBuff, kind, search);
             }
 
-            DrawPartyStatusList(row, isBuff, kind, search);
+            DrawExtraStatusList(row, kind, cardId, extra);
         });
+    }
+
+    // Statuses that are always shown whoever applied them, even with "only the ones I applied" on.
+    private void DrawExtraStatusList(PartyAuraSettings row, string kind, string cardId, StatusSearchState search)
+    {
+        ImGui.Spacing();
+        ImGui.TextColored(Theme.TextMuted, $"Always show these {kind}s, whoever applied them:");
+
+        if (row.ExtraStatusIds.Count == 0)
+            ImGui.TextColored(Theme.TextMuted, "  Nothing in the list yet.");
+
+        uint? toRemove = null;
+        foreach (var id in row.ExtraStatusIds)
+        {
+            ImGui.Text($"  {GameNames.StatusName(id)} ({id})");
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton($"Remove##xrm_{cardId}_{id}"))
+                toRemove = id;
+        }
+
+        if (toRemove is not null)
+        {
+            row.ExtraStatusIds.Remove(toRemove.Value);
+            plugin.RequestSave();
+        }
+
+        var text = search.Text;
+        if (ImGui.InputText($"Search by name##xsearch_{cardId}", ref text, 64))
+            search.Text = text;
+
+        foreach (var result in search.Results)
+        {
+            if (row.ExtraStatusIds.Contains(result.Id))
+                continue;
+
+            if (ImGui.Selectable($"{result.Name} ({result.Id})##xres_{cardId}_{result.Id}"))
+            {
+                row.ExtraStatusIds.Add(result.Id);
+                plugin.RequestSave();
+            }
+        }
     }
 
     // The list of statuses of a row: what is in it, a way to add from what the party has right now, and a name search.

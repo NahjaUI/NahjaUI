@@ -169,6 +169,15 @@ public class UnitFrameSettings
         Health = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -4, OffsetY = 0, TextSize = 14 }
     };
 
+    /// <summary>The buffs of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
+    public PartyAuraSettings Buffs { get; set; } = PartyAuraSettings.CreateFrameBuffs();
+
+    /// <summary>The debuffs of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
+    public PartyAuraSettings Debuffs { get; set; } = PartyAuraSettings.CreateFrameDebuffs();
+
+    /// <summary>Target frame: hide the game's own buffs and debuffs of the target while one of our two rows is on.</summary>
+    public bool HideNativeStatuses { get; set; } = true;
+
     /// <summary>Left click on the frame targets the unit, right click opens a small menu. When off, clicks go through to the game.</summary>
     public bool Clickable { get; set; } = true;
 
@@ -179,6 +188,12 @@ public class UnitFrameSettings
 
     /// <summary>Fixed colour for the life, or the colour of the job.</summary>
     public LifeColorMode LifeColorMode { get; set; } = LifeColorMode.Fixed;
+
+    /// <summary>Life colour of a target that is a pet or a minion.</summary>
+    public Vector4 PetColor { get; set; } = new(0.50f, 0.62f, 0.78f, 1f);
+
+    /// <summary>Colour of a target that is an object: furniture, chest, aetheryte, event object...</summary>
+    public Vector4 ObjectColor { get; set; } = new(0.55f, 0.57f, 0.62f, 1f);
 
     public Vector4 HostileColor { get; set; } = new(0.79f, 0.29f, 0.27f, 1f);
 

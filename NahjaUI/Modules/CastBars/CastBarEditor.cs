@@ -80,7 +80,7 @@ internal sealed class CastBarEditor
             ImGui.Spacing();
 
             var showIcon = settings.ShowIcon;
-            if (ImGui.Checkbox("Show the spell icon inside the bar", ref showIcon))
+            if (ImGui.Checkbox(isTarget ? "Show the spell icon inside the bar (allies only)" : "Show the spell icon inside the bar", ref showIcon))
             {
                 settings.ShowIcon = showIcon;
                 plugin.RequestSave();
@@ -176,6 +176,13 @@ internal sealed class CastBarEditor
                     settings.UninterruptibleColor = new Vector4(uninterruptible.X, uninterruptible.Y, uninterruptible.Z, 1f);
                     plugin.RequestSave();
                 }
+            }
+
+            var rounding = settings.RoundingPx;
+            if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
+            {
+                settings.RoundingPx = rounding;
+                plugin.RequestSave();
             }
 
             var background = settings.BackgroundColor;

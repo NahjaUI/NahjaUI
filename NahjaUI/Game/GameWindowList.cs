@@ -20,6 +20,30 @@ internal static unsafe class GameWindowList
     // A window's name is a text of up to 32 bytes, 8 bytes into the window.
     private const int NameOffset = 0x8;
 
+    /// <summary>Is the game window with this exact name on screen right now?</summary>
+    public static bool IsVisible(string windowName)
+    {
+        var manager = RaptureAtkUnitManager.Instance();
+        if (manager == null)
+            return false;
+
+        var list = &((AtkUnitManager*)manager)->AllLoadedUnitsList;
+        var count = Math.Min((int)list->Count, MaxEntries);
+
+        for (var i = 0; i < count; i++)
+        {
+            var unit = *(AtkUnitBase**)((byte*)list + EntriesOffset + i * sizeof(nint));
+            if (unit == null || !unit->IsVisible)
+                continue;
+
+            var name = Marshal.PtrToStringUTF8((nint)((byte*)unit + NameOffset));
+            if (name == windowName)
+                return true;
+        }
+
+        return false;
+    }
+
     public static List<(string Name, bool Visible)> Read()
     {
         var result = new List<(string Name, bool Visible)>();

@@ -10,7 +10,9 @@ using NahjaUI.Game;
 using NahjaUI.Modules.Auras;
 using NahjaUI.Modules.CastBars;
 using NahjaUI.Modules.JobGauges;
+using NahjaUI.Modules.EnemyList;
 using NahjaUI.Modules.NamePlates;
+using NahjaUI.Modules.Tooltip;
 using NahjaUI.Modules.PartyFrames;
 using NahjaUI.Modules.UnitFrames;
 using NahjaUI.Windows;
@@ -35,6 +37,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IJobGauges JobGauges { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static INamePlateGui NamePlateGui { get; private set; } = null!;
+    [PluginService] internal static IGameConfig GameConfig { get; private set; } = null!;
+    [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
 
     private const string CommandName = "/nui";
 
@@ -52,6 +56,8 @@ public sealed class Plugin : IDalamudPlugin
     private UnlockOverlay UnlockOverlay { get; init; }
     internal OverlayFonts Fonts { get; init; }
     internal AuraEngine AuraSystem { get; init; }
+    internal StatusRowRenderer StatusRows { get; init; }
+    internal GameWindowCover GameCover { get; } = new();
     internal AuraEditor AuraEditorPage { get; init; }
     internal CastBarModule CastBarSystem { get; init; }
     internal CastBarEditor CastBarEditorPage { get; init; }
@@ -61,6 +67,10 @@ public sealed class Plugin : IDalamudPlugin
     internal UnitFrameEditor UnitFrameEditorPage { get; init; }
     internal PartyFrameModule PartyFrameSystem { get; init; }
     internal NamePlateModule NamePlateSystem { get; init; }
+    internal NamePlateEditor NamePlateEditorPage { get; init; }
+    internal TooltipEditor TooltipEditorPage { get; init; }
+    internal EnemyListModule EnemyListSystem { get; init; }
+    internal EnemyListEditor EnemyListEditorPage { get; init; }
 
     // Set when something changed; the configuration is written once the mouse button is released.
     private bool saveRequested;
@@ -79,6 +89,7 @@ public sealed class Plugin : IDalamudPlugin
         Layout = new LayoutManager(Configuration);
         Fonts = new OverlayFonts();
         AuraSystem = new AuraEngine(this);
+        StatusRows = new StatusRowRenderer(this);
         AuraEditorPage = new AuraEditor(this);
         CastBarSystem = new CastBarModule(this);
         CastBarEditorPage = new CastBarEditor(this);
@@ -88,6 +99,10 @@ public sealed class Plugin : IDalamudPlugin
         UnitFrameEditorPage = new UnitFrameEditor(this);
         PartyFrameSystem = new PartyFrameModule(this);
         NamePlateSystem = new NamePlateModule(this);
+        NamePlateEditorPage = new NamePlateEditor(this);
+        TooltipEditorPage = new TooltipEditor(this);
+        EnemyListSystem = new EnemyListModule(this);
+        EnemyListEditorPage = new EnemyListEditor(this);
         UnlockOverlay = new UnlockOverlay(this, Layout);
 
         MainWindow = new MainWindow(this);
@@ -124,6 +139,7 @@ public sealed class Plugin : IDalamudPlugin
         UnitFrameSystem.Dispose();
         PartyFrameSystem.Dispose();
         NamePlateSystem.Dispose();
+        EnemyListSystem.Dispose();
         GameData.Dispose();
         Fonts.Dispose();
 
@@ -140,14 +156,20 @@ public sealed class Plugin : IDalamudPlugin
 
         FollowUnlockMode();
 
+        // Which game windows cover the screen right now (the frames are not drawn over them).
+        GameCover.Update();
+
         WindowSystem.Draw();
         UnitFrameSystem.Draw();
         PartyFrameSystem.Draw();
         NamePlateSystem.Draw();
+        EnemyListSystem.Draw();
         AuraSystem.Draw();
         CastBarSystem.Draw();
         JobGaugeSystem.Draw();
         UnlockOverlay.Draw();
+
+        UnitFrameSystem.UpdateCursor();
 
         FlushSave();
     }
@@ -187,12 +209,6 @@ public sealed class Plugin : IDalamudPlugin
         if (args.Trim().ToLowerInvariant() == "unlock")
         {
             Layout.UnlockMode = !Layout.UnlockMode;
-            return;
-        }
-
-        if (args.Trim().ToLowerInvariant() == "nameplates")
-        {
-            NamePlateSystem.Toggle();
             return;
         }
 
@@ -246,6 +262,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.CastBars.Target.Font = OverlayFont.NahjaDisplay;
         Configuration.JobGauges.WhiteMage.Font = OverlayFont.NahjaDisplayBold;
         Configuration.JobGauges.Warrior.Font = OverlayFont.NahjaDisplayBold;
+        Configuration.JobGauges.Paladin.Font = OverlayFont.NahjaDisplayBold;
         foreach (var frame in new[]
                  {
                      Configuration.UnitFrames.Player,

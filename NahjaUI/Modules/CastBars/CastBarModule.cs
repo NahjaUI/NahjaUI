@@ -105,11 +105,12 @@ internal sealed class CastBarModule : IDisposable
 
         var settings = plugin.Configuration.CastBars;
 
-        DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false);
-        DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true);
+        DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false, true);
+        // The icon of an enemy action means nothing (the game's own bar has none): the target bar shows it only for allies.
+        DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, snapshot.Target is { IsHostile: false });
     }
 
-    private void DrawBar(CastBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget)
+    private void DrawBar(CastBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
     {
         if (!settings.Enabled)
             return;
@@ -143,12 +144,15 @@ internal sealed class CastBarModule : IDisposable
         var fraction = Math.Clamp(view.Current / view.Total, 0f, 1f);
         var barColor = isTarget && !view.Interruptible ? settings.UninterruptibleColor : settings.BarColor;
 
+        // The corners are rounded like the rest of the interface (never more than half the height).
+        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), size.Y / 2f);
+
         // Background
-        drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.BackgroundColor), 0f);
+        drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.BackgroundColor), rounding, ImDrawFlags.RoundCornersAll);
 
         // The icon sits inside the bar, at its left, as a square as tall as the bar.
         var barLeft = pos.X;
-        var hasIcon = settings.ShowIcon && view.IconId != 0;
+        var hasIcon = settings.ShowIcon && (allowIcon || preview) && view.IconId != 0;
 
         if (hasIcon)
         {
@@ -156,26 +160,31 @@ internal sealed class CastBarModule : IDisposable
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(view.IconId)).GetWrapOrEmpty();
             var (uv0, uv1) = AuraEngine.IconUv(new Vector2(size.Y, size.Y), 1f, 0.08f);
 
-            drawList.AddImage(texture.Handle, pos, iconMax, uv0, uv1, 0xFFFFFFFFu);
+            drawList.AddImageRounded(texture.Handle, pos, iconMax, uv0, uv1, 0xFFFFFFFFu, rounding, ImDrawFlags.RoundCornersLeft);
             barLeft = iconMax.X;
         }
 
         // The fill grows from left to right over what is left of the bar.
         var fillRight = MathF.Round(barLeft + (max.X - barLeft) * fraction);
+
+        // The shape of the bar part: all corners rounded, or only the right ones when the icon takes the left side.
+        var shapeFlags = hasIcon ? ImDrawFlags.RoundCornersRight : ImDrawFlags.RoundCornersAll;
+        var shapeMin = new Vector2(barLeft, pos.Y);
+
         if (fillRight > barLeft)
-            drawList.AddRectFilled(new Vector2(barLeft, pos.Y), new Vector2(fillRight, max.Y), ImGui.GetColorU32(barColor), 0f);
+            FillShape(drawList, shapeMin, max, barLeft, fillRight, ImGui.GetColorU32(barColor), rounding, shapeFlags);
 
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         // Slidecast: the last part of the cast is tinted and a line shows where it starts.
         // From that point on you can move and the cast still goes through.
         if (!isTarget && settings.ShowSlideCast)
-            DrawSlideCast(drawList, settings, view, barLeft, pos, max, thickness);
+            DrawSlideCast(drawList, settings, view, barLeft, pos, max, thickness, rounding, shapeFlags);
 
         // Border, and a line between the icon and the bar.
         var border = ImGui.GetColorU32(settings.BorderColor);
 
-        drawList.AddRect(pos, max, border, 0f, ImDrawFlags.None, thickness);
+        drawList.AddRect(pos, max, border, rounding, ImDrawFlags.RoundCornersAll, thickness);
 
         if (hasIcon)
             drawList.AddLine(new Vector2(barLeft, pos.Y), new Vector2(barLeft, max.Y), border, thickness);
@@ -183,7 +192,15 @@ internal sealed class CastBarModule : IDisposable
         DrawTexts(drawList, settings, view, barLeft, pos, max);
     }
 
-    private static void DrawSlideCast(ImDrawListPtr drawList, CastBarSettings settings, CastView view, float barLeft, Vector2 pos, Vector2 max, float thickness)
+    // A fill that follows the rounded shape of the bar: the full shape cut by a clip rectangle, so it never sticks out of a corner.
+    private static void FillShape(ImDrawListPtr drawList, Vector2 shapeMin, Vector2 max, float clipLeft, float clipRight, uint color, float rounding, ImDrawFlags flags)
+    {
+        drawList.PushClipRect(new Vector2(clipLeft, shapeMin.Y), new Vector2(clipRight, max.Y), true);
+        drawList.AddRectFilled(shapeMin, max, color, rounding, flags);
+        drawList.PopClipRect();
+    }
+
+    private static void DrawSlideCast(ImDrawListPtr drawList, CastBarSettings settings, CastView view, float barLeft, Vector2 pos, Vector2 max, float thickness, float rounding, ImDrawFlags shapeFlags)
     {
         var window = settings.SlideCastMs / 1000f;
 
@@ -195,11 +212,8 @@ internal sealed class CastBarModule : IDisposable
         var x = MathF.Round(barLeft + (max.X - barLeft) * startFraction);
 
         // The tinted zone, from the start of the window to the end of the bar.
-        drawList.AddRectFilled(
-            new Vector2(x, pos.Y),
-            new Vector2(max.X, max.Y),
-            ImGui.GetColorU32(Theme.WithAlpha(settings.SlideCastColor, 0.35f)),
-            0f);
+        FillShape(drawList, new Vector2(barLeft, pos.Y), max, x, max.X,
+            ImGui.GetColorU32(Theme.WithAlpha(settings.SlideCastColor, 0.35f)), rounding, shapeFlags);
 
         // The line at the start of the window (moved half a pixel so it is sharp).
         var lineX = x + thickness / 2f;

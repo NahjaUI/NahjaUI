@@ -126,6 +126,13 @@ public sealed class MiniBarWindow : Window, IDisposable
         ImGui.SetCursorScreenPos(pos + new Vector2(1f, 1f));
         ImGui.InvisibleButton("##nui_minibar_drag", new Vector2(openPos.X - gap - pos.X, size.Y - 2f));
 
+        // Double click on the bar: back to the window, like the double click that minimized it.
+        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+        {
+            plugin.ExpandMainWindow();
+            return;
+        }
+
         if (ImGui.IsItemActive())
         {
             var delta = ImGui.GetIO().MouseDelta;

@@ -44,6 +44,9 @@ internal sealed class GameDataProvider : IDisposable
     /// <summary>Set by the nameplate module every frame: the plates are only read while someone wants them.</summary>
     public bool WantNamePlates { get; set; }
 
+    /// <summary>Set by the enemy list every frame it is on: the provider reads the game's enemy list only then.</summary>
+    public bool WantEnemyList { get; set; }
+
     /// <summary>The snapshot of the latest frame. Never null.</summary>
     public GameSnapshot Current { get; private set; } = GameSnapshot.Empty;
 
@@ -114,11 +117,20 @@ internal sealed class GameDataProvider : IDisposable
 
         var target = Plugin.TargetManager.Target;
 
+        // The game's option to show the party list while alone (the name says "off": 0 means it is shown).
+        var soloRaw = -1;
+        if (Plugin.GameConfig.UiControl.TryGet("PartyListSoloOff", out uint rawValue))
+            soloRaw = (int)rawValue;
+
+        var soloShown = soloRaw == 0;
+
         var context = new ContextSnapshot(
             Plugin.ClientState.TerritoryType,
             Plugin.Condition[ConditionFlag.InCombat],
             Plugin.Condition[ConditionFlag.BoundByDuty],
-            Plugin.PartyList.Length);
+            Plugin.PartyList.Length,
+            soloShown,
+            soloRaw);
 
         var player = ToUnit(localPlayer);
 
@@ -134,8 +146,11 @@ internal sealed class GameDataProvider : IDisposable
             frame,
             BuildWhiteMageGauge(player),
             BuildWarriorGauge(player),
-            BuildChocobo(localPlayer),
-            BuildNamePlates());
+            BuildChocobo(localPlayer, soloShown),
+            BuildNamePlates(),
+            BuildPaladinGauge(player),
+            BuildCombo(),
+            BuildEnemyList(localPlayer));
 
         // The statuses seen this frame are the ones to remember for the next one.
         (statusClock, nextStatusClock) = (nextStatusClock, statusClock);
@@ -143,10 +158,10 @@ internal sealed class GameDataProvider : IDisposable
     }
 
     // Your chocobo companion (the one the game shows at the end of its party list), or null when it is not out.
-    private UnitSnapshot? BuildChocobo(IGameObject localPlayer)
+    private UnitSnapshot? BuildChocobo(IGameObject localPlayer, bool soloShown)
     {
-        // Only while in a party, like the game's list.
-        if (Plugin.PartyList.Length == 0)
+        // Only while in a party, like the game's list (or alone, when the game is set to show the list alone).
+        if (Plugin.PartyList.Length == 0 && !soloShown)
             return null;
 
         IBattleNpc? chocobo = null;
@@ -229,6 +244,39 @@ internal sealed class GameDataProvider : IDisposable
         return result;
     }
 
+    // The enemies of the game's own enemy list (the ones that are fighting you, up to 8), with who each one is attacking.
+    private unsafe IReadOnlyList<EnemyEntrySnapshot> BuildEnemyList(IGameObject localPlayer)
+    {
+        var result = new List<EnemyEntrySnapshot>();
+        if (!WantEnemyList)
+            return result;
+
+        var numbers = EnemyListNumberArray.Instance();
+        if (numbers == null)
+            return result;
+
+        var count = Math.Clamp(numbers->EnemyCount, 0, 8);
+        var enemies = numbers->Enemies;
+
+        for (var i = 0; i < count; i++)
+        {
+            var entityId = (uint)enemies[i].EntityId;
+            if (entityId == 0 || entityId == 0xE0000000)
+                continue;
+
+            if (Plugin.ObjectTable.SearchByEntityId(entityId) is not IBattleChara chara || chara.IsDead)
+                continue;
+
+            var unit = ToUnit(chara);
+            if (unit is null)
+                continue;
+
+            result.Add(new EnemyEntrySnapshot(unit with { IsHostile = true }, chara.TargetObjectId == localPlayer.GameObjectId));
+        }
+
+        return result;
+    }
+
     // The White Mage gauge (class job 24). Nobody else has one, and the game only fills it for White Mages.
     private const uint WhiteMageJobId = 24;
 
@@ -253,6 +301,29 @@ internal sealed class GameDataProvider : IDisposable
         return new WarriorGaugeSnapshot(gauge.BeastGauge);
     }
 
+    // The combo of the game: the last action of the chain you used and the time left to continue it.
+    private static unsafe ComboSnapshot BuildCombo()
+    {
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null)
+            return ComboSnapshot.None;
+
+        var combo = actionManager->Combo;
+        return combo.Timer > 0f ? new ComboSnapshot(combo.Action, combo.Timer) : ComboSnapshot.None;
+    }
+
+    // The Paladin gauge. Paladin is class job 19 (Gladiator, its first class, is 1 and has no Oath Gauge).
+    private const uint PaladinJobId = 19;
+
+    private static PaladinGaugeSnapshot? BuildPaladinGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != PaladinJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<PLDGauge>();
+        return new PaladinGaugeSnapshot(gauge.OathGauge);
+    }
+
     // The target of the target. For your own character the game keeps the target somewhere else than for the rest, so the
     // usual reading comes back empty when you target yourself. In that case your target's target is you.
     private static IGameObject? TargetOfTarget(IGameObject? target, IGameObject localPlayer)
@@ -268,8 +339,28 @@ internal sealed class GameDataProvider : IDisposable
     // Only characters that fight (players, enemies, battle NPCs) have health and statuses.
     private UnitSnapshot? ToUnit(IGameObject? gameObject)
     {
-        if (gameObject is not IBattleChara chara)
+        if (gameObject is null)
             return null;
+
+        // The kind of object the game reports (numbers of the game's ObjectKind: 3 event NPC, 9 minion, 10 retainer).
+        var objectKind = (byte)gameObject.ObjectKind;
+
+        if (gameObject is not IBattleChara chara)
+        {
+            // Not a fighting character: no life, no statuses. It still gets a frame (name and colour only).
+            var kind = objectKind switch
+            {
+                9 => UnitKind.Pet,
+                3 or 10 => UnitKind.Npc,
+                _ => UnitKind.Object
+            };
+
+            return new UnitSnapshot(gameObject.EntityId, gameObject.Name.ToString(), 0, 0, 0, 0, 0, 0, false, null,
+                Array.Empty<StatusSnapshot>(), Kind: kind);
+        }
+
+        // Pets (summons, carbuncle...) and companions (SubKind 2 and 3 of a battle NPC) get their own colour.
+        var unitKind = objectKind == 2 && gameObject.SubKind is 2 or 3 ? UnitKind.Pet : UnitKind.Character;
 
         return new UnitSnapshot(
             chara.EntityId,
@@ -285,7 +376,8 @@ internal sealed class GameDataProvider : IDisposable
             ToStatuses(chara.EntityId, chara.StatusList),
             chara.ObjectKind == ObjectKind.Pc,
             chara.ShieldPercentage,
-            chara.StatusFlags.HasFlag(StatusFlags.Hostile));
+            chara.StatusFlags.HasFlag(StatusFlags.Hostile),
+            Kind: unitKind);
     }
 
     private UnitSnapshot ToUnit(IPartyMember member)
@@ -305,7 +397,8 @@ internal sealed class GameDataProvider : IDisposable
             member.MaxMP,
             chara?.IsDead ?? false,
             chara is null ? null : ToCast(chara),
-            ToStatuses(member.EntityId, member.Statuses));
+            ToStatuses(member.EntityId, member.Statuses),
+            ShieldPercent: chara?.ShieldPercentage ?? 0);
     }
 
     private static CastSnapshot? ToCast(IBattleChara chara)
@@ -393,7 +486,8 @@ internal sealed class GameDataProvider : IDisposable
             }
 
             result[requested] = new CooldownSnapshot(
-                requested, charges, maxCharges, remaining, perCharge, elapsed, totalForAllCharges, groupActive, group);
+                requested, charges, maxCharges, remaining, perCharge, elapsed, totalForAllCharges, groupActive, group, id,
+                actionManager->IsActionHighlighted(ActionType.Action, id));
         }
 
         return result;

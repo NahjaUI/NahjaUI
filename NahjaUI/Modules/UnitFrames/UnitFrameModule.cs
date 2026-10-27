@@ -4,6 +4,8 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Interface.Utility;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
@@ -19,13 +21,15 @@ namespace NahjaUI.Modules.UnitFrames;
 internal sealed class UnitFrameModule : IDisposable
 {
     // The game's own bars, found in game with the Debug page: yours (life and mana), the main part of the target info
-    // (it includes the target of target) and the focus. The target's statuses (_TargetInfoBuffDebuff) and the target
-    // cursor (_TargetCursor) are left alone. This needs the target info set to separate parts in the game's HUD layout.
+    // (it includes the target of target) and the focus. The target's statuses (_TargetInfoBuffDebuff) are hidden only while
+    // our own buff or debuff rows of the target frame are on. The target cursor (_TargetCursor) is left alone. This needs the target info set to separate parts in the game's HUD layout.
     private const string NativePlayerBar = "_ParameterWidget";
     private const string NativeTargetBar = "_TargetInfoMainTarget";
     private const string NativeFocusBar = "_FocusTargetInfo";
 
-    private static readonly string[] NativeBars = { NativePlayerBar, NativeTargetBar, NativeFocusBar };
+    private const string NativeTargetStatuses = "_TargetInfoBuffDebuff";
+
+    private static readonly string[] NativeBars = { NativePlayerBar, NativeTargetBar, NativeFocusBar, NativeTargetStatuses };
 
     // What is shown in the preview when the real unit is not there.
     private static readonly UnitSnapshot SamplePlayer = new(
@@ -123,6 +127,36 @@ internal sealed class UnitFrameModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);
+        RestoreCursor();
+    }
+
+    // The game's cursor is kept only while the mouse is over one of our frames (the setting is global in Dalamud, so it is
+    // put back as soon as the mouse leaves). Called once per frame after everything has been drawn.
+    private bool cursorWanted;
+    private bool cursorChanged;
+
+    internal void UpdateCursor()
+    {
+        if (cursorWanted)
+        {
+            Plugin.PluginInterface.UiBuilder.OverrideGameCursor = false;
+            cursorChanged = true;
+        }
+        else
+        {
+            RestoreCursor();
+        }
+
+        cursorWanted = false;
+    }
+
+    private void RestoreCursor()
+    {
+        if (!cursorChanged)
+            return;
+
+        Plugin.PluginInterface.UiBuilder.OverrideGameCursor = true;
+        cursorChanged = false;
     }
 
     // ---------------------------------------------------------------- hiding the game's bar
@@ -137,11 +171,20 @@ internal sealed class UnitFrameModule : IDisposable
             NativePlayerBar => frames.Player,
             NativeTargetBar => frames.Target,
             NativeFocusBar => frames.Focus,
+            NativeTargetStatuses => frames.Target,
             _ => null
         };
 
-        if (settings is null || !settings.Enabled || !settings.HideNative)
+        if (args.AddonName == NativeTargetStatuses)
+        {
+            var target = frames.Target;
+            if (!target.Enabled || !target.HideNativeStatuses || !(target.Buffs.Enabled || target.Debuffs.Enabled))
+                return;
+        }
+        else if (settings is null || !settings.Enabled || !settings.HideNative)
+        {
             return;
+        }
 
         args.PreventOriginal();
 
@@ -160,6 +203,11 @@ internal sealed class UnitFrameModule : IDisposable
         PreviewActive = preview;
 
         var frames = plugin.Configuration.UnitFrames;
+
+        // The mana box can only be moved when the job you play has its mana bar in its own box.
+        var player = snapshot.IsLoggedIn ? snapshot.Player : null;
+        ManaElement.IsHidden = player is not null
+            && !(frames.Player.Enabled && frames.Player.ShowMana && frames.Player.GetManaPlacement(player.JobId) == ManaPlacement.OwnBox);
 
         DrawUnit(frames.Player, PlayerElement, snapshot.Player, SamplePlayer, true, preview);
         DrawUnit(frames.Target, TargetElement, snapshot.Target, SampleTarget, false, preview);
@@ -183,7 +231,27 @@ internal sealed class UnitFrameModule : IDisposable
             unit = sample;
         }
 
-        DrawFrame(settings, element, unit, isPlayerFrame);
+        // Everything of the frame is drawn around the game's own right click menu, never over it.
+        var (barPos, barSize) = LayoutManager.GetRect(element.Layout);
+        plugin.GameCover.Draw(barPos, barSize, 400f * ImGuiHelpers.GlobalScale, () =>
+        {
+            DrawFrame(settings, element, unit, isPlayerFrame);
+
+            // Buffs and debuffs: not on the target of target, which is only a small frame.
+            if (unit.Kind != UnitKind.Object && !ReferenceEquals(settings, plugin.Configuration.UnitFrames.TargetOfTarget))
+            {
+                var drawList = ImGui.GetBackgroundDrawList();
+                var playerId = plugin.GameData.Current.Player?.EntityId ?? 0;
+                var buffs = isReal ? unit.Statuses : StatusRowRenderer.PreviewBuffs;
+                var debuffs = isReal ? unit.Statuses : StatusRowRenderer.PreviewDebuffs;
+
+                var frames = plugin.Configuration.UnitFrames;
+                var place = ReferenceEquals(settings, frames.Player) ? "player" : ReferenceEquals(settings, frames.Focus) ? "focus" : "target";
+
+                plugin.StatusRows.DrawRow(drawList, settings.Buffs, true, buffs, !isReal, playerId, barPos, barSize, place);
+                plugin.StatusRows.DrawRow(drawList, settings.Debuffs, false, debuffs, !isReal, playerId, barPos, barSize, place);
+            }
+        });
 
         // Clicks only make sense on a real unit, and not while the boxes are being moved (they use the same place).
         if (isReal && settings.Clickable && !plugin.Layout.UnlockMode)
@@ -193,7 +261,7 @@ internal sealed class UnitFrameModule : IDisposable
     // ---------------------------------------------------------------- clicks
 
     // A see-through window exactly over the frame takes the mouse clicks, so the game does not get them.
-    // Left click targets the unit. Right click opens a small NahjaUI menu (the game's own menu cannot be opened from here).
+    // Left click targets the unit. Right click opens the game's own menu for the unit.
     private void HandleClicks(LayoutElement element, UnitSnapshot unit)
     {
         var (pos, size) = LayoutManager.GetRect(element.Layout);
@@ -206,73 +274,46 @@ internal sealed class UnitFrameModule : IDisposable
         if (size.X < 1f || size.Y < 1f)
             return;
 
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, new Vector2(1f, 1f));
+        // While the game's own menu is open, our click areas step aside so its entries can be clicked.
+        if (plugin.GameCover.Any)
+            return;
 
-        ImGuiHelpers.ForceNextWindowMainViewport();
-        ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
-        ImGui.SetNextWindowSize(size, ImGuiCond.Always);
+        // No window over the frame: while the mouse is over the box we tell Dalamud the mouse is ours (so the game does not
+        // get the click) and read the click ourselves.
+        var hovered = ImGui.IsMouseHoveringRect(pos, pos + size, false) && !ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow);
+        if (!hovered)
+            return;
 
-        var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove |
-                    ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse |
-                    ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoBringToFrontOnFocus |
-                    ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav;
+        ImGui.SetNextFrameWantCaptureMouse(true);
 
-        var menuId = $"##nui_unit_menu_{id}";
+        // Dalamud swaps the game's cursor for the Windows one while it captures the mouse; this asks it to keep the game's.
+        cursorWanted = true;
 
-        if (ImGui.Begin($"##nui_unit_click_{id}", flags))
+        if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
-            ImGui.SetCursorPos(Vector2.Zero);
-            ImGui.InvisibleButton("##click", size);
-
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
-            {
-                var clicked = Plugin.ObjectTable.SearchByEntityId(unit.EntityId);
-                if (clicked is not null)
-                    Plugin.TargetManager.Target = clicked;
-            }
-
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-                ImGui.OpenPopup(menuId);
-
-            DrawUnitMenu(menuId, unit);
+            var clicked = Plugin.ObjectTable.SearchByEntityId(unit.EntityId);
+            if (clicked is not null)
+                Plugin.TargetManager.Target = clicked;
         }
 
-        ImGui.End();
-        ImGui.PopStyleVar(4);
+        // Right click: the game's own menu for that unit (the same one as on its own frames).
+        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+            OpenGameMenu(unit);
     }
 
-    // The small menu of right click: what Dalamud lets a plugin do with a unit.
-    private void DrawUnitMenu(string menuId, UnitSnapshot unit)
+    // Opens the game's own right click menu for a unit, at the mouse. Returns false when it could not.
+    private static unsafe bool OpenGameMenu(UnitSnapshot unit)
     {
-        if (!ImGui.IsPopupOpen(menuId))
-            return;
+        var gameObject = Plugin.ObjectTable.SearchByEntityId(unit.EntityId);
+        if (gameObject is null)
+            return false;
 
-        using var theme = new ThemeScope(plugin.Configuration);
+        var agent = AgentHUD.Instance();
+        if (agent == null)
+            return false;
 
-        if (!ImGui.BeginPopup(menuId))
-            return;
-
-        ImGui.TextColored(Theme.Accent, unit.Name);
-        ImGui.Separator();
-
-        var target = Plugin.ObjectTable.SearchByEntityId(unit.EntityId);
-
-        if (ImGui.Selectable("Target") && target is not null)
-            Plugin.TargetManager.Target = target;
-
-        if (ImGui.Selectable("Set as focus target") && target is not null)
-            Plugin.TargetManager.FocusTarget = target;
-
-        if (Plugin.TargetManager.FocusTarget is not null && ImGui.Selectable("Clear focus target"))
-            Plugin.TargetManager.FocusTarget = null;
-
-        if (ImGui.Selectable("Copy name"))
-            ImGui.SetClipboardText(unit.Name);
-
-        ImGui.EndPopup();
+        agent->OpenContextMenuFromTarget((GameObject*)gameObject.Address);
+        return true;
     }
 
     private void DrawFrame(UnitFrameSettings settings, LayoutElement element, UnitSnapshot unit, bool isPlayerFrame)
@@ -285,17 +326,22 @@ internal sealed class UnitFrameModule : IDisposable
         var rounding = MathF.Round(settings.RoundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
-        var fraction = unit.MaxHp == 0 ? 0f : Math.Clamp(unit.Hp / (float)unit.MaxHp, 0f, 1f);
+        // Something without life (an object, a shopkeeper) is a full bar in its colour.
+        var hasLife = unit.MaxHp > 0;
+        var fraction = hasLife ? Math.Clamp(unit.Hp / (float)unit.MaxHp, 0f, 1f) : (unit.Kind == UnitKind.Character ? 0f : 1f);
         var fillColor = LifeColor(settings, unit, isPlayerFrame);
 
-        // Background, then the life. The right end of the fill is straight, except when the life is full.
+        // Background, then the life. The right end of the fill is straight, cut with a clip rectangle.
         drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.BackgroundColor), rounding);
 
         var fillRight = MathF.Round(pos.X + size.X * fraction);
         if (fillRight > pos.X)
         {
-            var flags = fraction >= 0.999f ? ImDrawFlags.RoundCornersAll : ImDrawFlags.RoundCornersLeft;
-            drawList.AddRectFilled(pos, new Vector2(fillRight, max.Y), ImGui.GetColorU32(fillColor), rounding, flags);
+            // The whole rounded bar, cut at the end of the life: the fill never sticks out of the rounded corners
+            // (with a straight end it did when the life was between about 95% and 100%).
+            drawList.PushClipRect(pos, new Vector2(fillRight, max.Y), true);
+            drawList.AddRectFilled(pos, max, ImGui.GetColorU32(fillColor), rounding);
+            drawList.PopClipRect();
         }
 
         if (settings.ShowShield && unit.ShieldPercent > 0)
@@ -328,7 +374,9 @@ internal sealed class UnitFrameModule : IDisposable
         }
 
         // While moving things around, the own box shows a sample so there is something to see and drag.
-        if (isPlayerFrame && settings.ShowMana && !manaDrawn && PreviewActive)
+        // Only when this job really has its mana bar in its own box: with "off" there is nothing to show.
+        if (isPlayerFrame && settings.ShowMana && !manaDrawn && PreviewActive
+            && settings.GetManaPlacement(unit.JobId) == ManaPlacement.OwnBox)
         {
             var (manaPos, manaSize) = LayoutManager.GetRect(ManaElement.Layout);
             DrawManaBar(drawList, settings, manaPos, manaPos + manaSize, 0.7f, scale, thickness);
@@ -338,8 +386,12 @@ internal sealed class UnitFrameModule : IDisposable
         var name = UnitTextFormatter.FormatName(unit.Name, settings.NameFormat, unit.IsPlayer, settings.NameFormatOnlyPlayers);
         DrawText(drawList, name, settings.Name, pos, size);
 
-        var health = UnitTextFormatter.FormatHealth(settings, unit.Hp, unit.MaxHp);
-        DrawText(drawList, health, settings.Health, pos, size);
+        // No life number for things that have no life.
+        if (hasLife || unit.Kind == UnitKind.Character)
+        {
+            var health = UnitTextFormatter.FormatHealth(settings, unit.Hp, unit.MaxHp);
+            DrawText(drawList, health, settings.Health, pos, size);
+        }
     }
 
     // The shield is as tall as the bar and follows its rounded corners.
@@ -360,25 +412,25 @@ internal sealed class UnitFrameModule : IDisposable
         if (right <= left)
             return;
 
-        // Only the corners that touch the ends of the bar are rounded, the same as the bar.
-        var touchesLeft = left <= pos.X + 0.5f;
-        var touchesRight = right >= max.X - 0.5f;
-
-        var flags = touchesLeft && touchesRight ? ImDrawFlags.RoundCornersAll
-            : touchesRight ? ImDrawFlags.RoundCornersRight
-            : touchesLeft ? ImDrawFlags.RoundCornersLeft
-            : ImDrawFlags.RoundCornersNone;
-
         var color = settings.ShieldColor;
         color.W = Math.Clamp(color.W * settings.ShieldOpacity, 0f, 1f);
 
-        drawList.AddRectFilled(new Vector2(left, pos.Y), new Vector2(right, max.Y), ImGui.GetColorU32(color), rounding, flags);
+        // The rounded bar cut to the part of the shield: it follows the corners of the bar, never sticks out of them.
+        drawList.PushClipRect(new Vector2(left, pos.Y), new Vector2(right, max.Y), true);
+        drawList.AddRectFilled(pos, max, ImGui.GetColorU32(color), rounding);
+        drawList.PopClipRect();
     }
 
     // The colour of the life: the hostile colour for enemies, and for players the job's own colour when class colours
     // are chosen, the fixed one otherwise. Anything else (friendly NPCs) uses the fixed one.
     internal Vector4 LifeColor(UnitFrameSettings settings, UnitSnapshot unit, bool isPlayerFrame)
     {
+        if (unit.Kind == UnitKind.Object)
+            return settings.ObjectColor;
+
+        if (unit.Kind == UnitKind.Pet)
+            return settings.PetColor;
+
         var isPlayer = isPlayerFrame || unit.IsPlayer;
 
         if (!isPlayer && unit.IsHostile)
@@ -401,8 +453,9 @@ internal sealed class UnitFrameModule : IDisposable
         var fillRight = MathF.Round(min.X + width * fraction);
         if (fillRight > min.X)
         {
-            var flags = fraction >= 0.999f ? ImDrawFlags.RoundCornersAll : ImDrawFlags.RoundCornersLeft;
-            drawList.AddRectFilled(min, new Vector2(fillRight, max.Y), ImGui.GetColorU32(settings.ManaColor), rounding, flags);
+            drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
+            drawList.AddRectFilled(min, max, ImGui.GetColorU32(settings.ManaColor), rounding);
+            drawList.PopClipRect();
         }
 
         drawList.AddRect(min, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);

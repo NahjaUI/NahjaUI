@@ -29,7 +29,8 @@ internal sealed class JobGaugeEditor
         // Cards follow the order of the game's job list: tanks (PLD, WAR, DRK, GNB), healers (WHM, SCH, AST, SGE),
         // melee (MNK, DRG, NIN, SAM, RPR, VPR, BST), physical ranged (BRD, MCH, DNC), magical ranged (BLM, SMN, RDM, PCT, BLU).
         // New jobs are added in their place in this list.
-        DrawWarrior(plugin.Configuration.JobGauges.Warrior);
+        DrawBarGauge("Paladin", "pld", plugin.Configuration.JobGauges.Paladin, plugin.JobGaugeSystem.PaladinElement, "Oath Gauge");
+        DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge");
         DrawWhiteMage(plugin.Configuration.JobGauges.WhiteMage);
     }
 
@@ -159,42 +160,43 @@ internal sealed class JobGaugeEditor
         });
     }
 
-    private void DrawWarrior(WarriorGaugeSettings settings)
+    // The card of a job whose gauge is one bar from 0 to 100 (Warrior, Paladin). <id> keeps the control ids apart.
+    private void DrawBarGauge(string title, string id, BarGaugeSettings settings, LayoutElement element, string gaugeName)
     {
-        Widgets.Card("##card_gauge_war", 22, () =>
+        Widgets.Card($"##card_gauge_{id}", 22, () =>
         {
-            Widgets.SectionLabel("Warrior");
+            Widgets.SectionLabel($"{title} ({gaugeName})");
 
             var enabled = settings.Enabled;
-            if (ImGui.Checkbox("Enabled##war", ref enabled))
+            if (ImGui.Checkbox($"Enabled##{id}", ref enabled))
             {
                 settings.Enabled = enabled;
                 plugin.RequestSave();
             }
 
             var hideNative = settings.HideNative;
-            if (ImGui.Checkbox("Hide the game's gauge##war", ref hideNative))
+            if (ImGui.Checkbox($"Hide the game's gauge##{id}", ref hideNative))
             {
                 settings.HideNative = hideNative;
                 plugin.RequestSave();
             }
 
             var showNumber = settings.ShowNumber;
-            if (ImGui.Checkbox("Show the number on the bar##war", ref showNumber))
+            if (ImGui.Checkbox($"Show the number on the bar##{id}", ref showNumber))
             {
                 settings.ShowNumber = showNumber;
                 plugin.RequestSave();
             }
 
             var showThreshold = settings.ShowThreshold;
-            if (ImGui.Checkbox("Show a mark at 50##war", ref showThreshold))
+            if (ImGui.Checkbox($"Show a mark at 50##{id}", ref showThreshold))
             {
                 settings.ShowThreshold = showThreshold;
                 plugin.RequestSave();
             }
 
             var highlight = settings.HighlightWhenReady;
-            if (ImGui.Checkbox("Change color from 50 up (a spender is ready)##war", ref highlight))
+            if (ImGui.Checkbox($"Change color from 50 up (a spender is ready)##{id}", ref highlight))
             {
                 settings.HighlightWhenReady = highlight;
                 plugin.RequestSave();
@@ -202,12 +204,12 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
-            SizeControls("Bar", plugin.JobGaugeSystem.WarriorElement.Layout);
+            SizeControls("Bar", element.Layout);
 
             ImGui.Spacing();
 
             var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt("Corner rounding (px)##war", ref rounding, 0, 12))
+            if (ImGui.SliderInt($"Corner rounding (px)##{id}", ref rounding, 0, 12))
             {
                 settings.RoundingPx = rounding;
                 plugin.RequestSave();
@@ -215,11 +217,11 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
-            if (ImGui.BeginCombo("Text size (px)##war", $"{settings.TextSize} px", ImGuiComboFlags.None))
+            if (ImGui.BeginCombo($"Text size (px)##{id}", $"{settings.TextSize} px", ImGuiComboFlags.None))
             {
                 foreach (var size in OverlayFonts.AvailableSizes)
                 {
-                    if (ImGui.Selectable($"{size} px##war", settings.TextSize == size))
+                    if (ImGui.Selectable($"{size} px##{id}", settings.TextSize == size))
                     {
                         settings.TextSize = size;
                         plugin.RequestSave();
@@ -230,7 +232,7 @@ internal sealed class JobGaugeEditor
             }
 
             var font = settings.Font;
-            if (EnumCombo("Text font##war", ref font, FontLabel))
+            if (EnumCombo($"Text font##{id}", ref font, FontLabel))
             {
                 settings.Font = font;
                 plugin.RequestSave();
@@ -239,35 +241,35 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var bar = settings.BarColor;
-            if (ImGui.ColorEdit4("Bar color##war", ref bar, ImGuiColorEditFlags.NoAlpha))
+            if (ImGui.ColorEdit4($"Bar color##{id}", ref bar, ImGuiColorEditFlags.NoAlpha))
             {
                 settings.BarColor = new Vector4(bar.X, bar.Y, bar.Z, 1f);
                 plugin.RequestSave();
             }
 
             var ready = settings.ReadyColor;
-            if (ImGui.ColorEdit4("Color from 50 up##war", ref ready, ImGuiColorEditFlags.NoAlpha))
+            if (ImGui.ColorEdit4($"Color from 50 up##{id}", ref ready, ImGuiColorEditFlags.NoAlpha))
             {
                 settings.ReadyColor = new Vector4(ready.X, ready.Y, ready.Z, 1f);
                 plugin.RequestSave();
             }
 
             var background = settings.BackgroundColor;
-            if (ImGui.ColorEdit4("Empty bar color##war", ref background, ImGuiColorEditFlags.None))
+            if (ImGui.ColorEdit4($"Empty bar color##{id}", ref background, ImGuiColorEditFlags.None))
             {
                 settings.BackgroundColor = background;
                 plugin.RequestSave();
             }
 
             var border = settings.BorderColor;
-            if (ImGui.ColorEdit4("Border color##war", ref border, ImGuiColorEditFlags.NoAlpha))
+            if (ImGui.ColorEdit4($"Border color##{id}", ref border, ImGuiColorEditFlags.NoAlpha))
             {
                 settings.BorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
                 plugin.RequestSave();
             }
 
             var mark = settings.ThresholdColor;
-            if (ImGui.ColorEdit4("Mark color##war", ref mark, ImGuiColorEditFlags.None))
+            if (ImGui.ColorEdit4($"Mark color##{id}", ref mark, ImGuiColorEditFlags.None))
             {
                 settings.ThresholdColor = mark;
                 plugin.RequestSave();

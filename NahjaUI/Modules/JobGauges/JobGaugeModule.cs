@@ -12,8 +12,7 @@ using NahjaUI.Game;
 namespace NahjaUI.Modules.JobGauges;
 
 /// <summary>
-/// Draws the job gauges. For now only the White Mage: a row of three lilies (the next one fills up over 20 seconds)
-/// and a row of three blood lilies. It also hides the game's own gauge. It only reads the game snapshot.
+/// Draws the job gauges: White Mage (lilies), Warrior (Beast Gauge) and Paladin (Oath Gauge). It also hides the game's own gauge. It only reads the game snapshot.
 /// </summary>
 internal sealed class JobGaugeModule : IDisposable
 {
@@ -27,7 +26,12 @@ internal sealed class JobGaugeModule : IDisposable
     private const uint WhiteMageJobId = 24;
     private const uint WarriorJobId = 21;
 
-    private static readonly string[] NativeGauges = { NativeWhiteMageGauge, NativeWarriorGauge };
+    // The game's own Paladin gauge.
+    private const string NativePaladinGauge = "JobHudPLD0";
+
+    private const uint PaladinJobId = 19;
+
+    private static readonly string[] NativeGauges = { NativeWhiteMageGauge, NativeWarriorGauge, NativePaladinGauge };
 
     // A new lily every 20 seconds.
     private const float LilyIntervalMs = 20000f;
@@ -37,6 +41,9 @@ internal sealed class JobGaugeModule : IDisposable
 
     // Preview of the Warrior: enough gauge for one spender.
     private static readonly WarriorGaugeSnapshot WarriorSample = new(70);
+
+    // Preview of the Paladin: enough gauge for one spender.
+    private static readonly PaladinGaugeSnapshot PaladinSample = new(70);
 
     private readonly Plugin plugin;
 
@@ -74,6 +81,16 @@ internal sealed class JobGaugeModule : IDisposable
             Height = 14
         });
 
+        PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
+        {
+            ScreenAnchor = AnchorPoint.Center,
+            SelfAnchor = AnchorPoint.Center,
+            OffsetX = 0,
+            OffsetY = 230,
+            Width = 156,
+            Height = 14
+        });
+
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeGauges, OnNativePreDraw);
     }
 
@@ -82,6 +99,8 @@ internal sealed class JobGaugeModule : IDisposable
     public LayoutElement BloodLilyElement { get; }
 
     public LayoutElement WarriorElement { get; }
+
+    public LayoutElement PaladinElement { get; }
 
     /// <summary>
     /// Set by the settings page every frame it is open: the gauge then shows sample values so its look can be adjusted
@@ -99,9 +118,13 @@ internal sealed class JobGaugeModule : IDisposable
     // Runs right before the game draws its own gauge. Skipping the drawing hides it completely, even during its animations.
     private unsafe void OnNativePreDraw(AddonEvent type, AddonArgs args)
     {
-        var hide = args.AddonName == NativeWarriorGauge
-            ? plugin.Configuration.JobGauges.Warrior is { Enabled: true, HideNative: true }
-            : plugin.Configuration.JobGauges.WhiteMage is { Enabled: true, HideNative: true };
+        var gauges = plugin.Configuration.JobGauges;
+        var hide = args.AddonName switch
+        {
+            NativeWarriorGauge => gauges.Warrior is { Enabled: true, HideNative: true },
+            NativePaladinGauge => gauges.Paladin is { Enabled: true, HideNative: true },
+            _ => gauges.WhiteMage is { Enabled: true, HideNative: true }
+        };
         if (!hide)
             return;
 
@@ -128,6 +151,9 @@ internal sealed class JobGaugeModule : IDisposable
         BloodLilyElement.IsHidden = !isWhiteMage;
         WarriorElement.IsHidden = !isWarrior;
 
+        var isPaladin = player is null || player.JobId == PaladinJobId;
+        PaladinElement.IsHidden = !isPaladin;
+
         var unlock = plugin.Layout.UnlockMode;
 
         var whiteMage = plugin.Configuration.JobGauges.WhiteMage;
@@ -145,20 +171,28 @@ internal sealed class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Warrior ?? (settingsPage || (unlock && isWarrior) ? WarriorSample : null);
             if (gauge is not null)
-                DrawWarrior(warrior, gauge);
+                DrawBar(warrior, WarriorElement, gauge.BeastGauge);
+        }
+
+        var paladin = plugin.Configuration.JobGauges.Paladin;
+        if (paladin.Enabled)
+        {
+            var gauge = snapshot.Paladin ?? (settingsPage || (unlock && isPaladin) ? PaladinSample : null);
+            if (gauge is not null)
+                DrawBar(paladin, PaladinElement, gauge.OathGauge);
         }
     }
 
     // One rounded bar from 0 to 100, with an optional mark at 50 and the number in the middle.
-    private void DrawWarrior(WarriorGaugeSettings settings, WarriorGaugeSnapshot gauge)
+    private void DrawBar(BarGaugeSettings settings, LayoutElement element, byte gaugeValue)
     {
         var drawList = ImGui.GetBackgroundDrawList();
         var scale = ImGuiHelpers.GlobalScale;
-        var (pos, size) = LayoutManager.GetRect(WarriorElement.Layout);
+        var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;
 
-        var value = Math.Clamp((int)gauge.BeastGauge, 0, 100);
+        var value = Math.Clamp((int)gaugeValue, 0, 100);
         var rounding = MathF.Round(settings.RoundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;
