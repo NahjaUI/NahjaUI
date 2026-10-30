@@ -10,8 +10,9 @@ using NahjaUI.Game;
 using NahjaUI.Modules.Auras;
 using NahjaUI.Modules.CastBars;
 using NahjaUI.Modules.JobGauges;
-using NahjaUI.Modules.EnemyList;
+using NahjaUI.Modules.EnmityList;
 using NahjaUI.Modules.NamePlates;
+using NahjaUI.Modules.StatusEffects;
 using NahjaUI.Modules.Tooltip;
 using NahjaUI.Modules.PartyFrames;
 using NahjaUI.Modules.UnitFrames;
@@ -65,12 +66,14 @@ public sealed class Plugin : IDalamudPlugin
     internal JobGaugeEditor JobGaugeEditorPage { get; init; }
     internal UnitFrameModule UnitFrameSystem { get; init; }
     internal UnitFrameEditor UnitFrameEditorPage { get; init; }
+    internal StatusEffectsModule StatusEffectsSystem { get; init; }
+    internal StatusEffectsEditor StatusEffectsEditorPage { get; init; }
     internal PartyFrameModule PartyFrameSystem { get; init; }
     internal NamePlateModule NamePlateSystem { get; init; }
     internal NamePlateEditor NamePlateEditorPage { get; init; }
     internal TooltipEditor TooltipEditorPage { get; init; }
-    internal EnemyListModule EnemyListSystem { get; init; }
-    internal EnemyListEditor EnemyListEditorPage { get; init; }
+    internal EnmityListModule EnmityListSystem { get; init; }
+    internal EnmityListEditor EnmityListEditorPage { get; init; }
 
     // Set when something changed; the configuration is written once the mouse button is released.
     private bool saveRequested;
@@ -84,7 +87,18 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
+        // The cards the user folded last time stay folded.
+        Widgets.Collapsed = new System.Collections.Generic.HashSet<string>(Configuration.CollapsedCards ?? new System.Collections.Generic.List<string>());
+        Widgets.CollapsedChanged = () =>
+        {
+            Configuration.CollapsedCards = new System.Collections.Generic.List<string>(Widgets.Collapsed);
+            RequestSave();
+        };
+
         GameData = new GameDataProvider();
+
+        Configuration.UnitFrames.Player.MigrateMpLists();
+        Configuration.UnitFrames.Player.MigrateParameterBar();
 
         Layout = new LayoutManager(Configuration);
         Fonts = new OverlayFonts();
@@ -97,12 +111,14 @@ public sealed class Plugin : IDalamudPlugin
         JobGaugeEditorPage = new JobGaugeEditor(this);
         UnitFrameSystem = new UnitFrameModule(this);
         UnitFrameEditorPage = new UnitFrameEditor(this);
+        StatusEffectsSystem = new StatusEffectsModule(this);
+        StatusEffectsEditorPage = new StatusEffectsEditor(this);
         PartyFrameSystem = new PartyFrameModule(this);
         NamePlateSystem = new NamePlateModule(this);
         NamePlateEditorPage = new NamePlateEditor(this);
         TooltipEditorPage = new TooltipEditor(this);
-        EnemyListSystem = new EnemyListModule(this);
-        EnemyListEditorPage = new EnemyListEditor(this);
+        EnmityListSystem = new EnmityListModule(this);
+        EnmityListEditorPage = new EnmityListEditor(this);
         UnlockOverlay = new UnlockOverlay(this, Layout);
 
         MainWindow = new MainWindow(this);
@@ -137,9 +153,10 @@ public sealed class Plugin : IDalamudPlugin
         CastBarSystem.Dispose();
         JobGaugeSystem.Dispose();
         UnitFrameSystem.Dispose();
+        StatusEffectsSystem.Dispose();
         PartyFrameSystem.Dispose();
         NamePlateSystem.Dispose();
-        EnemyListSystem.Dispose();
+        EnmityListSystem.Dispose();
         GameData.Dispose();
         Fonts.Dispose();
 
@@ -156,14 +173,19 @@ public sealed class Plugin : IDalamudPlugin
 
         FollowUnlockMode();
 
+        // The elements that have a position for each job show the one of the job being played.
+        var currentSnapshot = GameData.Current;
+        Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u);
+
         // Which game windows cover the screen right now (the frames are not drawn over them).
         GameCover.Update();
 
         WindowSystem.Draw();
         UnitFrameSystem.Draw();
+        StatusEffectsSystem.Draw();
         PartyFrameSystem.Draw();
         NamePlateSystem.Draw();
-        EnemyListSystem.Draw();
+        EnmityListSystem.Draw();
         AuraSystem.Draw();
         CastBarSystem.Draw();
         JobGaugeSystem.Draw();

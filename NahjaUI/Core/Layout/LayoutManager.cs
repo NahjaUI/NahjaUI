@@ -105,9 +105,80 @@ internal sealed class LayoutManager
     {
         elements.RemoveAll(e => e.Id == id);
         config.Layouts.Remove(id);
+        config.JobLayouts.Remove(id);
+        loadedFor.Remove(id);
 
         if (SelectedId == id)
             SelectedId = null;
+    }
+
+    // ---------------------------------------------------------------- one position for each job
+
+    // The job whose position each element currently shows.
+    private readonly Dictionary<string, uint> loadedFor = new();
+
+    /// <summary>True when the element keeps a different position for each job.</summary>
+    public bool IsPerJob(string id) => config.JobLayouts.ContainsKey(id);
+
+    /// <summary>
+    /// Turns "a position for each job" on or off for an element. On: the current position becomes the base (what a job that
+    /// was never moved starts from) and the position of the job being played. Off: the element keeps what it shows now.
+    /// </summary>
+    public void SetPerJob(LayoutElement element, bool on, uint jobId)
+    {
+        if (!on)
+        {
+            config.JobLayouts.Remove(element.Id);
+            loadedFor.Remove(element.Id);
+            return;
+        }
+
+        var jobs = new Dictionary<uint, ElementLayout> { [0] = element.Layout.Clone() };
+        if (jobId != 0)
+            jobs[jobId] = element.Layout.Clone();
+
+        config.JobLayouts[element.Id] = jobs;
+        loadedFor[element.Id] = jobId;
+    }
+
+    /// <summary>
+    /// Call once per frame with the job being played (0 when not known). The elements with a position for each job show
+    /// the one of that job when the job changes; while the job stays, what is moved or edited is stored for that job.
+    /// </summary>
+    public void SyncJob(uint jobId)
+    {
+        if (jobId == 0 || config.JobLayouts.Count == 0)
+            return;
+
+        foreach (var element in elements)
+        {
+            if (!config.JobLayouts.TryGetValue(element.Id, out var jobs))
+                continue;
+
+            if (!loadedFor.TryGetValue(element.Id, out var loaded) || loaded != jobId)
+            {
+                // A different job (or the first frame): show its position, or the base one if it never had its own.
+                if (!jobs.TryGetValue(jobId, out var own))
+                {
+                    own = jobs.TryGetValue(0, out var baseLayout) ? baseLayout.Clone() : element.Layout.Clone();
+                    jobs[jobId] = own;
+                }
+
+                element.Layout.CopyPositionFrom(own);
+                loadedFor[element.Id] = jobId;
+            }
+            else
+            {
+                // The same job: keep its saved position equal to what is shown (moved by hand or edited).
+                if (!jobs.TryGetValue(jobId, out var own))
+                {
+                    own = element.Layout.Clone();
+                    jobs[jobId] = own;
+                }
+
+                own.CopyPositionFrom(element.Layout);
+            }
+        }
     }
 
     /// <summary>The box unlock mode draws for an element: its display rect if the module gave one, else its layout box.</summary>

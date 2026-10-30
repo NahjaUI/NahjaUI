@@ -38,8 +38,21 @@ internal sealed class AuraEditor
 
     // The aura or group waiting for a second click on its delete button.
     private string? pendingDeleteId;
+    private AuraRuntime? pendingDuplicate;
+    private AuraRuntime? pendingRemove;
 
     // Status search
+    // The filter of the explorer: only the auras that load on a job (the one you play, or the one you pick), or every aura.
+    private enum JobFilterMode
+    {
+        MyJob,
+        AllJobs,
+        PickedJob
+    }
+
+    private JobFilterMode jobFilter = JobFilterMode.MyJob;
+    private uint pickedFilterJob;
+
     private string search = string.Empty;
     private bool addAsExtraEffect;
     private string appliedSearch = string.Empty;
@@ -98,6 +111,24 @@ internal sealed class AuraEditor
     public void Draw()
     {
         var engine = plugin.AuraSystem;
+
+        if (pendingRemove is not null)
+        {
+            engine.Remove(pendingRemove);
+            if (selectedAuraId == pendingRemove.Definition.Id)
+                selectedAuraId = null;
+
+            pendingRemove = null;
+            pendingDeleteId = null;
+            pendingDuplicate = null;
+        }
+
+        if (pendingDuplicate is not null)
+        {
+            var copy = engine.Duplicate(pendingDuplicate);
+            pendingDuplicate = null;
+            SelectAura(copy.Definition.Id);
+        }
         var snapshot = plugin.GameData.Current;
         var scale = ImGuiHelpers.GlobalScale;
 
@@ -151,11 +182,9 @@ internal sealed class AuraEditor
 
         DrawGeneral(engine, aura);
 
-        if (definition.Trigger == AuraTriggerType.Cooldown)
-            DrawAbility(definition, snapshot);
-
-        DrawStatus(definition, snapshot);
+        DrawRules(definition, snapshot);
         DrawDisplay(engine, definition, aura, null);
+        DrawTexts(definition);
         DrawLoad(engine, definition, snapshot, null);
         DrawDelete(engine, aura);
     }
@@ -182,9 +211,6 @@ internal sealed class AuraEditor
     {
         var scale = ImGuiHelpers.GlobalScale;
 
-        rows.Clear();
-        explorerHovered = ImGui.IsWindowHovered();
-
         Widgets.SectionLabel("Groups and auras");
 
         if (Widgets.PrimaryButton("New group"))
@@ -201,6 +227,12 @@ internal sealed class AuraEditor
             var target = SelectedGroupContext(engine);
             var created = engine.AddNew(target);
 
+            // Looking at the auras of one job: a loose new aura loads on that job (it can be changed in its load conditions).
+            // An aura created inside a group keeps loading on every job, so a general group never ends up limited by mistake.
+            var filterNow = JobFilterNow();
+            if (target is null && filterNow is { } jobForNew && !created.Definition.Load.JobIds.Contains(jobForNew))
+                created.Definition.Load.JobIds.Add(jobForNew);
+
             if (target is not null)
                 target.Definition.Expanded = true;
 
@@ -209,9 +241,27 @@ internal sealed class AuraEditor
 
         ImGui.Spacing();
 
+        // The header (buttons and filter) stays in place; only the list below it scrolls.
+        ImGui.TextColored(Theme.TextMuted, "Show auras of");
+        var filterJob = DrawJobFilter();
+
+        ImGui.Spacing();
+
+        using var list = ImRaii.Child("##aura_explorer_list", Vector2.Zero, false);
+        if (!list.Success)
+            return;
+
+        rows.Clear();
+        explorerHovered = ImGui.IsWindowHovered();
+
+        // An aura passes the filter when it loads on every job or on the chosen one.
+        bool Passes(AuraRuntime aura) =>
+            filterJob is null || aura.Definition.Load.JobIds.Count == 0 || aura.Definition.Load.JobIds.Contains(filterJob.Value);
+
         // Rows are close together, like in a file explorer.
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f * scale, RowGap * scale));
 
+        var hidden = 0;
         var entries = engine.RootEntries();
         if (entries.Count == 0)
             ImGui.TextColored(Theme.TextMuted, "Nothing here yet.");
@@ -220,7 +270,14 @@ internal sealed class AuraEditor
         {
             if (entry.Group is { } group)
             {
-                var members = engine.MembersOf(group);
+                var allMembers = engine.MembersOf(group);
+                var members = allMembers.Where(Passes).ToList();
+                hidden += allMembers.Count - members.Count;
+
+                // A group with auras but none for this job is left out; an empty group is always shown.
+                if (allMembers.Count > 0 && members.Count == 0)
+                    continue;
+
                 DrawGroupRow(group, members.Count);
 
                 if (group.Definition.Expanded)
@@ -231,13 +288,81 @@ internal sealed class AuraEditor
             }
             else if (entry.Aura is { } aura)
             {
-                DrawAuraRow(aura, null);
+                if (Passes(aura))
+                    DrawAuraRow(aura, null);
+                else
+                    hidden++;
             }
         }
 
         ImGui.PopStyleVar();
 
+        if (hidden > 0)
+            ImGui.TextColored(Theme.TextMuted, $"{hidden} aura(s) of other jobs are hidden by the filter.");
+
         HandleDrag(engine);
+    }
+
+    // The job filter of the explorer: a combo with my job, every job, or one job of the list. Returns the job to filter by
+    // (null = show every aura).
+    private uint? DrawJobFilter()
+    {
+        var myJob = plugin.GameData.Current.Player?.JobId;
+
+        // Without a job to look at (not logged in), "my job" shows everything.
+        var mode = jobFilter == JobFilterMode.MyJob && myJob is null ? JobFilterMode.AllJobs : jobFilter;
+
+        var label = mode switch
+        {
+            JobFilterMode.AllJobs => "All jobs",
+            JobFilterMode.PickedJob => GameNames.JobAbbreviation(pickedFilterJob),
+            _ => $"My job ({GameNames.JobAbbreviation(myJob ?? 0)})"
+        };
+
+        ImGui.SetNextItemWidth(220f * ImGuiHelpers.GlobalScale);
+        if (ImGui.BeginCombo("##aura_job_filter", label, ImGuiComboFlags.None))
+        {
+            if (myJob is not null && ImGui.Selectable($"My job ({GameNames.JobAbbreviation(myJob.Value)})", jobFilter == JobFilterMode.MyJob))
+                jobFilter = JobFilterMode.MyJob;
+
+            if (ImGui.Selectable("All jobs", jobFilter == JobFilterMode.AllJobs))
+                jobFilter = JobFilterMode.AllJobs;
+
+            foreach (var (role, jobs) in RolesWithBeastmaster())
+            {
+                ImGui.TextColored(Theme.TextMuted, role);
+
+                foreach (var jobId in jobs)
+                {
+                    if (ImGui.Selectable($"   {GameNames.JobAbbreviation(jobId)}##filter_{jobId}", jobFilter == JobFilterMode.PickedJob && pickedFilterJob == jobId))
+                    {
+                        jobFilter = JobFilterMode.PickedJob;
+                        pickedFilterJob = jobId;
+                    }
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        return mode switch
+        {
+            JobFilterMode.AllJobs => null,
+            JobFilterMode.PickedJob => pickedFilterJob,
+            _ => myJob
+        };
+    }
+
+    // The job the explorer is filtering by right now (null when it shows every aura).
+    private uint? JobFilterNow()
+    {
+        var myJob = plugin.GameData.Current.Player?.JobId;
+        return jobFilter switch
+        {
+            JobFilterMode.AllJobs => null,
+            JobFilterMode.PickedJob => pickedFilterJob,
+            _ => myJob
+        };
     }
 
     // The group a "New aura" should go into: the selected group, or the group of the selected aura.
@@ -269,19 +394,17 @@ internal sealed class AuraEditor
         var selected = selectedGroupId == definition.Id;
         var center = (min.Y + max.Y) / 2f;
 
-        var gripBox = (Min: new Vector2(min.X, min.Y), Max: new Vector2(min.X + 22f * scale, max.Y));
-        var chevronBox = (Min: new Vector2(min.X + 22f * scale, min.Y), Max: new Vector2(min.X + 46f * scale, max.Y));
+        var chevronBox = (Min: new Vector2(min.X, min.Y), Max: new Vector2(min.X + 28f * scale, max.Y));
 
         var drawList = ImGui.GetWindowDrawList();
         FillRow(drawList, min, max, selected, hovered && dragKey is null, dragKey == key);
 
-        DrawGrip(drawList, new Vector2(min.X + 11f * scale, center));
-        DrawChevron(drawList, new Vector2(min.X + 34f * scale, center), definition.Expanded);
-        DrawFolder(drawList, new Vector2(min.X + 52f * scale, center - 9f * scale), 18f * scale);
+        DrawChevron(drawList, new Vector2(min.X + 14f * scale, center), definition.Expanded);
+        DrawFolder(drawList, new Vector2(min.X + 32f * scale, center - 9f * scale), 18f * scale);
 
         var name = string.IsNullOrWhiteSpace(definition.Name) ? "Unnamed group" : definition.Name;
         var textY = center - ImGui.GetTextLineHeight() / 2f;
-        drawList.AddText(new Vector2(min.X + 78f * scale, textY), ImGui.GetColorU32(Theme.Text), name);
+        drawList.AddText(new Vector2(min.X + 58f * scale, textY), ImGui.GetColorU32(Theme.Text), name);
 
         var count = memberCount == 1 ? "1 aura" : $"{memberCount} auras";
         var countWidth = ImGui.CalcTextSize(count).X;
@@ -294,12 +417,17 @@ internal sealed class AuraEditor
                 definition.Expanded = !definition.Expanded;
                 plugin.RequestSave();
             }
+            else if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            {
+                // Double click on the group opens or closes it.
+                definition.Expanded = !definition.Expanded;
+                plugin.RequestSave();
+            }
             else
             {
+                // Any point of the row can be grabbed to move the group.
                 SelectGroup(definition.Id);
-
-                if (Inside(gripBox.Min, gripBox.Max, mouse))
-                    StartDrag(key, mouse);
+                StartDrag(key, mouse);
             }
         }
     }
@@ -324,16 +452,13 @@ internal sealed class AuraEditor
         var selected = selectedAuraId == definition.Id;
         var center = (min.Y + max.Y) / 2f;
 
-        var gripBox = (Min: new Vector2(min.X + indent, min.Y), Max: new Vector2(min.X + indent + 22f * scale, max.Y));
 
         var drawList = ImGui.GetWindowDrawList();
         FillRow(drawList, min, max, selected, hovered && dragKey is null, dragKey == key);
 
-        DrawGrip(drawList, new Vector2(min.X + indent + 11f * scale, center));
-
-        // The game's own icon: the ability for a cooldown aura, the status for a buff or debuff aura.
+        // The game's own icon: the ability for a cooldown aura, the status for an enhancement or enfeeblement aura.
         var iconSize = 24f * scale;
-        var iconMin = new Vector2(min.X + indent + 28f * scale, center - iconSize / 2f);
+        var iconMin = new Vector2(min.X + indent + 10f * scale, center - iconSize / 2f);
         DrawAuraIcon(drawList, definition, iconMin, iconSize);
 
         var nameColor = definition.Enabled ? Theme.Text : Theme.TextMuted;
@@ -347,10 +472,38 @@ internal sealed class AuraEditor
 
         if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
+            // Any point of the row can be grabbed to move the aura.
             SelectAura(definition.Id);
+            StartDrag(key, mouse);
+        }
 
-            if (Inside(gripBox.Min, gripBox.Max, mouse))
-                StartDrag(key, mouse);
+        // Right click: the menu of the aura.
+        var menuId = $"##aura_menu_{key}";
+        if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+        {
+            SelectAura(definition.Id);
+            ImGui.OpenPopup(menuId);
+        }
+
+        if (ImGui.BeginPopup(menuId))
+        {
+            // One entry that flips: Disable while it is on, Enable while it is off.
+            if (ImGui.Selectable(definition.Enabled ? "Disable" : "Enable"))
+            {
+                definition.Enabled = !definition.Enabled;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.Selectable("Duplicate"))
+            {
+                // Done after the list is drawn, so the list is not changed while it is being walked.
+                pendingDuplicate = aura;
+            }
+
+            if (ImGui.Selectable("Delete"))
+                pendingRemove = aura;
+
+            ImGui.EndPopup();
         }
     }
 
@@ -360,16 +513,30 @@ internal sealed class AuraEditor
         if (!definition.Enabled)
             return "Off";
 
-        if (definition.Trigger == AuraTriggerType.Cooldown)
-            return "Cooldown";
+        if (definition.Rules.Count > 1)
+            return $"{definition.Rules.Count} triggers";
 
-        if (definition.StatusId == 0)
+        var rule = definition.Rules.FirstOrDefault();
+        if (rule is null)
+            return "No trigger";
+
+        switch (rule.Kind)
+        {
+            case ConditionKind.AbilityActivated:
+                return "Activated";
+            case ConditionKind.AbilityOnCooldown:
+            case ConditionKind.AbilityReady:
+            case ConditionKind.AbilityAlways:
+                return "Cooldown";
+        }
+
+        if (rule.StatusId == 0)
             return "No status";
 
-        return GameNames.StatusCategory(definition.StatusId) switch
+        return GameNames.StatusCategory(rule.StatusId) switch
         {
-            1 => "Buff",
-            2 => "Debuff",
+            1 => "Enhancement",
+            2 => "Enfeeblement",
             _ => "Status"
         };
     }
@@ -377,12 +544,9 @@ internal sealed class AuraEditor
     private static void DrawAuraIcon(ImDrawListPtr drawList, AuraDefinition definition, Vector2 min, float size)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var isCooldown = definition.Trigger == AuraTriggerType.Cooldown;
         var max = min + new Vector2(size, size);
 
-        var iconId = isCooldown
-            ? GameNames.ActionIconId(definition.ActionId)
-            : GameNames.StatusIconId(definition.StatusId);
+        var iconId = AuraEngine.ResolveIcon(definition.Rules.FirstOrDefault(), 0, out var iconIsStatus);
 
         if (iconId == 0)
         {
@@ -392,7 +556,7 @@ internal sealed class AuraEditor
         }
 
         var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
-        var (uv0, uv1) = AuraEngine.IconUv(new Vector2(size, size), isCooldown ? 1f : AuraEngine.StatusIconAspect, 0.10f);
+        var (uv0, uv1) = AuraEngine.IconUv(new Vector2(size, size), iconIsStatus ? AuraEngine.StatusIconAspect : 1f, 0.10f);
 
         drawList.AddImage(texture.Handle, min, max, uv0, uv1, 0xFFFFFFFFu);
         drawList.AddRect(min, max, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f)), 0f, ImDrawFlags.None, 1f);
@@ -771,7 +935,6 @@ internal sealed class AuraEditor
             }
 
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "The group's box is moved in unlock mode (Layout page).");
             ImGui.TextColored(Theme.TextMuted, "Drag the auras in the list on the left to change their order.");
         });
 
@@ -806,19 +969,10 @@ internal sealed class AuraEditor
     private void DrawGeneral(AuraEngine engine, AuraRuntime runtime)
     {
         var definition = runtime.Definition;
-        var isCooldown = definition.Trigger == AuraTriggerType.Cooldown;
 
-        // A cooldown aura has no "watch" or "only mine" here: those belong to its optional effect (see the effect card).
-        Widgets.Card("##card_aura_general", isCooldown ? 11 : 10, () =>
+        Widgets.Card("##card_aura_general", 4, () =>
         {
             Widgets.SectionLabel("General");
-
-            var name = definition.Name;
-            if (ImGui.InputText("Name", ref name, 64))
-            {
-                definition.Name = name;
-                plugin.RequestSave();
-            }
 
             var enabled = definition.Enabled;
             if (ImGui.Checkbox("Enabled", ref enabled))
@@ -827,165 +981,781 @@ internal sealed class AuraEditor
                 plugin.RequestSave();
             }
 
-            var trigger = definition.Trigger;
-            if (EnumCombo("Tracks", ref trigger, TriggerLabel))
+            var name = definition.Name;
+            if (ImGui.InputText("Name", ref name, 64))
             {
-                definition.Trigger = trigger;
+                definition.Name = name;
+                plugin.RequestSave();
+            }
+        });
+    }
+
+    // ---------------------------------------------------------------- icon triggers
+
+    // The search boxes of the cards (one per trigger / text source, so cards do not share what is typed).
+    private sealed class TextSearch
+    {
+        public string Query = string.Empty;
+        public string Applied = string.Empty;
+        public int AppliedKind = -1;
+
+        // Ability search box: the results show only while the box has the focus (or the mouse is over them),
+        // and not after one was picked.
+        public bool Initialized;
+        public bool Dismissed;
+        public bool ResultsHovered;
+        public IReadOnlyList<StatusSearchResult> Statuses = Array.Empty<StatusSearchResult>();
+        public IReadOnlyList<ActionInfo> Actions = Array.Empty<ActionInfo>();
+    }
+
+    private readonly Dictionary<string, TextSearch> textSearches = new();
+
+    private TextSearch SearchOf(string key)
+    {
+        if (!textSearches.TryGetValue(key, out var found))
+            textSearches[key] = found = new TextSearch();
+
+        return found;
+    }
+
+    // Runs the name search only when the typed text (or what is searched) changed.
+    private static void RunSearch(TextSearch state, bool statuses, bool actions, int kind)
+    {
+        if (state.Query == state.Applied && state.AppliedKind == kind)
+            return;
+
+        state.Applied = state.Query;
+        state.AppliedKind = kind;
+
+        var query = state.Query.Trim();
+        state.Statuses = statuses && query.Length >= 3
+            ? GameNames.SearchStatuses(query, MaxSearchResults)
+            : Array.Empty<StatusSearchResult>();
+        state.Actions = actions && query.Length >= 3
+            ? GameNames.SearchActions(query, MaxSearchResults)
+            : Array.Empty<ActionInfo>();
+    }
+
+    private static string ConditionLabel(ConditionKind kind) => kind switch
+    {
+        ConditionKind.StatusPresent => "An enhancement or enfeeblement is on",
+        ConditionKind.StatusMissing => "An enhancement or enfeeblement is missing",
+        ConditionKind.AbilityActivated => "An ability is activated",
+        ConditionKind.AbilityOnCooldown => "An ability is recharging",
+        ConditionKind.AbilityReady => "An ability is ready",
+        _ => "An ability, always (ready or recharging)"
+    };
+
+    private void EnsureAbilities(GameSnapshot snapshot)
+    {
+        // The abilities of the current job are listed again only when the job or the level changes.
+        var jobId = snapshot.Player?.JobId ?? 0;
+        var level = snapshot.Player?.Level ?? 0;
+
+        if (jobId == abilitiesJobId && level == abilitiesLevel)
+            return;
+
+        abilitiesJobId = jobId;
+        abilitiesLevel = level;
+        abilities = jobId == 0 ? Array.Empty<ActionInfo>() : GameNames.AbilitiesOfJob(jobId, level);
+    }
+
+    // Dragging an icon trigger by any empty point of its card (arrows do the same).
+    private int ruleDragIndex = -1;
+    private bool ruleDragging;
+    private Vector2 ruleDragStart;
+    private readonly List<(Vector2 Min, Vector2 Max)> ruleRects = new();
+
+    // The icon triggers of an aura, in order of priority. The first one that matches decides the picture and the glow.
+    private void DrawRules(AuraDefinition definition, GameSnapshot snapshot)
+    {
+        EnsureAbilities(snapshot);
+
+        var moveFrom = -1;
+        var moveTo = -1;
+        var remove = -1;
+
+        ruleRects.Clear();
+
+        // All the triggers live in one card: trigger 1, then "if not" trigger 2, and so on.
+        Widgets.Card("##card_aura_triggers", 22 * definition.Rules.Count + 2, () =>
+        {
+            Widgets.SectionLabel("Icon triggers");
+
+            for (var i = 0; i < definition.Rules.Count; i++)
+            {
+                if (i > 0)
+                    ImGui.Separator();
+
+                DrawRuleSection(definition, i, snapshot, ref moveFrom, ref moveTo, ref remove);
+            }
+
+            ImGui.Spacing();
+
+            if (ImGui.Button("Add trigger"))
+            {
+                definition.Rules.Add(new AuraRule());
+                plugin.RequestSave();
+            }
+        });
+
+        HandleRuleDrag(definition, ref moveFrom, ref moveTo);
+
+        // The list changes only here, after every card has been drawn.
+        if (remove >= 0 && definition.Rules.Count > 1)
+        {
+            definition.Rules.RemoveAt(remove);
+            textSearches.Clear();
+            plugin.RequestSave();
+        }
+        else if (moveFrom >= 0 && moveTo >= 0 && moveTo < definition.Rules.Count && moveFrom != moveTo)
+        {
+            var moved = definition.Rules[moveFrom];
+            definition.Rules.RemoveAt(moveFrom);
+            definition.Rules.Insert(moveTo, moved);
+            textSearches.Clear();
+            plugin.RequestSave();
+        }
+    }
+
+    // Follows a drag of a trigger card: a line shows where it would land; on release it moves there.
+    private void HandleRuleDrag(AuraDefinition definition, ref int moveFrom, ref int moveTo)
+    {
+        if (ruleDragIndex < 0)
+            return;
+
+        var count = definition.Rules.Count;
+        var scale = ImGuiHelpers.GlobalScale;
+        var mouse = ImGui.GetMousePos();
+
+        if (ruleDragIndex >= count || ruleRects.Count != count)
+        {
+            ruleDragIndex = -1;
+            ruleDragging = false;
+            return;
+        }
+
+        // The slot where it would land: before the first card whose middle is below the mouse, or at the end.
+        var slot = count;
+        for (var i = 0; i < count; i++)
+        {
+            if (mouse.Y < (ruleRects[i].Min.Y + ruleRects[i].Max.Y) / 2f)
+            {
+                slot = i;
+                break;
+            }
+        }
+
+        if (ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        {
+            if (!ruleDragging && Vector2.Distance(mouse, ruleDragStart) > 5f * scale)
+                ruleDragging = true;
+
+            if (ruleDragging)
+            {
+                var y = slot < count ? ruleRects[slot].Min.Y - 3f * scale : ruleRects[count - 1].Max.Y + 3f * scale;
+                var left = ruleRects[0].Min.X;
+                var right = ruleRects[0].Max.X;
+                ImGui.GetForegroundDrawList().AddLine(new Vector2(left, y), new Vector2(right, y), ImGui.GetColorU32(Theme.Accent), 3f * scale);
+            }
+
+            return;
+        }
+
+        if (ruleDragging)
+        {
+            var destination = slot > ruleDragIndex ? slot - 1 : slot;
+            if (destination != ruleDragIndex)
+            {
+                moveFrom = ruleDragIndex;
+                moveTo = destination;
+            }
+        }
+
+        ruleDragIndex = -1;
+        ruleDragging = false;
+    }
+
+    private void DrawRuleSection(AuraDefinition definition, int index, GameSnapshot snapshot, ref int moveFrom, ref int moveTo, ref int remove)
+    {
+        var rule = definition.Rules[index];
+        var count = definition.Rules.Count;
+        var key = $"{definition.Id}:rule{index}";
+        var pick = SearchOf(key);
+        var iconPick = SearchOf(key + ":icon");
+
+        var isStatus = !rule.IsAbility;
+        RunSearch(pick, isStatus, !isStatus, (int)rule.Kind);
+
+        var iconIsStatus = rule.Icon == IconSource.Status;
+        RunSearch(iconPick, iconIsStatus, rule.Icon == IconSource.Ability, (int)rule.Icon);
+
+        var unit = UnitOf(rule.Unit, snapshot);
+        var startY = ImGui.GetCursorScreenPos().Y;
+
+        {
+            ImGui.PushID(index);
+
+            if (count > 1)
+                ImGui.TextColored(Theme.Accent, index == 0 ? "Trigger 1" : $"If not, trigger {index + 1}");
+
+            // Order: the first trigger that matches wins. Arrows move this one up or down.
+            if (count > 1)
+            {
+                if (index > 0)
+                {
+                    if (ImGui.ArrowButton("##rule_up", ImGuiDir.Up))
+                        {
+                        moveFrom = index;
+                        moveTo = index - 1;
+                    }
+
+                    ImGui.SameLine();
+                }
+
+                if (index < count - 1)
+                {
+                    if (ImGui.ArrowButton("##rule_down", ImGuiDir.Down))
+                        {
+                        moveFrom = index;
+                        moveTo = index + 1;
+                    }
+
+                    ImGui.SameLine();
+                }
+
+                if (ImGui.SmallButton("Remove this trigger"))
+                    remove = index;
+            }
+
+            var kind = rule.Kind;
+            if (EnumCombo("When", ref kind, ConditionLabel))
+            {
+                rule.Kind = kind;
+                pick.Query = string.Empty;
                 plugin.RequestSave();
             }
 
-            // An aura in a group is placed by the group. Without a group it has its own position.
-            var currentGroup = engine.FindGroup(definition.GroupId);
-            if (ImGui.BeginCombo("Group", currentGroup?.Definition.Name ?? NoGroupLabel, ImGuiComboFlags.None))
-            {
-                if (ImGui.Selectable(NoGroupLabel, currentGroup is null) && currentGroup is not null)
-                    engine.MoveAuraToRoot(runtime, AuraEngine.GroupKey(currentGroup.Definition), true);
+            if (isStatus)
+                DrawStatusPart(definition, index, rule, pick, unit);
+            else
+                DrawAbilityPart(definition, index, rule, pick);
 
-                foreach (var group in engine.Groups)
+            ImGui.Spacing();
+            DrawRuleIcon(rule, iconPick);
+
+            ImGui.Spacing();
+
+            var glow = rule.Glow;
+            if (ImGui.Checkbox("Glow while this trigger decides", ref glow))
+            {
+                rule.Glow = glow;
+                plugin.RequestSave();
+            }
+
+            if (rule.Kind == ConditionKind.AbilityAlways)
+            {
+                var glowReady = rule.GlowWhenReady;
+                if (ImGui.Checkbox("Glow when the ability is ready", ref glowReady))
                 {
-                    if (ImGui.Selectable($"{group.Definition.Name}##pick_{group.Definition.Id}", currentGroup == group) && currentGroup != group)
+                    rule.GlowWhenReady = glowReady;
+                    plugin.RequestSave();
+                }
+            }
+
+            if (rule.IsAbility)
+            {
+                var glowHighlighted = rule.GlowWhenHighlighted;
+                if (ImGui.Checkbox("Glow when the game highlights it", ref glowHighlighted))
+                {
+                    rule.GlowWhenHighlighted = glowHighlighted;
+                    plugin.RequestSave();
+                }
+
+                if (rule.Kind != ConditionKind.AbilityActivated)
+                {
+                    var ignoreGcd = rule.IgnoreGlobalCooldown;
+                    if (ImGui.Checkbox("Ignore the global cooldown", ref ignoreGcd))
                     {
-                        engine.MoveAuraIntoGroup(runtime, group, null, false);
-                        group.Definition.Expanded = true;
+                        rule.IgnoreGlobalCooldown = ignoreGcd;
+                        plugin.RequestSave();
+                    }
+                }
+            }
+
+            // Pressing on an empty point of the section (not on a control) grabs it, to drag it to another place in the list.
+            var endY = ImGui.GetCursorScreenPos().Y;
+            var windowPos = ImGui.GetWindowPos();
+            ruleRects.Add((new Vector2(windowPos.X, startY), new Vector2(windowPos.X + ImGui.GetWindowSize().X, endY)));
+
+            var mouse = ImGui.GetMousePos();
+            if (count > 1 && ruleDragIndex < 0 && ImGui.IsWindowHovered() && !ImGui.IsAnyItemHovered()
+                && ImGui.IsMouseClicked(ImGuiMouseButton.Left) && mouse.Y >= startY && mouse.Y <= endY)
+            {
+                ruleDragIndex = index;
+                ruleDragging = false;
+                ruleDragStart = mouse;
+            }
+
+            ImGui.PopID();
+        }
+    }
+
+    private void DrawStatusPart(AuraDefinition definition, int index, AuraRule rule, TextSearch pick, UnitSnapshot? unit)
+    {
+        var watched = rule.Unit;
+        if (EnumCombo("Watch", ref watched, UnitLabel))
+        {
+            rule.Unit = watched;
+            plugin.RequestSave();
+        }
+
+        var onlyMine = rule.OnlyMine;
+        if (ImGui.Checkbox("Only statuses I applied", ref onlyMine))
+        {
+            rule.OnlyMine = onlyMine;
+            plugin.RequestSave();
+        }
+
+        if (rule.StatusId == 0)
+            ImGui.TextColored(Theme.Warning, "No status selected yet.");
+        else
+            ImGui.Text($"Selected: {GameNames.StatusName(rule.StatusId)} ({rule.StatusId})");
+
+        // The box starts with the name of the status already chosen.
+        if (!pick.Initialized)
+        {
+            pick.Initialized = true;
+
+            if (rule.StatusId != 0)
+            {
+                pick.Query = GameNames.StatusName(rule.StatusId);
+                pick.Dismissed = true;
+            }
+        }
+
+        var query = pick.Query;
+        if (ImGui.InputText("Search status", ref query, 64))
+        {
+            pick.Query = query;
+            pick.Dismissed = false;
+        }
+
+        var active = ImGui.IsItemActive();
+        if (ImGui.IsItemActivated())
+            pick.Dismissed = false;
+
+        // The matches show while the box has the focus (or the mouse is over them, so a click still lands).
+        if (pick.Dismissed || !(active || pick.ResultsHovered) || pick.Statuses.Count == 0)
+        {
+            pick.ResultsHovered = false;
+            return;
+        }
+
+        var top = ImGui.GetCursorScreenPos().Y;
+
+        foreach (var result in pick.Statuses)
+        {
+            var kindText = result.Category switch
+            {
+                1 => "enhancement",
+                2 => "enfeeblement",
+                _ => string.Empty
+            };
+
+            if (ImGui.Selectable($"{result.Name} ({result.Id})   {kindText}##res_{result.Id}", rule.StatusId == result.Id))
+            {
+                PickStatus(definition, index, rule, result.Id);
+                pick.Query = result.Name;
+                pick.Dismissed = true;
+            }
+        }
+
+        var bottom = ImGui.GetCursorScreenPos().Y;
+        var mouse = ImGui.GetMousePos();
+        var windowX = ImGui.GetWindowPos().X;
+        pick.ResultsHovered = !pick.Dismissed
+            && mouse.Y >= top && mouse.Y <= bottom
+            && mouse.X >= windowX && mouse.X <= windowX + ImGui.GetWindowSize().X;
+    }
+
+    private void DrawAbilityPart(AuraDefinition definition, int index, AuraRule rule, TextSearch pick)
+    {
+        if (rule.ActionId == 0)
+            ImGui.TextColored(Theme.Warning, "No ability selected yet.");
+        else
+            ImGui.Text($"Selected: {GameNames.ActionName(rule.ActionId)} ({rule.ActionId})");
+
+        // The box starts with the name of the ability already chosen.
+        if (!pick.Initialized)
+        {
+            pick.Initialized = true;
+
+            if (rule.ActionId != 0)
+            {
+                pick.Query = GameNames.ActionName(rule.ActionId);
+                pick.Dismissed = true;
+            }
+        }
+
+        var query = pick.Query;
+        if (ImGui.InputText("Search ability", ref query, 64))
+        {
+            pick.Query = query;
+            pick.Dismissed = false;
+        }
+
+        var active = ImGui.IsItemActive();
+        if (ImGui.IsItemActivated())
+            pick.Dismissed = false;
+
+        // The list of matches appears while typing and goes away when the focus leaves the box.
+        // (It stays while the mouse is over it, so a click on a result still lands.)
+        if (pick.Dismissed || !(active || pick.ResultsHovered) || pick.Actions.Count == 0)
+        {
+            pick.ResultsHovered = false;
+            return;
+        }
+
+        var top = ImGui.GetCursorScreenPos().Y;
+
+        foreach (var result in pick.Actions)
+        {
+            if (ImGui.Selectable($"{result.Name} ({result.Id})   {result.RecastSeconds:0}s##actionresult_{result.Id}", rule.ActionId == result.Id))
+            {
+                PickAction(definition, index, rule, result.Id);
+
+                // The name goes into the box, as it is written in the game.
+                pick.Query = result.Name;
+                pick.Dismissed = true;
+            }
+        }
+
+        var bottom = ImGui.GetCursorScreenPos().Y;
+        var mouse = ImGui.GetMousePos();
+        var windowX = ImGui.GetWindowPos().X;
+        pick.ResultsHovered = !pick.Dismissed
+            && mouse.Y >= top && mouse.Y <= bottom
+            && mouse.X >= windowX && mouse.X <= windowX + ImGui.GetWindowSize().X;
+    }
+
+    private static string IconSourceLabel(IconSource source) => source switch
+    {
+        IconSource.Automatic => "The icon of what it tracks",
+        IconSource.Status => "The icon of a status I choose",
+        _ => "The icon of an ability I choose"
+    };
+
+    // Any game icon can be the picture of a trigger, whatever it tracks: the icon of Requiescat's status has the stack number drawn
+    // in it, so another status icon (without the number) can be used while the stacks are shown as a text of our own.
+    private void DrawRuleIcon(AuraRule rule, TextSearch iconPick)
+    {
+        var source = rule.Icon;
+        if (EnumCombo("Icon", ref source, IconSourceLabel))
+        {
+            rule.Icon = source;
+            iconPick.Query = string.Empty;
+            plugin.RequestSave();
+        }
+
+        if (rule.Icon == IconSource.Automatic)
+            return;
+
+        var isStatus = rule.Icon == IconSource.Status;
+        var chosen = isStatus ? rule.IconStatusId : rule.IconActionId;
+
+        if (chosen == 0)
+            ImGui.TextColored(Theme.Warning, isStatus ? "No status selected yet." : "No ability selected yet.");
+        else
+            ImGui.Text($"Selected: {(isStatus ? GameNames.StatusName(chosen) : GameNames.ActionName(chosen))} ({chosen})");
+
+        var query = iconPick.Query;
+        if (ImGui.InputText(isStatus ? "Search status icon by name" : "Search ability icon by name", ref query, 64))
+            iconPick.Query = query;
+
+        foreach (var result in iconPick.Statuses)
+        {
+            if (ImGui.Selectable($"{result.Name} ({result.Id})##icon_status_{result.Id}", rule.IconStatusId == result.Id))
+            {
+                rule.IconStatusId = result.Id;
+                plugin.RequestSave();
+            }
+        }
+
+        foreach (var result in iconPick.Actions)
+        {
+            if (ImGui.Selectable($"{result.Name} ({result.Id})##icon_action_{result.Id}", rule.IconActionId == result.Id))
+            {
+                rule.IconActionId = result.Id;
+                plugin.RequestSave();
+            }
+        }
+    }
+
+    private void PickStatus(AuraDefinition definition, int index, AuraRule rule, uint statusId)
+    {
+        rule.StatusId = statusId;
+
+        // A brand new aura takes the name of the first thing it watches.
+        if (index == 0 && definition.Name == DefaultName)
+            definition.Name = GameNames.StatusName(statusId);
+
+        plugin.RequestSave();
+    }
+
+    private void PickAction(AuraDefinition definition, int index, AuraRule rule, uint actionId)
+    {
+        rule.ActionId = actionId;
+
+        if (index == 0 && definition.Name == DefaultName)
+            definition.Name = GameNames.ActionName(actionId);
+
+        plugin.RequestSave();
+    }
+
+    // ---------------------------------------------------------------- texts over the icon
+
+    private static string TextSourceLabel(TextSource source) => source switch
+    {
+        TextSource.OwnTime => "The time of the trigger that decides",
+        TextSource.OwnStacks => "The stacks or charges of the trigger that decides",
+        TextSource.ComboTime => "The combo time",
+        TextSource.StatusTime => "The time of a status I choose",
+        TextSource.StatusStacks => "The stacks of a status I choose",
+        TextSource.AbilityCooldown => "The cooldown of an ability I choose",
+        _ => "The charges of an ability I choose"
+    };
+
+    // The texts of an aura: Text 1, Text 2... Each one has its own sources (the first with a value wins) and look, and sits over the icon.
+    private void DrawTexts(AuraDefinition definition)
+    {
+        for (var i = 0; i < definition.Texts.Count; i++)
+        {
+            if (DrawTextCard(definition, i))
+                break;
+        }
+
+        if (ImGui.Button("Add text"))
+        {
+            // A new text starts at the bottom right corner (no offset), so it does not hide behind Text 1 in the centre.
+            definition.Texts.Add(new AuraTextDefinition
+            {
+                Sources = { new AuraTextSource { Source = TextSource.OwnStacks } },
+                Anchor = AnchorPoint.BottomRight
+            });
+
+            plugin.RequestSave();
+        }
+
+        ImGui.Spacing();
+    }
+
+    // One text card. Returns true when the text was removed (the list changed, so the caller stops walking it).
+    private bool DrawTextCard(AuraDefinition definition, int index)
+    {
+        var text = definition.Texts[index];
+        var removed = false;
+
+        var moveFrom = -1;
+        var moveTo = -1;
+        var removeSource = -1;
+
+        var searches = new TextSearch[text.Sources.Count];
+        var lines = 12;
+
+        for (var j = 0; j < text.Sources.Count; j++)
+        {
+            var source = text.Sources[j];
+            var needsStatus = source.Source is TextSource.StatusTime or TextSource.StatusStacks;
+            var needsAbility = source.Source is TextSource.AbilityCooldown or TextSource.AbilityCharges;
+
+            searches[j] = SearchOf($"{definition.Id}:text{index}:{j}");
+            RunSearch(searches[j], needsStatus, needsAbility, (int)source.Source);
+
+            lines += 2 + ((needsStatus || needsAbility) ? 3 + searches[j].Statuses.Count + searches[j].Actions.Count : 0);
+        }
+
+        Widgets.Card($"##card_aura_text_{index}", lines, () =>
+        {
+            ImGui.PushID(index);
+
+            Widgets.SectionLabel($"Text {index + 1}");
+
+            for (var j = 0; j < text.Sources.Count; j++)
+            {
+                if (j > 0)
+                    ImGui.Separator();
+
+                ImGui.PushID(j);
+                DrawSourceRow(text, j, searches[j], ref moveFrom, ref moveTo, ref removeSource);
+                ImGui.PopID();
+            }
+
+            if (ImGui.Button("Add source"))
+            {
+                text.Sources.Add(new AuraTextSource());
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            // Font sizes are fixed steps: each one is a real font, so the text is always sharp.
+            if (ImGui.BeginCombo("Text size (px)", $"{text.Size} px", ImGuiComboFlags.None))
+            {
+                foreach (var size in OverlayFonts.AvailableSizes)
+                {
+                    if (ImGui.Selectable($"{size} px", text.Size == size))
+                    {
+                        text.Size = size;
+                        plugin.RequestSave();
                     }
                 }
 
                 ImGui.EndCombo();
             }
 
-            if (isCooldown)
+            var anchor = text.Anchor;
+            var x = text.OffsetX;
+            var y = text.OffsetY;
+            if (PlacementControls("Text", ref anchor, ref x, ref y))
             {
-                var show = definition.CooldownShow;
-                if (EnumCombo("Show the icon", ref show, CooldownShowLabel))
-                {
-                    definition.CooldownShow = show;
-                    plugin.RequestSave();
-                }
-
-                var comboStep = definition.OnlyAsComboStep;
-                if (ImGui.Checkbox("Only while it is the next step of my combo", ref comboStep))
-                {
-                    definition.OnlyAsComboStep = comboStep;
-                    plugin.RequestSave();
-                }
-
-                if (definition.OnlyAsComboStep)
-                {
-                    var parent = GameNames.ComboParent(definition.ActionId);
-                    ImGui.TextColored(Theme.TextMuted, parent == 0
-                        ? "This ability is not a combo step: the icon will never show."
-                        : $"Shows after {GameNames.ActionName(parent)}; the timer is the combo time left.");
-                }
+                text.Anchor = anchor;
+                text.OffsetX = x;
+                text.OffsetY = y;
+                plugin.RequestSave();
             }
-            else
+
+            var font = text.Font;
+            if (EnumCombo("Text font", ref font, FontLabel))
             {
-                var unit = definition.Unit;
-                if (EnumCombo("Watch", ref unit, UnitLabel))
-                {
-                    definition.Unit = unit;
-                    plugin.RequestSave();
-                }
-
-                var mode = definition.ShowMode;
-                if (EnumCombo("Show the icon", ref mode, ShowModeLabel))
-                {
-                    definition.ShowMode = mode;
-                    plugin.RequestSave();
-                }
-
-                var onlyMine = definition.OnlyMine;
-                if (ImGui.Checkbox("Only statuses I applied", ref onlyMine))
-                {
-                    definition.OnlyMine = onlyMine;
-                    plugin.RequestSave();
-                }
+                text.Font = font;
+                plugin.RequestSave();
             }
+
+            var color = text.Color;
+            if (ImGui.ColorEdit4("Text color", ref color, ImGuiColorEditFlags.NoAlpha))
+            {
+                text.Color = new Vector4(color.X, color.Y, color.Z, 1f);
+                plugin.RequestSave();
+            }
+
+            if (ImGui.Button("Remove this text"))
+                removed = true;
+
+            ImGui.PopID();
         });
+
+        // The list of sources changes only after the card is drawn.
+        if (removeSource >= 0 && text.Sources.Count > 1)
+        {
+            text.Sources.RemoveAt(removeSource);
+            textSearches.Clear();
+            plugin.RequestSave();
+        }
+        else if (moveFrom >= 0 && moveTo >= 0 && moveTo < text.Sources.Count)
+        {
+            (text.Sources[moveFrom], text.Sources[moveTo]) = (text.Sources[moveTo], text.Sources[moveFrom]);
+            textSearches.Clear();
+            plugin.RequestSave();
+        }
+
+        if (!removed)
+            return false;
+
+        definition.Texts.RemoveAt(index);
+        textSearches.Clear();
+        plugin.RequestSave();
+        return true;
     }
 
-    // ---------------------------------------------------------------- ability picker (cooldown auras)
-
-    private void DrawAbility(AuraDefinition definition, GameSnapshot snapshot)
+    // One source of a text: where the value comes from, with arrows to change its priority.
+    private void DrawSourceRow(AuraTextDefinition text, int j, TextSearch search, ref int moveFrom, ref int moveTo, ref int removeSource)
     {
-        // The abilities of the current job are listed again only when the job or the level changes.
-        var jobId = snapshot.Player?.JobId ?? 0;
-        var level = snapshot.Player?.Level ?? 0;
+        var source = text.Sources[j];
+        var count = text.Sources.Count;
 
-        if (jobId != abilitiesJobId || level != abilitiesLevel)
+        var needsStatus = source.Source is TextSource.StatusTime or TextSource.StatusStacks;
+        var needsAbility = source.Source is TextSource.AbilityCooldown or TextSource.AbilityCharges;
+
+        if (count > 1)
+            ImGui.TextColored(Theme.Accent, j == 0 ? "Source 1" : $"If not, source {j + 1}");
+
+        var choice = source.Source;
+        if (EnumCombo("Text from", ref choice, TextSourceLabel))
         {
-            abilitiesJobId = jobId;
-            abilitiesLevel = level;
-            abilities = jobId == 0 ? Array.Empty<ActionInfo>() : GameNames.AbilitiesOfJob(jobId, level);
+            source.Source = choice;
+            search.Query = string.Empty;
+            plugin.RequestSave();
         }
 
-        // Run the name search only when the text changed.
-        if (actionSearch != appliedActionSearch)
+        if (count > 1)
         {
-            appliedActionSearch = actionSearch;
-            actionResults = actionSearch.Trim().Length >= 3
-                ? GameNames.SearchActions(actionSearch.Trim(), MaxSearchResults)
-                : Array.Empty<ActionInfo>();
+            if (j > 0)
+            {
+                if (ImGui.ArrowButton("##source_up", ImGuiDir.Up))
+                {
+                    moveFrom = j;
+                    moveTo = j - 1;
+                }
+
+                ImGui.SameLine();
+            }
+
+            if (j < count - 1)
+            {
+                if (ImGui.ArrowButton("##source_down", ImGuiDir.Down))
+                {
+                    moveFrom = j;
+                    moveTo = j + 1;
+                }
+
+                ImGui.SameLine();
+            }
+
+            if (ImGui.SmallButton("Remove this source"))
+                removeSource = j;
         }
 
-        var lines = 10 + AbilityListRows + actionResults.Count;
-
-        Widgets.Card("##card_aura_ability", lines, () =>
+        if (needsStatus)
         {
-            Widgets.SectionLabel("Ability to track");
+            if (source.StatusId == 0)
+                ImGui.TextColored(Theme.Warning, "No status selected yet.");
+            else
+                ImGui.Text($"Selected: {GameNames.StatusName(source.StatusId)} ({source.StatusId})");
 
-            if (definition.ActionId == 0)
+            var query = search.Query;
+            if (ImGui.InputText("Search status by name", ref query, 64))
+                search.Query = query;
+
+            foreach (var result in search.Statuses)
+            {
+                if (ImGui.Selectable($"{result.Name} ({result.Id})##text_status_{result.Id}", source.StatusId == result.Id))
+                {
+                    source.StatusId = result.Id;
+                    plugin.RequestSave();
+                }
+            }
+        }
+        else if (needsAbility)
+        {
+            if (source.ActionId == 0)
                 ImGui.TextColored(Theme.Warning, "No ability selected yet.");
             else
-                ImGui.Text($"Selected: {GameNames.ActionName(definition.ActionId)} ({definition.ActionId})");
+                ImGui.Text($"Selected: {GameNames.ActionName(source.ActionId)} ({source.ActionId})");
 
-            ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Abilities of your job with a real cooldown (click one):");
+            var query = search.Query;
+            if (ImGui.InputText("Search ability by name", ref query, 64))
+                search.Query = query;
 
-            var scale = ImGuiHelpers.GlobalScale;
-            var listHeight = ImGui.GetTextLineHeightWithSpacing() * AbilityListRows + 8f * scale;
-
-            using (var list = ImRaii.Child("##ability_list", new Vector2(0f, listHeight), true))
+            foreach (var result in search.Actions)
             {
-                if (list.Success)
+                if (ImGui.Selectable($"{result.Name} ({result.Id})   {result.RecastSeconds:0}s##text_action_{result.Id}", source.ActionId == result.Id))
                 {
-                    if (abilities.Count == 0)
-                        ImGui.TextColored(Theme.TextMuted, "Nothing to list. Log in, or use the search below.");
-
-                    foreach (var ability in abilities)
-                    {
-                        var charges = ability.MaxCharges > 1 ? $"   x{ability.MaxCharges} charges" : string.Empty;
-                        var label = $"{ability.Name}   {ability.RecastSeconds:0}s{charges}##ability_{ability.Id}";
-
-                        if (ImGui.Selectable(label, definition.ActionId == ability.Id))
-                            PickAction(definition, ability.Id);
-                    }
+                    source.ActionId = result.Id;
+                    plugin.RequestSave();
                 }
             }
-
-            ImGui.Spacing();
-
-            var text = actionSearch;
-            if (ImGui.InputText("Or search any ability", ref text, 64))
-                actionSearch = text;
-
-            foreach (var result in actionResults)
-            {
-                var label = $"{result.Name} ({result.Id})   {result.RecastSeconds:0}s##actionresult_{result.Id}";
-                if (ImGui.Selectable(label, definition.ActionId == result.Id))
-                    PickAction(definition, result.Id);
-            }
-        });
-    }
-
-    private void PickAction(AuraDefinition definition, uint actionId)
-    {
-        definition.ActionId = actionId;
-
-        // A brand new aura takes the name of the ability it watches.
-        if (definition.Name == DefaultName)
-            definition.Name = GameNames.ActionName(actionId);
-
-        plugin.RequestSave();
+        }
     }
 
     // ---------------------------------------------------------------- display
@@ -997,13 +1767,12 @@ internal sealed class AuraEditor
         var isGroup = group is not null;
 
         // A group can hold both kinds of aura, so it shows every option.
-        var isCooldown = isGroup || definition.Trigger == AuraTriggerType.Cooldown;
+        var hasAbility = isGroup || definition.Rules.Any(r => r.IsAbility);
 
         // The size of an icon belongs to the layout system (the same size you see in unlock mode).
         var elementLayout = runtime?.Element.Layout;
-        var isSquare = elementLayout is null || elementLayout.Width == elementLayout.Height;
 
-        var lines = (isSquare ? 12 : 13) + (isCooldown ? 6 : 1) + (isGroup ? 4 : 0) + 10;
+        var lines = 8 + (isGroup ? 0 : 4) + (hasAbility ? 3 : 0) + (isGroup ? 3 : 0);
         var changed = false;
 
         Widgets.Card(isGroup ? "##card_group_display" : "##card_aura_display", lines, () =>
@@ -1029,24 +1798,33 @@ internal sealed class AuraEditor
             }
             else if (elementLayout is not null)
             {
-                // A square icon. The +/- buttons move by 2 px (10 px with Ctrl); you can also type a value.
-                var iconSize = elementLayout.Width;
-                if (ImGui.InputInt("Icon size (px)", ref iconSize, 2, 10))
+                // Width and height are chosen apart, so the icon does not have to be square. The +/- buttons move by 2 px (10 px with Ctrl).
+                var width = elementLayout.Width;
+                if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
                 {
-                    iconSize = Math.Clamp(iconSize, 1, 512);
-                    elementLayout.Width = iconSize;
-                    elementLayout.Height = iconSize;
+                    elementLayout.Width = Math.Clamp(width, 1, 512);
                     plugin.RequestSave();
                 }
 
-                if (!isSquare)
-                    ImGui.TextColored(Theme.TextMuted, $"Now {elementLayout.Width} x {elementLayout.Height}. Changing the size makes it square.");
+                var height = elementLayout.Height;
+                if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
+                {
+                    elementLayout.Height = Math.Clamp(height, 1, 512);
+                    plugin.RequestSave();
+                }
             }
 
             var iconCrop = definition.IconCropPercent;
             if (ImGui.SliderInt("Icon crop (%)", ref iconCrop, 0, 30))
             {
                 definition.IconCropPercent = iconCrop;
+                changed = true;
+            }
+
+            var fillWidth = definition.FillWidth;
+            if (ImGui.Checkbox("Fill the width (cut the icon's side margins)", ref fillWidth))
+            {
+                definition.FillWidth = fillWidth;
                 changed = true;
             }
 
@@ -1057,18 +1835,7 @@ internal sealed class AuraEditor
                 changed = true;
             }
 
-            if (!isCooldown)
-            {
-                // Same setting as "Glow while the effect is active" of the cooldown auras.
-                var glowPresent = definition.GlowWhenActive;
-                if (ImGui.Checkbox("Glow while the status is on (a proc)", ref glowPresent))
-                {
-                    definition.GlowWhenActive = glowPresent;
-                    changed = true;
-                }
-            }
-
-            if (isCooldown)
+            if (hasAbility)
             {
                 ImGui.Spacing();
 
@@ -1085,128 +1852,7 @@ internal sealed class AuraEditor
                     definition.ShowCooldownSweep = sweep;
                     changed = true;
                 }
-
-                var glowReady = definition.GlowWhenReady;
-                if (ImGui.Checkbox("Glow when the ability is ready", ref glowReady))
-                {
-                    definition.GlowWhenReady = glowReady;
-                    changed = true;
-                }
-
-                var glowActive = definition.GlowWhenActive;
-                if (ImGui.Checkbox("Glow while the effect is active", ref glowActive))
-                {
-                    definition.GlowWhenActive = glowActive;
-                    changed = true;
-                }
-
-                var glowHighlighted = definition.GlowWhenHighlighted;
-                if (ImGui.Checkbox("Glow when the game highlights it", ref glowHighlighted))
-                {
-                    definition.GlowWhenHighlighted = glowHighlighted;
-                    changed = true;
-                }
-
-                ImGui.TextColored(Theme.TextMuted, "The same signal the game uses to light up the button (Goring Blade, procs).");
-
-                var ignoreGcd = definition.IgnoreGlobalCooldown;
-                if (ImGui.Checkbox("Ignore the global cooldown", ref ignoreGcd))
-                {
-                    definition.IgnoreGlobalCooldown = ignoreGcd;
-                    changed = true;
-                }
             }
-
-            ImGui.Spacing();
-
-            var showTimer = definition.ShowTimer;
-            if (ImGui.Checkbox("Show the remaining time", ref showTimer))
-            {
-                definition.ShowTimer = showTimer;
-                changed = true;
-            }
-
-            var showStacks = definition.ShowStacks;
-            if (ImGui.Checkbox(isCooldown ? "Show the charges / stack count" : "Show the stack count", ref showStacks))
-            {
-                definition.ShowStacks = showStacks;
-                changed = true;
-            }
-
-            // Font sizes are fixed steps: each one is a real font, so the text is always sharp.
-            if (ImGui.BeginCombo("Text size (px)", $"{definition.TextSize} px", ImGuiComboFlags.None))
-            {
-                foreach (var size in OverlayFonts.AvailableSizes)
-                {
-                    if (ImGui.Selectable($"{size} px", definition.TextSize == size))
-                    {
-                        definition.TextSize = size;
-                        changed = true;
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
-            // The charges / stack count can have their own size. Automatic keeps it at three quarters of the time size.
-            var stackPreview = definition.StackTextSize > 0 ? $"{definition.StackTextSize} px" : "Automatic";
-            if (ImGui.BeginCombo("Stack text size (px)", stackPreview, ImGuiComboFlags.None))
-            {
-                if (ImGui.Selectable("Automatic (3/4 of the time size)", definition.StackTextSize == 0))
-                {
-                    definition.StackTextSize = 0;
-                    changed = true;
-                }
-
-                foreach (var size in OverlayFonts.AvailableSizes)
-                {
-                    if (ImGui.Selectable($"{size} px", definition.StackTextSize == size))
-                    {
-                        definition.StackTextSize = size;
-                        changed = true;
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
-            var font = definition.Font;
-            if (EnumCombo("Text font", ref font, FontLabel))
-            {
-                definition.Font = font;
-                changed = true;
-            }
-
-            // Where the texts sit on the icon.
-            ImGui.Spacing();
-
-            var timerAnchor = definition.TimerAnchor;
-            var timerX = definition.TimerOffsetX;
-            var timerY = definition.TimerOffsetY;
-            if (PlacementControls("Time", ref timerAnchor, ref timerX, ref timerY))
-            {
-                definition.TimerAnchor = timerAnchor;
-                definition.TimerOffsetX = timerX;
-                definition.TimerOffsetY = timerY;
-                changed = true;
-            }
-
-            ImGui.Spacing();
-
-            var stacksAnchor = definition.StacksAnchor;
-            var stacksX = definition.StacksOffsetX;
-            var stacksY = definition.StacksOffsetY;
-            if (PlacementControls(isCooldown ? "Charges" : "Stacks", ref stacksAnchor, ref stacksX, ref stacksY))
-            {
-                definition.StacksAnchor = stacksAnchor;
-                definition.StacksOffsetX = stacksX;
-                definition.StacksOffsetY = stacksY;
-                changed = true;
-            }
-
-            ImGui.TextColored(Theme.TextMuted, "Position: the point of the icon the text is attached to (the text's own");
-            ImGui.TextColored(Theme.TextMuted, "same point goes there, so a right position right-justifies it).");
-            ImGui.TextColored(Theme.TextMuted, "Offset: pixels from that point. +X is right, +Y is down.");
 
             if (isGroup)
             {
@@ -1223,171 +1869,6 @@ internal sealed class AuraEditor
             engine.ApplyGroupStyle(group);
         else
             plugin.RequestSave();
-    }
-
-    // ---------------------------------------------------------------- status picker
-
-    // For status auras this is the status to watch. For cooldown auras it is the optional EFFECT of the ability
-    // (the buff it gives): while it is on, the icon shows how long it lasts.
-    private void DrawStatus(AuraDefinition definition, GameSnapshot snapshot)
-    {
-        var isCooldown = definition.Trigger == AuraTriggerType.Cooldown;
-
-        var unit = UnitOf(definition.Unit, snapshot);
-        var currentCount = unit is null ? 1 : Math.Min(Math.Max(unit.Statuses.Count, 1), MaxListedStatuses);
-
-        // Run the name search only when the text changed.
-        if (search != appliedSearch)
-        {
-            appliedSearch = search;
-            searchResults = search.Trim().Length >= 3
-                ? GameNames.SearchStatuses(search.Trim(), MaxSearchResults)
-                : Array.Empty<StatusSearchResult>();
-        }
-
-        var lines = 8 + currentCount + searchResults.Count + (isCooldown ? 9 + definition.ExtraEffectIds.Count : 0);
-
-        Widgets.Card("##card_aura_status", lines, () =>
-        {
-            Widgets.SectionLabel(isCooldown ? "Effect while active (optional)" : "Status to watch");
-
-            if (isCooldown)
-            {
-                ImGui.TextColored(Theme.TextMuted, "Pick the buff the ability gives, to show how long it lasts.");
-                ImGui.TextColored(Theme.TextMuted, "Leave it empty to track only the cooldown.");
-                ImGui.Spacing();
-
-                // Where the effect lives once the ability is used.
-                var effectUnit = definition.Unit;
-                if (EnumCombo("Look for the effect on", ref effectUnit, UnitLabel))
-                {
-                    definition.Unit = effectUnit;
-                    plugin.RequestSave();
-                }
-
-                ImGui.TextColored(Theme.TextMuted, "Player = on you. Target = on whoever you are targeting.");
-                ImGui.Spacing();
-            }
-
-            if (definition.StatusId == 0)
-            {
-                ImGui.TextColored(isCooldown ? Theme.TextMuted : Theme.Warning, isCooldown ? "No effect selected." : "No status selected yet.");
-            }
-            else
-            {
-                ImGui.Text($"Selected: {GameNames.StatusName(definition.StatusId)} ({definition.StatusId})");
-
-                if (isCooldown)
-                {
-                    ImGui.SameLine();
-                    if (ImGui.SmallButton("Clear##clear_effect"))
-                    {
-                        definition.StatusId = 0;
-                        definition.ExtraEffectIds.Clear();
-                        plugin.RequestSave();
-                    }
-                }
-            }
-
-            if (isCooldown && definition.StatusId != 0)
-            {
-                // More effects: the first one that is on shows its time (Fight or Flight, then Goring Blade Ready...).
-                for (var i = 0; i < definition.ExtraEffectIds.Count; i++)
-                {
-                    var extraId = definition.ExtraEffectIds[i];
-                    ImGui.Text($"Then: {GameNames.StatusName(extraId)} ({extraId})");
-                    ImGui.SameLine();
-                    if (ImGui.SmallButton($"Remove##remove_extra_{i}"))
-                    {
-                        definition.ExtraEffectIds.RemoveAt(i);
-                        plugin.RequestSave();
-                        break;
-                    }
-                }
-
-                ImGui.Checkbox("The next one I click is an extra effect (does not replace the first)", ref addAsExtraEffect);
-                ImGui.TextColored(Theme.TextMuted, "If several are on, the first of the list is the one shown.");
-            }
-
-            ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, $"On {UnitLabel(definition.Unit).ToLowerInvariant()} right now (click one):");
-
-            if (unit is null || unit.Statuses.Count == 0)
-            {
-                ImGui.TextColored(Theme.TextMuted, unit is null ? "  Nobody there at the moment." : "  No statuses at the moment.");
-            }
-            else
-            {
-                var shown = 0;
-                foreach (var status in unit.Statuses)
-                {
-                    if (shown >= MaxListedStatuses)
-                        break;
-
-                    var label = $"{GameNames.StatusName(status.Id)} ({status.Id})   {status.RemainingTime:0}s##cur_{shown}";
-                    if (ImGui.Selectable(label, definition.StatusId == status.Id || definition.ExtraEffectIds.Contains(status.Id)))
-                        PickStatus(definition, status.Id);
-
-                    shown++;
-                }
-            }
-
-            ImGui.Spacing();
-
-            var text = search;
-            if (ImGui.InputText("Search by name", ref text, 64))
-                search = text;
-
-            foreach (var result in searchResults)
-            {
-                var kind = result.Category switch
-                {
-                    1 => "buff",
-                    2 => "debuff",
-                    _ => string.Empty
-                };
-
-                var label = $"{result.Name} ({result.Id})   {kind}##res_{result.Id}";
-                if (ImGui.Selectable(label, definition.StatusId == result.Id || definition.ExtraEffectIds.Contains(result.Id)))
-                    PickStatus(definition, result.Id);
-            }
-
-            // Only effects the player applied (their own buffs), for statuses that other players could also apply.
-            if (isCooldown && definition.StatusId != 0)
-            {
-                ImGui.Spacing();
-
-                var onlyMine = definition.OnlyMine;
-                if (ImGui.Checkbox("Only effects I applied", ref onlyMine))
-                {
-                    definition.OnlyMine = onlyMine;
-                    plugin.RequestSave();
-                }
-            }
-        });
-    }
-
-    private void PickStatus(AuraDefinition definition, uint statusId)
-    {
-        // Cooldown auras can keep several effects: with the box ticked, the click adds one more (or removes it if it was there).
-        if (definition.Trigger == AuraTriggerType.Cooldown && addAsExtraEffect && definition.StatusId != 0 && definition.StatusId != statusId)
-        {
-            if (!definition.ExtraEffectIds.Remove(statusId))
-                definition.ExtraEffectIds.Add(statusId);
-
-            addAsExtraEffect = false;
-            plugin.RequestSave();
-            return;
-        }
-
-        definition.StatusId = statusId;
-        definition.ExtraEffectIds.Remove(statusId);
-
-        // A brand new status aura takes the name of the status it watches.
-        if (definition.Trigger == AuraTriggerType.Status && definition.Name == DefaultName)
-            definition.Name = GameNames.StatusName(statusId);
-
-        plugin.RequestSave();
     }
 
     // ---------------------------------------------------------------- load conditions
@@ -1598,13 +2079,6 @@ internal sealed class AuraEditor
         _ => null
     };
 
-    private static string TriggerLabel(AuraTriggerType trigger) => trigger switch
-    {
-        AuraTriggerType.Status => "A buff or debuff",
-        AuraTriggerType.Cooldown => "An ability cooldown",
-        _ => trigger.ToString()
-    };
-
     private static string UnitLabel(AuraUnit unit) => unit switch
     {
         AuraUnit.Player => "Player",
@@ -1612,21 +2086,6 @@ internal sealed class AuraEditor
         AuraUnit.Focus => "Focus target",
         AuraUnit.TargetOfTarget => "Target of target",
         _ => unit.ToString()
-    };
-
-    private static string ShowModeLabel(AuraShowMode mode) => mode switch
-    {
-        AuraShowMode.WhenPresent => "When the status is present",
-        AuraShowMode.WhenMissing => "When the status is missing",
-        _ => mode.ToString()
-    };
-
-    private static string CooldownShowLabel(CooldownShowMode mode) => mode switch
-    {
-        CooldownShowMode.Always => "Always (ready, recharging, active)",
-        CooldownShowMode.OnlyOnCooldown => "Only while recharging or active",
-        CooldownShowMode.OnlyWhenReady => "Only while ready",
-        _ => mode.ToString()
     };
 
     private static string CooldownLookLabel(CooldownLook look) => look switch
@@ -1681,8 +2140,13 @@ internal sealed class AuraEditor
         if (ImGui.InputInt($"{label} offset X (px)", ref offsetX, 1, 5))
             changed = true;
 
-        if (ImGui.InputInt($"{label} offset Y (px)", ref offsetY, 1, 5))
+        // Up is plus (the saved value counts downwards, so the sign is turned here).
+        var up = -offsetY;
+        if (ImGui.InputInt($"{label} offset Y (px)", ref up, 1, 5))
+        {
+            offsetY = -up;
             changed = true;
+        }
 
         return changed;
     }

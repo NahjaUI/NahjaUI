@@ -44,8 +44,8 @@ internal sealed class GameDataProvider : IDisposable
     /// <summary>Set by the nameplate module every frame: the plates are only read while someone wants them.</summary>
     public bool WantNamePlates { get; set; }
 
-    /// <summary>Set by the enemy list every frame it is on: the provider reads the game's enemy list only then.</summary>
-    public bool WantEnemyList { get; set; }
+    /// <summary>Set by the enmity list every frame it is on: the provider reads the game's enmity list only then.</summary>
+    public bool WantEnmityList { get; set; }
 
     /// <summary>The snapshot of the latest frame. Never null.</summary>
     public GameSnapshot Current { get; private set; } = GameSnapshot.Empty;
@@ -150,7 +150,7 @@ internal sealed class GameDataProvider : IDisposable
             BuildNamePlates(),
             BuildPaladinGauge(player),
             BuildCombo(),
-            BuildEnemyList(localPlayer));
+            BuildEnmityList(localPlayer));
 
         // The statuses seen this frame are the ones to remember for the next one.
         (statusClock, nextStatusClock) = (nextStatusClock, statusClock);
@@ -192,7 +192,7 @@ internal sealed class GameDataProvider : IDisposable
         return unit is null ? null : unit with { IsCompanion = true };
     }
 
-    // The enemies that have a plate in the game, with the screen position of the point above their head.
+    // The units that have a plate in the game, with the screen position of the point above their head.
     // The game keeps its plates in two lists with the same order: the numbers (kind, entity id) and the 3D objects (world position).
     private unsafe IReadOnlyList<NamePlateSnapshot> BuildNamePlates()
     {
@@ -214,21 +214,30 @@ internal sealed class GameDataProvider : IDisposable
         // In this version of the game structures, the per plate data is a Span: it is read by index.
         var plateData = numbers->ObjectData;
 
+        var currentTarget = Plugin.TargetManager.Target;
+
         for (var i = 0; i < count; i++)
         {
-            if (plateData[i].NamePlateKind != UIObjectKind.BattleNpcEnemy)
-                continue;
+            var kind = plateData[i].NamePlateKind;
+            var isEnemy = kind == UIObjectKind.BattleNpcEnemy;
+            var isPlayer = kind == UIObjectKind.PlayerCharacter;
 
-            // 0xE0000000 is how the game marks an empty plate.
+            // Characters of the fight keep the old check: 0xE0000000 is how the game marks an empty plate. Objects can have no
+            // entity id at all, so they are found through the object the plate points to.
             var entityId = plateData[i].EntityId;
-            if (entityId == 0 || entityId == 0xE0000000)
+            if ((isEnemy || isPlayer) && (entityId == 0 || entityId == 0xE0000000))
                 continue;
 
             var info = ui3d->NamePlateObjectInfoPointers[i].Value;
-            if (info == null)
+            if (info == null || info->GameObject == null)
                 continue;
 
-            if (Plugin.ObjectTable.SearchByEntityId(entityId) is not IBattleChara chara || chara.IsDead)
+            var gameObject = Plugin.ObjectTable.CreateObjectReference((nint)info->GameObject);
+            if (gameObject is null)
+                continue;
+
+            var name = gameObject.Name.ToString();
+            if (string.IsNullOrWhiteSpace(name))
                 continue;
 
             // The game gives the plate position as screen coordinates from -1 to 1 (checked with the log: x 0 is the middle of
@@ -238,17 +247,57 @@ internal sealed class GameDataProvider : IDisposable
                 continue;
 
             var scale = Math.Clamp(plateData[i].Scale / 100f, 0f, 1f);
-            result.Add(new NamePlateSnapshot(entityId, chara.Name.ToString(), chara.Level, chara.CurrentHp, chara.MaxHp, new Vector2(point.X, point.Y), scale, ToCast(chara)));
+            var isTarget = currentTarget is not null && currentTarget.GameObjectId == gameObject.GameObjectId;
+            var ndc = new Vector2(point.X, point.Y);
+
+            if (gameObject is IBattleChara chara)
+            {
+                if (isEnemy && chara.IsDead)
+                    continue;
+
+                // Players: you, the people of your party, or anyone else (a hostile player, as in PvP, counts as an enemy).
+                // Other fighting characters (pets, chocobo, friendly battle NPCs) are Friendly.
+                var relation = isEnemy ? NamePlateRelation.Enemy : isPlayer ? PlayerRelation(chara) : NamePlateRelation.Friendly;
+                result.Add(new NamePlateSnapshot(chara.EntityId, name, chara.Level, chara.CurrentHp, chara.MaxHp, ndc, scale, isEnemy ? ToCast(chara) : null, relation, chara.GameObjectId, isTarget));
+            }
+            else
+            {
+                // No HP: a plate of text only.
+                result.Add(new NamePlateSnapshot(gameObject.EntityId, name, 0, 0, 0, ndc, scale, null, NamePlateRelation.Other, gameObject.GameObjectId, isTarget));
+            }
         }
 
         return result;
     }
 
-    // The enemies of the game's own enemy list (the ones that are fighting you, up to 8), with who each one is attacking.
-    private unsafe IReadOnlyList<EnemyEntrySnapshot> BuildEnemyList(IGameObject localPlayer)
+    /// <summary>Who a player plate belongs to (also used by the plate module to know which game plates to leave alone).</summary>
+    internal static NamePlateRelation PlayerRelation(IGameObject gameObject)
+    {
+        if (gameObject is IBattleChara chara && chara.StatusFlags.HasFlag(StatusFlags.Hostile))
+            return NamePlateRelation.Enemy;
+
+        if (Plugin.ObjectTable.LocalPlayer is { } me && me.EntityId == gameObject.EntityId)
+            return NamePlateRelation.Self;
+
+        return IsInParty(gameObject.EntityId) ? NamePlateRelation.Party : NamePlateRelation.OtherPlayer;
+    }
+
+    private static bool IsInParty(uint entityId)
+    {
+        foreach (var member in Plugin.PartyList)
+        {
+            if (member.EntityId == entityId)
+                return true;
+        }
+
+        return false;
+    }
+
+    // The enemies of the game's own enmity list (the ones that are fighting you, up to 8), with who each one is attacking.
+    private unsafe IReadOnlyList<EnemyEntrySnapshot> BuildEnmityList(IGameObject localPlayer)
     {
         var result = new List<EnemyEntrySnapshot>();
-        if (!WantEnemyList)
+        if (!WantEnmityList)
             return result;
 
         var numbers = EnemyListNumberArray.Instance();
@@ -271,7 +320,12 @@ internal sealed class GameDataProvider : IDisposable
             if (unit is null)
                 continue;
 
-            result.Add(new EnemyEntrySnapshot(unit with { IsHostile = true }, chara.TargetObjectId == localPlayer.GameObjectId));
+            result.Add(new EnemyEntrySnapshot(
+                unit with { IsHostile = true },
+                chara.TargetObjectId == localPlayer.GameObjectId,
+                enemies[i].ActiveInList ? 1 : 0,
+                enemies[i].LockedInList ? 1 : 0,
+                chara.IsTargetable ? 1 : 0));
         }
 
         return result;
@@ -302,6 +356,52 @@ internal sealed class GameDataProvider : IDisposable
     }
 
     // The combo of the game: the last action of the chain you used and the time left to continue it.
+    /// <summary>
+    /// Debug: what the game flags right now among the actions of a job. Highlighted = the game makes it glow (procs, follow-ups);
+    /// Form = the action turns into another one (Confiteor into Blade of Faith). Only meant for the Debug page.
+    /// </summary>
+    public static unsafe List<string> ReadActionFlags(uint jobId)
+    {
+        var lines = new List<string>();
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null || jobId == 0)
+            return lines;
+
+        uint parentId = 0;
+        if (Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().TryGetRow(jobId, out var jobRow))
+            parentId = jobRow.ClassJobParent.RowId;
+
+        foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>())
+        {
+            var owner = row.ClassJob.RowId;
+            if (row.IsPvP || row.ClassJobLevel == 0 || (owner != jobId && (parentId == 0 || owner != parentId)))
+                continue;
+
+            var name = row.Name.ToString();
+            if (string.IsNullOrEmpty(name))
+                continue;
+
+            var adjusted = actionManager->GetAdjustedActionId(row.RowId);
+            var glowing = actionManager->IsActionHighlighted(ActionType.Action, row.RowId);
+            var glowingForm = adjusted != row.RowId && actionManager->IsActionHighlighted(ActionType.Action, adjusted);
+
+            if (!glowing && !glowingForm && adjusted == row.RowId)
+                continue;
+
+            var text = $"{name} ({row.RowId})";
+            if (adjusted != row.RowId)
+                text += $"  form: {GameNames.ActionName(adjusted)} ({adjusted})";
+
+            text += $"  glow: {(glowing ? "yes" : "no")}";
+            if (adjusted != row.RowId)
+                text += $", form glow: {(glowingForm ? "yes" : "no")}";
+
+            lines.Add(text);
+        }
+
+        return lines;
+    }
+
     private static unsafe ComboSnapshot BuildCombo()
     {
         var actionManager = ActionManager.Instance();
@@ -347,7 +447,7 @@ internal sealed class GameDataProvider : IDisposable
 
         if (gameObject is not IBattleChara chara)
         {
-            // Not a fighting character: no life, no statuses. It still gets a frame (name and colour only).
+            // Not a fighting character: no HP, no statuses. It still gets a frame (name and colour only).
             var kind = objectKind switch
             {
                 9 => UnitKind.Pet,
@@ -369,8 +469,8 @@ internal sealed class GameDataProvider : IDisposable
             chara.Level,
             chara.CurrentHp,
             chara.MaxHp,
-            chara.CurrentMp,
-            chara.MaxMp,
+            ResourceNow(chara),
+            ResourceMax(chara),
             chara.IsDead,
             ToCast(chara),
             ToStatuses(chara.EntityId, chara.StatusList),
@@ -379,6 +479,21 @@ internal sealed class GameDataProvider : IDisposable
             chara.StatusFlags.HasFlag(StatusFlags.Hostile),
             Kind: unitKind);
     }
+
+    // The resource of the MP bar: MP, except for crafters (CP, jobs 8 to 15) and gatherers (GP, jobs 16 to 18).
+    private static uint ResourceNow(IBattleChara chara) => chara.ClassJob.RowId switch
+    {
+        >= 8 and <= 15 => chara.CurrentCp,
+        >= 16 and <= 18 => chara.CurrentGp,
+        _ => chara.CurrentMp
+    };
+
+    private static uint ResourceMax(IBattleChara chara) => chara.ClassJob.RowId switch
+    {
+        >= 8 and <= 15 => chara.MaxCp,
+        >= 16 and <= 18 => chara.MaxGp,
+        _ => chara.MaxMp
+    };
 
     private UnitSnapshot ToUnit(IPartyMember member)
     {

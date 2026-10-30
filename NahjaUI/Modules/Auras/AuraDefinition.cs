@@ -8,11 +8,145 @@ namespace NahjaUI.Modules.Auras;
 /// <summary>What an aura watches.</summary>
 public enum AuraTriggerType
 {
-    /// <summary>A buff or debuff on a unit.</summary>
+    /// <summary>An enhancement or enfeeblement on a unit.</summary>
     Status,
 
     /// <summary>The cooldown of one of your own abilities (with its charges and, optionally, its effect).</summary>
-    Cooldown
+    Cooldown,
+
+    /// <summary>An ability that the game turns on right now (it glows, or its button changes into it): procs and follow-up steps.</summary>
+    Activated
+}
+
+/// <summary>Where the value of a text on an aura comes from.</summary>
+public enum TextSource
+{
+    /// <summary>The time of the aura itself: the status time, or the cooldown (or the effect time) of the ability.</summary>
+    OwnTime,
+
+    /// <summary>The stacks of the status of the aura, or the charges of its ability.</summary>
+    OwnStacks,
+
+    /// <summary>The time left of the game's combo.</summary>
+    ComboTime,
+
+    /// <summary>The time left of a status chosen by the user (on the player).</summary>
+    StatusTime,
+
+    /// <summary>The stacks of a status chosen by the user (on the player).</summary>
+    StatusStacks,
+
+    /// <summary>The cooldown of an ability chosen by the user.</summary>
+    AbilityCooldown,
+
+    /// <summary>The charges of an ability chosen by the user.</summary>
+    AbilityCharges
+}
+
+/// <summary>Where the picture of an aura comes from.</summary>
+public enum IconSource
+{
+    /// <summary>The icon of what the aura tracks: the status, or the ability (in its current form).</summary>
+    Automatic,
+
+    /// <summary>The icon of a status chosen by the user, whatever the aura tracks.</summary>
+    Status,
+
+    /// <summary>The icon of an ability chosen by the user, whatever the aura tracks.</summary>
+    Ability
+}
+
+/// <summary>What has to be true for an icon trigger to match.</summary>
+public enum ConditionKind
+{
+    /// <summary>An enhancement or enfeeblement is on the unit.</summary>
+    StatusPresent,
+
+    /// <summary>An enhancement or enfeeblement is NOT on the unit (a reminder that it fell off).</summary>
+    StatusMissing,
+
+    /// <summary>The game turns an ability on right now: it glows, or its button changes into it (procs, follow-up steps).</summary>
+    AbilityActivated,
+
+    /// <summary>An ability is recharging.</summary>
+    AbilityOnCooldown,
+
+    /// <summary>An ability is ready to use.</summary>
+    AbilityReady,
+
+    /// <summary>An ability is known: matches ready or recharging.</summary>
+    AbilityAlways
+}
+
+/// <summary>
+/// One icon trigger of an aura. The triggers of an aura are tried in order: the first one that matches decides the picture,
+/// the glow and the values of the texts. When none matches, the aura is hidden.
+/// </summary>
+[Serializable]
+public class AuraRule
+{
+    public ConditionKind Kind { get; set; } = ConditionKind.StatusPresent;
+
+    /// <summary>Status conditions: the unit to look at.</summary>
+    public AuraUnit Unit { get; set; } = AuraUnit.Player;
+
+    public uint StatusId { get; set; }
+    public uint ActionId { get; set; }
+
+    /// <summary>Status conditions: only count a status the player applied.</summary>
+    public bool OnlyMine { get; set; }
+
+    /// <summary>Ability conditions: treat the global cooldown (about 2.5 s) as "ready".</summary>
+    public bool IgnoreGlobalCooldown { get; set; } = true;
+
+    /// <summary>The picture shown while this trigger decides. It can differ from what is tracked.</summary>
+    public IconSource Icon { get; set; } = IconSource.Automatic;
+    public uint IconStatusId { get; set; }
+    public uint IconActionId { get; set; }
+
+    /// <summary>Glow around the icon while this trigger decides.</summary>
+    public bool Glow { get; set; }
+
+    /// <summary>Glow while the ability is ready (for the "always" condition, which also covers recharging).</summary>
+    public bool GlowWhenReady { get; set; }
+
+    /// <summary>Glow while the game makes the button of the ability glow.</summary>
+    public bool GlowWhenHighlighted { get; set; }
+
+    [Newtonsoft.Json.JsonIgnore]
+    public bool IsAbility => Kind is not (ConditionKind.StatusPresent or ConditionKind.StatusMissing);
+}
+
+/// <summary>One place a text can take its value from. A text tries its sources in order: the first one with a value wins.</summary>
+[Serializable]
+public class AuraTextSource
+{
+    public TextSource Source { get; set; } = TextSource.OwnTime;
+    public uint StatusId { get; set; }
+    public uint ActionId { get; set; }
+}
+
+/// <summary>One text drawn over the icon of an aura, with its own source and look.</summary>
+[Serializable]
+public class AuraTextDefinition
+{
+    /// <summary>The places the value can come from, in order of priority.</summary>
+    public List<AuraTextSource> Sources { get; set; } = new();
+
+    // Older saves had one source. It becomes the first entry of Sources when the aura loads.
+    public TextSource Source { get; set; } = TextSource.OwnTime;
+    public uint StatusId { get; set; }
+    public uint ActionId { get; set; }
+
+    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
+
+    /// <summary>Height of the letters, in logical pixels.</summary>
+    public int Size { get; set; } = 8;
+
+    public AnchorPoint Anchor { get; set; } = AnchorPoint.Center;
+    public int OffsetX { get; set; }
+    public int OffsetY { get; set; }
+    public System.Numerics.Vector4 Color { get; set; } = new(1f, 1f, 1f, 1f);
 }
 
 /// <summary>For cooldown auras: in which situations the icon is shown.</summary>
@@ -48,7 +182,7 @@ public enum AuraUnit
 /// <summary>When the icon is shown.</summary>
 public enum AuraShowMode
 {
-    /// <summary>While the status is on the unit (a normal buff or debuff tracker).</summary>
+    /// <summary>While the status is on the unit (a normal enhancement or enfeeblement tracker).</summary>
     WhenPresent,
 
     /// <summary>While the status is NOT on the unit (a reminder that something fell off).</summary>
@@ -87,8 +221,23 @@ public class AuraDefinition
     /// <summary>Id of the group that places this aura, or null when the aura has its own position.</summary>
     public string? GroupId { get; set; }
 
-    // Trigger: what is watched.
+    /// <summary>The icon triggers, in order of priority: the first one that matches decides the picture and the glow.</summary>
+    public List<AuraRule> Rules { get; set; } = new();
+
+    /// <summary>False for auras saved before the trigger list existed: their old settings become one trigger when they load.</summary>
+    public bool RulesMigrated { get; set; }
+
+    // ---- Older saves (before the trigger list). Only read once, to build Rules; nothing uses them afterwards.
     public AuraTriggerType Trigger { get; set; } = AuraTriggerType.Status;
+    public IconSource Icon { get; set; } = IconSource.Automatic;
+    public uint IconStatusId { get; set; }
+    public uint IconActionId { get; set; }
+
+    /// <summary>The texts drawn over the icon: any number, each with its own source (Text 1, Text 2...).</summary>
+    public List<AuraTextDefinition> Texts { get; set; } = new();
+
+    /// <summary>False for auras saved before the text list existed: their timer and stack texts become Texts when they load.</summary>
+    public bool TextsMigrated { get; set; }
 
     // Status triggers: the status to watch. Cooldown triggers: the optional effect of the ability,
     // whose remaining time is shown while it is active.
@@ -96,7 +245,7 @@ public class AuraDefinition
     public uint StatusId { get; set; }
 
     /// <summary>
-    /// Cooldown auras: more effects that count as "the effect is active" (for abilities that give two buffs one after
+    /// Cooldown auras: more effects that count as "the effect is active" (for abilities that give two enhancements one after
     /// the other, like Fight or Flight and Goring Blade Ready). The first one found, in this order after StatusId, is shown.
     /// </summary>
     public List<uint> ExtraEffectIds { get; set; } = new();
@@ -131,13 +280,10 @@ public class AuraDefinition
     public bool ShowStacks { get; set; } = true;
 
     /// <summary>Font size of the timer, in pixels. One of the sizes in OverlayFonts.AvailableSizes.</summary>
-    public int TextSize { get; set; } = 12;
+    public int TextSize { get; set; } = 8;
 
-    /// <summary>
-    /// Font size of the charges / stack count, in pixels. 0 means automatic: three quarters of the timer size
-    /// (how it always was), so existing auras look the same.
-    /// </summary>
-    public int StackTextSize { get; set; } = 0;
+    /// <summary>Size of the charges / stack count, in pixels (the height of its letters). Chosen like the timer's; 0 in old saved auras counts as 8.</summary>
+    public int StackTextSize { get; set; } = 8;
 
     /// <summary>Font family of the timer and stack text.</summary>
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
@@ -160,6 +306,9 @@ public class AuraDefinition
     /// </summary>
     public int IconCropPercent { get; set; } = 13;
 
+    /// <summary>Cut the empty margin at the left and right of the game's icon, so the art fills the width of the box.</summary>
+    public bool FillWidth { get; set; } = true;
+
     /// <summary>Corner rounding of the icon, in pixels. The same idea as the unit frames, so the interface looks consistent. 0 = square.</summary>
     public int CornerRadiusPx { get; set; } = 3;
 
@@ -173,6 +322,7 @@ public class AuraDefinition
     public void CopyStyleFrom(AuraDefinition other)
     {
         IconCropPercent = other.IconCropPercent;
+        FillWidth = other.FillWidth;
         CornerRadiusPx = other.CornerRadiusPx;
         ShowTimer = other.ShowTimer;
         ShowStacks = other.ShowStacks;

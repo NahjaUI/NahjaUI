@@ -13,19 +13,19 @@ using NahjaUI.Modules.PartyFrames;
 namespace NahjaUI.Modules.UnitFrames;
 
 /// <summary>
-/// Draws one row of status icons (buffs or debuffs) attached to a bar. The party frames and the player, target and focus
+/// Draws one row of status icons (enhancements or enfeeblements) attached to a bar. The party frames and the player, target and focus
 /// frames all use it, so every row looks and is set up the same way.
 /// </summary>
 internal sealed class StatusRowRenderer
 {
     // Statuses shown while a frame is being adjusted (real status ids, so they have real icons). The filters do not apply to them.
-    public static readonly StatusSnapshot[] PreviewBuffs =
+    public static readonly StatusSnapshot[] PreviewEnhancements =
     {
         new(160, 0, 14f, 0), new(1191, 0, 8f, 0), new(50, 0, 22f, 0),
         new(160, 0, 5f, 0), new(1191, 0, 31f, 0), new(50, 0, 12f, 0)
     };
 
-    public static readonly StatusSnapshot[] PreviewDebuffs =
+    public static readonly StatusSnapshot[] PreviewEnfeeblements =
     {
         new(638, 0, 12f, 0), new(43, 0, 9f, 0), new(144, 0, 21f, 0)
     };
@@ -39,7 +39,7 @@ internal sealed class StatusRowRenderer
 
     // One row of icons next to a bar. The first icon is attached to a point of the bar (plus the offset) by one of its own
     // points, and the next ones follow in the direction of the growth.
-    public void DrawRow(ImDrawListPtr drawList, PartyAuraSettings row, bool isBuff, IReadOnlyList<StatusSnapshot> statuses, bool isSample, uint playerId, Vector2 barPos, Vector2 barSize, string place = "")
+    public void DrawRow(ImDrawListPtr drawList, PartyAuraSettings row, bool isEnhancement, IReadOnlyList<StatusSnapshot> statuses, bool isSample, uint playerId, Vector2 barPos, Vector2 barSize, string place = "")
     {
         if (!row.Enabled || row.MaxIcons <= 0 || statuses.Count == 0)
             return;
@@ -67,7 +67,7 @@ internal sealed class StatusRowRenderer
             if (shown >= row.MaxIcons)
                 break;
 
-            if (!Accepts(row, isBuff, status, isSample, playerId))
+            if (!Accepts(row, isEnhancement, status, isSample, playerId))
                 continue;
 
             var iconPos = first + step * shown;
@@ -75,7 +75,7 @@ internal sealed class StatusRowRenderer
 
             // The mouse is over this icon: show its description (no window is needed to know this, only the rectangle).
             if (ImGui.IsMouseHoveringRect(iconPos, iconPos + iconSize, false))
-                ShowTooltip(status, isBuff, place);
+                ShowTooltip(status, isEnhancement, place);
 
             shown++;
         }
@@ -86,10 +86,10 @@ internal sealed class StatusRowRenderer
     private int tooltipFrame = -1;
 
     // A small box next to the mouse with what the game says about the status: name, kind, time left, description and who applied it.
-    private void ShowTooltip(StatusSnapshot status, bool isBuff, string place)
+    internal void ShowTooltip(StatusSnapshot status, bool isEnhancement, string place)
     {
         var look = plugin.Configuration.Tooltip;
-        if (!look.Allows(place, isBuff) || plugin.Layout.UnlockMode)
+        if (!look.Allows(place, isEnhancement) || plugin.Layout.UnlockMode)
             return;
 
         // The row can be drawn several times in one frame (around a game window): the box is shown once.
@@ -148,7 +148,7 @@ internal sealed class StatusRowRenderer
     }
 
     // Does this row show this status?
-    private static bool Accepts(PartyAuraSettings row, bool isBuff, StatusSnapshot status, bool isSample, uint playerId)
+    private static bool Accepts(PartyAuraSettings row, bool isEnhancement, StatusSnapshot status, bool isSample, uint playerId)
     {
         if (isSample)
             return true;
@@ -157,8 +157,8 @@ internal sealed class StatusRowRenderer
         if (GameNames.StatusIconId(status.Id) == 0)
             return false;
 
-        // Every buff, or every debuff: the game says which of the two a status is.
-        if (GameNames.StatusCategory(status.Id) != (isBuff ? 1 : 2))
+        // Every enhancement, or every enfeeblement: the game says which of the two a status is.
+        if (GameNames.StatusCategory(status.Id) != (isEnhancement ? 1 : 2))
             return false;
 
         // The "extra" list is always shown, whoever applied the status.
@@ -179,7 +179,7 @@ internal sealed class StatusRowRenderer
     }
 
     // One icon: cropped (never stretched) to the shape of the box, with a 1 px black border, the time and the stacks.
-    private void DrawIcon(ImDrawListPtr drawList, PartyAuraSettings row, StatusSnapshot status, Vector2 pos, Vector2 size)
+    internal void DrawIcon(ImDrawListPtr drawList, PartyAuraSettings row, StatusSnapshot status, Vector2 pos, Vector2 size)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var iconId = GameNames.StatusIconId(status.Id);
@@ -204,8 +204,8 @@ internal sealed class StatusRowRenderer
         drawList.AddRect(pos, pos + size, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f)), rounding, ImDrawFlags.None, thickness);
 
         // The text size is in logical pixels (the fonts are already built scaled).
-        var timerPx = Math.Clamp(row.TimerSize, 8, 64);
-        var stackPx = row.StackTextSize > 0 ? Math.Clamp(row.StackTextSize, 8, 64) : timerPx * 0.75f;
+        var timerPx = Math.Clamp(row.TimerSize, 4, 64);
+        var stackPx = Math.Clamp(row.StackTextSize > 0 ? row.StackTextSize : 8, 4, 64);
 
         if (row.ShowTimer && status.RemainingTime > 0f)
             plugin.AuraSystem.DrawOverlayText(drawList, AuraEngine.FormatTime(status.RemainingTime), timerPx, row.Font,

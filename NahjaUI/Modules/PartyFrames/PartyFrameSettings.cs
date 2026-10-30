@@ -7,8 +7,8 @@ using NahjaUI.Modules.UnitFrames;
 
 namespace NahjaUI.Modules.PartyFrames;
 
-/// <summary>Which party members get a mana bar.</summary>
-public enum PartyManaMode
+/// <summary>Which party members get a MP bar.</summary>
+public enum PartyMpMode
 {
     Off,
 
@@ -44,7 +44,7 @@ public enum PartyOrder
 /// <summary>Which statuses a row of party icons shows.</summary>
 public enum PartyAuraFilter
 {
-    /// <summary>Every buff (or every debuff, in the debuff row).</summary>
+    /// <summary>Every enhancement (or every enfeeblement, in the enfeeblement row).</summary>
     All,
 
     /// <summary>Only the statuses in the list.</summary>
@@ -64,7 +64,7 @@ public enum PartyAuraGrowth
 }
 
 /// <summary>
-/// One row of status icons next to each party bar (the buffs, or the debuffs). It has its own point on the bar, its own
+/// One row of status icons next to each party bar (the enhancements, or the enfeeblements). It has its own point on the bar, its own
 /// offset, icon size, spacing and growth, so the two rows can be put anywhere.
 /// </summary>
 [Serializable]
@@ -78,7 +78,7 @@ public class PartyAuraSettings
     public List<uint> StatusIds { get; set; } = new();
 
     /// <summary>
-    /// Statuses that are always shown, whoever applied them (a raid debuff you want to see even if it is not yours).
+    /// Statuses that are always shown, whoever applied them (a raid enfeeblement you want to see even if it is not yours).
     /// They count even when "only the ones I applied" is on.
     /// </summary>
     public List<uint> ExtraStatusIds { get; set; } = new();
@@ -116,7 +116,7 @@ public class PartyAuraSettings
     public bool ShowTimer { get; set; } = true;
 
     /// <summary>Font size of the time left, in pixels (one of the sizes in OverlayFonts.AvailableSizes).</summary>
-    public int TimerSize { get; set; } = 12;
+    public int TimerSize { get; set; } = 8;
 
     /// <summary>Font of the time left and of the stack count.</summary>
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
@@ -131,8 +131,8 @@ public class PartyAuraSettings
 
     public bool ShowStacks { get; set; } = true;
 
-    /// <summary>Font size of the stack count, in pixels. 0 means automatic: three quarters of the time size.</summary>
-    public int StackTextSize { get; set; } = 0;
+    /// <summary>Size of the stack count, in pixels (the height of its letters). 0 in old saved settings counts as 8.</summary>
+    public int StackTextSize { get; set; } = 8;
 
     public AnchorPoint StacksAnchor { get; set; } = AnchorPoint.BottomRight;
 
@@ -140,8 +140,8 @@ public class PartyAuraSettings
 
     public int StacksOffsetY { get; set; } = -1;
 
-    /// <summary>The buffs row of the player, target and focus frames: above the bar, growing to the right. Off until it is switched on.</summary>
-    public static PartyAuraSettings CreateFrameBuffs() => new()
+    /// <summary>The enhancements row of the player, target and focus frames: above the bar, growing to the right. Off until it is switched on.</summary>
+    public static PartyAuraSettings CreateFrameEnhancements() => new()
     {
         Enabled = false,
         BarAnchor = AnchorPoint.TopLeft,
@@ -152,8 +152,8 @@ public class PartyAuraSettings
         MaxIcons = 12
     };
 
-    /// <summary>The debuffs row of the player, target and focus frames: under the bar, growing to the right, only the ones you applied.</summary>
-    public static PartyAuraSettings CreateFrameDebuffs() => new()
+    /// <summary>The enfeeblements row of the player, target and focus frames: under the bar, growing to the right, only the ones you applied.</summary>
+    public static PartyAuraSettings CreateFrameEnfeeblements() => new()
     {
         Enabled = false,
         BarAnchor = AnchorPoint.BottomLeft,
@@ -165,11 +165,11 @@ public class PartyAuraSettings
         MaxIcons = 12
     };
 
-    /// <summary>Buffs go at the left of the bar and grow to the left.</summary>
-    public static PartyAuraSettings CreateBuffs() => new();
+    /// <summary>Enhancements go at the left of the bar and grow to the left.</summary>
+    public static PartyAuraSettings CreateEnhancements() => new();
 
-    /// <summary>Debuffs go at the right of the bar and grow to the right.</summary>
-    public static PartyAuraSettings CreateDebuffs() => new()
+    /// <summary>Enfeeblements go at the right of the bar and grow to the right.</summary>
+    public static PartyAuraSettings CreateEnfeeblements() => new()
     {
         BarAnchor = AnchorPoint.Right,
         IconAnchor = AnchorPoint.Left,
@@ -179,7 +179,7 @@ public class PartyAuraSettings
 }
 
 /// <summary>
-/// The party frames: one bar per member, one under the other. The look of each bar (colours, shield, name and life text,
+/// The party frames: one bar per member, one under the other. The look of each bar (colours, shield, name and HP text,
 /// size of the first bar's box) is a normal <see cref="UnitFrameSettings"/>, so it is edited with the same controls as
 /// the other unit frames. What is only about the party is here.
 /// </summary>
@@ -192,20 +192,13 @@ public class PartyFrameSettings
     /// <summary>Space between two bars, in pixels.</summary>
     public int RowSpacingPx { get; set; } = 6;
 
-    public PartyManaMode ManaMode { get; set; } = PartyManaMode.HealersAndRaisers;
+    public PartyMpMode MpMode { get; set; } = PartyMpMode.HealersAndRaisers;
 
     public PartyOrder Order { get; set; } = PartyOrder.GameOrder;
 
     /// <summary>Your chocobo companion as one more bar at the end, like the game's own party list.</summary>
     public bool ShowChocobo { get; set; } = true;
 
-    /// <summary>A ring around the bar of the member you have targeted.</summary>
-    public bool SelectionRing { get; set; } = true;
-
-    /// <summary>An arrow beside the bar of the member you have targeted.</summary>
-    public bool SelectionArrow { get; set; } = true;
-
-    public Vector4 SelectionColor { get; set; } = new(0.545f, 0.486f, 1f, 1f);
 
     /// <summary>A thin stripe at the left edge of each bar: blue for tanks, green for healers, red for damage dealers.</summary>
     public bool RoleStripe { get; set; } = true;
@@ -218,20 +211,20 @@ public class PartyFrameSettings
     /// <summary>Size of the icon in pixels; it never goes over the height of the bar.</summary>
     public int JobIconSizePx { get; set; } = 16;
 
-    /// <summary>The buffs of each member, at the left of the bar by default.</summary>
-    public PartyAuraSettings Buffs { get; set; } = PartyAuraSettings.CreateBuffs();
+    /// <summary>The enhancements of each member, at the left of the bar by default.</summary>
+    public PartyAuraSettings Enhancements { get; set; } = PartyAuraSettings.CreateEnhancements();
 
-    /// <summary>The debuffs of each member, at the right of the bar by default.</summary>
-    public PartyAuraSettings Debuffs { get; set; } = PartyAuraSettings.CreateDebuffs();
+    /// <summary>The enfeeblements of each member, at the right of the bar by default.</summary>
+    public PartyAuraSettings Enfeeblements { get; set; } = PartyAuraSettings.CreateEnfeeblements();
 
-    /// <summary>The look the party bars start with: class colours, the name at the left and the percentage at the right.</summary>
+    /// <summary>The look the party bars start with: role colours, the name at the left and the percentage at the right.</summary>
     public static UnitFrameSettings CreateLook() => new()
     {
         HideNative = true,
         RoundingPx = 4,
-        ShowMana = false,
-        ManaHeightPx = 5,
-        LifeColorMode = LifeColorMode.Class,
+        ShowMp = false,
+        MpHeightPx = 5,
+        HpColorMode = HpColorMode.Role,
         HealthPreset = HealthTextPreset.Percent,
         Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 10, OffsetY = 0, TextSize = 15, Font = OverlayFont.NahjaDisplayBold },
         Health = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -8, OffsetY = 0, TextSize = 14, Font = OverlayFont.NahjaDisplayBold }

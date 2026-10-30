@@ -27,6 +27,7 @@ internal sealed class CastBarModule : IDisposable
     private static readonly string[] NativeBars = { NativePlayerBar, NativeTargetBar };
 
     private readonly Plugin plugin;
+    private readonly NativeWindowHider hider = new();
 
     public CastBarModule(Plugin plugin)
     {
@@ -84,12 +85,8 @@ internal sealed class CastBarModule : IDisposable
 
         // Skipping the game's own drawing hides the bar completely. Only clearing the "visible" flag was not enough:
         // at the end of a cast the game plays a closing animation (a fade) and kept drawing the bar during it.
-        args.PreventOriginal();
-
-        // Also mark it as hidden, so the game's own logic agrees with what is on screen.
-        var addon = args.GetAddonPointer<AtkUnitBase>();
-        if (addon != null)
-            addon->IsVisible = false;
+        // The hider also marks it as hidden, so the game's own logic agrees with what is on screen.
+        hider.Hide(args);
     }
 
     // ---------------------------------------------------------------- drawing
@@ -97,8 +94,16 @@ internal sealed class CastBarModule : IDisposable
     // What a bar shows for one frame.
     private readonly record struct CastView(string Name, uint IconId, float Current, float Total, bool Interruptible);
 
+    // Does this module want the game's window hidden right now?
+    private bool HidesNative(string windowName)
+    {
+        var settings = windowName == NativePlayerBar ? plugin.Configuration.CastBars.Player : plugin.Configuration.CastBars.Target;
+        return settings.Enabled && settings.HideNative;
+    }
+
     public void Draw()
     {
+        hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
         var preview = PreviewRequested || plugin.Layout.UnlockMode;
         PreviewRequested = false;
@@ -107,7 +112,7 @@ internal sealed class CastBarModule : IDisposable
 
         DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false, true);
         // The icon of an enemy action means nothing (the game's own bar has none): the target bar shows it only for allies.
-        DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, snapshot.Target is { IsHostile: false });
+        DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, false);
     }
 
     private void DrawBar(CastBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
@@ -152,7 +157,7 @@ internal sealed class CastBarModule : IDisposable
 
         // The icon sits inside the bar, at its left, as a square as tall as the bar.
         var barLeft = pos.X;
-        var hasIcon = settings.ShowIcon && (allowIcon || preview) && view.IconId != 0;
+        var hasIcon = !isTarget && settings.ShowIcon && view.IconId != 0;
 
         if (hasIcon)
         {
@@ -229,11 +234,13 @@ internal sealed class CastBarModule : IDisposable
     {
         var scale = ImGuiHelpers.GlobalScale;
         var padding = 6f * scale;
+        var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
 
-        // The size is in logical pixels: the fonts are already built scaled by the UI scale.
-        using (plugin.Fonts.PushClosest(settings.Font, settings.TextSize))
+        // The size is the height of the letters, in logical pixels.
+        using (var face = plugin.Fonts.PushCap(settings.Font, settings.TextSize))
         {
-            var y = MathF.Round((pos.Y + max.Y - ImGui.GetTextLineHeight()) / 2f);
+            // The letters are centred in the bar.
+            var y = MathF.Round((pos.Y + max.Y - face.Height) / 2f);
 
             var timeWidth = 0f;
             if (settings.ShowTime)
@@ -243,28 +250,28 @@ internal sealed class CastBarModule : IDisposable
                     ? remaining.ToString("0.0")
                     : $"{view.Current:0.0} / {view.Total:0.0}";
 
-                timeWidth = ImGui.CalcTextSize(timeText).X;
-                DrawOutlined(drawList, new Vector2(MathF.Round(max.X - padding - timeWidth), y), timeText);
+                timeWidth = face.Width(timeText);
+                face.Draw(drawList, new Vector2(MathF.Round(max.X - padding - timeWidth), y), timeText, white);
             }
 
             if (settings.ShowName)
             {
                 // The name never runs into the time: it is shortened if it does not fit.
                 var available = max.X - padding - (settings.ShowTime ? timeWidth + padding : 0f) - (barLeft + padding);
-                var name = Fit(view.Name, available);
+                var name = Fit(face, view.Name, available);
 
-                DrawOutlined(drawList, new Vector2(MathF.Round(barLeft + padding), y), name);
+                face.Draw(drawList, new Vector2(MathF.Round(barLeft + padding), y), name, white);
             }
         }
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.
-    private static string Fit(string text, float available)
+    private static string Fit(TextFace face, string text, float available)
     {
         if (available <= 0f)
             return string.Empty;
 
-        if (ImGui.CalcTextSize(text).X <= available)
+        if (face.Width(text) <= available)
             return text;
 
         while (text.Length > 1)
@@ -272,15 +279,10 @@ internal sealed class CastBarModule : IDisposable
             text = text[..^1];
 
             var candidate = text + "...";
-            if (ImGui.CalcTextSize(candidate).X <= available)
+            if (face.Width(candidate) <= available)
                 return candidate;
         }
 
         return string.Empty;
-    }
-
-    private static void DrawOutlined(ImDrawListPtr drawList, Vector2 pos, string text)
-    {
-        OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
     }
 }

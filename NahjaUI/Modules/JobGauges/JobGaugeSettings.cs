@@ -42,7 +42,7 @@ public class WhiteMageGaugeSettings
     public int RoundingPx { get; set; } = 3;
 
     /// <summary>Font size of the timer, in pixels (a fixed step, see OverlayFonts.AvailableSizes).</summary>
-    public int TextSize { get; set; } = 12;
+    public int TextSize { get; set; } = 8;
 
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
 
@@ -81,7 +81,7 @@ public class BarGaugeSettings
     /// <summary>How round the corners of the bar are, in pixels.</summary>
     public int RoundingPx { get; set; } = 3;
 
-    public int TextSize { get; set; } = 12;
+    public int TextSize { get; set; } = 8;
 
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
 

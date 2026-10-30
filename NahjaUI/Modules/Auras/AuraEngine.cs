@@ -23,7 +23,7 @@ internal enum AuraPhase
     /// <summary>No charge is available: the ability is recharging.</summary>
     Cooling,
 
-    /// <summary>The effect of the ability is on right now (for example a defensive buff).</summary>
+    /// <summary>The effect of the ability is on right now (for example a defensive enhancement).</summary>
     Active
 }
 
@@ -37,6 +37,8 @@ internal enum AuraPhase
 /// <param name="Charges">Cooldown auras: charges available.</param>
 /// <param name="MaxCharges">Cooldown auras: charges the ability can hold.</param>
 /// <param name="Highlighted">Cooldown auras: the game is making the button of the current form glow.</param>
+/// <param name="AbilityBased">The trigger that matched works with an ability (not a status).</param>
+/// <param name="Rule">The icon trigger that matched: it decides the picture and the glow.</param>
 /// <param name="IconActionId">Cooldown auras: the action whose icon is shown (the form the game shows now; 0 = the chosen one).</param>
 internal readonly record struct AuraState(
     bool Visible,
@@ -48,7 +50,9 @@ internal readonly record struct AuraState(
     int Charges = 0,
     int MaxCharges = 1,
     uint IconActionId = 0,
-    bool Highlighted = false)
+    bool Highlighted = false,
+    bool AbilityBased = false,
+    AuraRule? Rule = null)
 {
     public static readonly AuraState Hidden = new(false, false, 0f, 0);
 }
@@ -130,8 +134,135 @@ internal sealed class AuraEngine
         LoadFromConfiguration();
     }
 
+    // Cooldown auras used to have an "effect while active". Now the time of that status is a text of the aura.
+    private static void MigrateEffect(AuraDefinition aura)
+    {
+        if (aura.Trigger == AuraTriggerType.Cooldown && aura.StatusId != 0)
+        {
+            aura.Texts.Add(new AuraTextDefinition
+            {
+                Source = TextSource.StatusTime,
+                StatusId = aura.StatusId,
+                Anchor = AnchorPoint.TopRight
+            });
+        }
+
+        if (aura.Trigger == AuraTriggerType.Cooldown)
+        {
+            aura.StatusId = 0;
+            aura.ExtraEffectIds.Clear();
+        }
+    }
+
+    // Auras saved before the text list existed: their timer and stack texts become texts of their own.
+    private static void MigrateTexts(AuraDefinition aura)
+    {
+        if (aura.TextsMigrated)
+            return;
+
+        aura.TextsMigrated = true;
+        aura.Texts.Clear();
+
+        if (aura.ShowTimer)
+        {
+            aura.Texts.Add(new AuraTextDefinition
+            {
+                Source = TextSource.OwnTime,
+                Font = aura.Font,
+                Size = aura.TextSize,
+                Anchor = aura.TimerAnchor,
+                OffsetX = aura.TimerOffsetX,
+                OffsetY = aura.TimerOffsetY
+            });
+        }
+
+        if (aura.ShowStacks)
+        {
+            aura.Texts.Add(new AuraTextDefinition
+            {
+                Source = TextSource.OwnStacks,
+                Font = aura.Font,
+                Size = aura.StackTextSize > 0 ? aura.StackTextSize : 8,
+                Anchor = aura.StacksAnchor,
+                OffsetX = aura.StacksOffsetX,
+                OffsetY = aura.StacksOffsetY
+            });
+        }
+    }
+
+    // Auras saved before the trigger list: what they watched becomes one trigger, and each text gets its first source.
+    private static void MigrateRules(AuraDefinition aura)
+    {
+        foreach (var text in aura.Texts)
+        {
+            if (text.Sources.Count == 0)
+                text.Sources.Add(new AuraTextSource { Source = text.Source, StatusId = text.StatusId, ActionId = text.ActionId });
+        }
+
+        if (aura.RulesMigrated)
+            return;
+
+        aura.RulesMigrated = true;
+        aura.Rules.Clear();
+
+        var rule = new AuraRule
+        {
+            Icon = aura.Icon,
+            IconStatusId = aura.IconStatusId,
+            IconActionId = aura.IconActionId
+        };
+
+        switch (aura.Trigger)
+        {
+            case AuraTriggerType.Cooldown:
+                rule.Kind = aura.CooldownShow switch
+                {
+                    CooldownShowMode.OnlyOnCooldown => ConditionKind.AbilityOnCooldown,
+                    CooldownShowMode.OnlyWhenReady => ConditionKind.AbilityReady,
+                    _ => ConditionKind.AbilityAlways
+                };
+                rule.ActionId = aura.ActionId;
+                rule.IgnoreGlobalCooldown = aura.IgnoreGlobalCooldown;
+                rule.GlowWhenReady = aura.GlowWhenReady;
+                rule.GlowWhenHighlighted = aura.GlowWhenHighlighted;
+                break;
+
+            case AuraTriggerType.Activated:
+                rule.Kind = ConditionKind.AbilityActivated;
+                rule.ActionId = aura.ActionId;
+                rule.Glow = aura.GlowWhenActive;
+                rule.GlowWhenHighlighted = aura.GlowWhenHighlighted;
+                break;
+
+            default:
+                rule.Kind = aura.ShowMode == AuraShowMode.WhenMissing ? ConditionKind.StatusMissing : ConditionKind.StatusPresent;
+                rule.Unit = aura.Unit;
+                rule.StatusId = aura.StatusId;
+                rule.OnlyMine = aura.OnlyMine;
+                rule.Glow = aura.GlowWhenActive;
+                break;
+        }
+
+        aura.Rules.Add(rule);
+    }
+
     private void LoadFromConfiguration()
     {
+        // Older auras that were "only as a combo step" are now activated-ability auras.
+        foreach (var old in plugin.Configuration.Auras)
+        {
+            MigrateTexts(old);
+            MigrateEffect(old);
+
+            if (old.Trigger == AuraTriggerType.Cooldown && old.OnlyAsComboStep)
+            {
+                old.Trigger = AuraTriggerType.Activated;
+                old.OnlyAsComboStep = false;
+            }
+
+            MigrateRules(old);
+        }
+
         foreach (var definition in plugin.Configuration.AuraGroups)
             RegisterGroup(definition);
 
@@ -183,7 +314,9 @@ internal sealed class AuraEngine
     /// </summary>
     public AuraRuntime AddNew(AuraGroupRuntime? intoGroup = null)
     {
-        var definition = new AuraDefinition();
+        var definition = new AuraDefinition { TextsMigrated = true, RulesMigrated = true };
+        definition.Rules.Add(new AuraRule());
+        definition.Texts.Add(new AuraTextDefinition { Sources = { new AuraTextSource() } });
         plugin.Configuration.Auras.Add(definition);
 
         var runtime = Register(definition);
@@ -192,6 +325,38 @@ internal sealed class AuraEngine
             plugin.Configuration.RootOrder.Add(AuraKey(definition));
         else
             MoveAuraIntoGroup(runtime, intoGroup, null, false);
+
+        plugin.RequestSave();
+        return runtime;
+    }
+
+    /// <summary>Makes a copy of an aura and puts it right below the original (inside the same group, or at the top level).</summary>
+    public AuraRuntime Duplicate(AuraRuntime original)
+    {
+        // A deep copy through JSON: every setting of the aura, now and in the future, is copied without listing them here.
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(original.Definition);
+        var definition = Newtonsoft.Json.JsonConvert.DeserializeObject<AuraDefinition>(json) ?? new AuraDefinition();
+        definition.Id = Guid.NewGuid().ToString("N");
+        definition.Name = string.IsNullOrWhiteSpace(original.Definition.Name) ? definition.Name : $"{original.Definition.Name} (copy)";
+
+        plugin.Configuration.Auras.Add(definition);
+        var runtime = Register(definition);
+
+        // Same size and place as the original (a loose aura has a place of its own).
+        runtime.Element.Layout.CopyPositionFrom(original.Element.Layout);
+        runtime.Element.Layout.Width = original.Element.Layout.Width;
+        runtime.Element.Layout.Height = original.Element.Layout.Height;
+
+        var group = FindGroup(definition.GroupId);
+        if (group is not null)
+        {
+            MoveAuraIntoGroup(runtime, group, original, true);
+        }
+        else
+        {
+            definition.GroupId = null;
+            PlaceAtRoot(AuraKey(definition), AuraKey(original.Definition), true);
+        }
 
         plugin.RequestSave();
         return runtime;
@@ -415,14 +580,13 @@ internal sealed class AuraEngine
 
     private AuraRuntime Register(AuraDefinition definition)
     {
-        // New auras are lined up in rows of 10 so they do not pile up on top of each other.
-        var index = runtimes.Count;
+        // New auras start in the centre of the screen, so they can never end up off screen.
         var defaults = new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
-            OffsetX = (index % 10) * 50 - 225,
-            OffsetY = 120 + (index / 10) * 50,
+            OffsetX = 0,
+            OffsetY = 0,
             Width = 44,
             Height = 44
         };
@@ -440,7 +604,7 @@ internal sealed class AuraEngine
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = 200 + groups.Count * 60,
+            OffsetY = 0,
             Width = 44,
             Height = 44
         };
@@ -453,9 +617,13 @@ internal sealed class AuraEngine
 
     // ---------------------------------------------------------------- per frame
 
+    // The snapshot of the frame being drawn: texts that read other statuses, abilities or the combo need it.
+    private GameSnapshot? frameSnapshot;
+
     public void Draw()
     {
         var snapshot = plugin.GameData.Current;
+        frameSnapshot = snapshot;
         var unlock = plugin.Layout.UnlockMode;
 
         DecimalsBelowSeconds = plugin.Configuration.TimerDecimalsBelowSeconds;
@@ -465,8 +633,30 @@ internal sealed class AuraEngine
         foreach (var runtime in runtimes)
         {
             var definition = runtime.Definition;
-            if (definition.Enabled && definition.Trigger == AuraTriggerType.Cooldown && definition.ActionId != 0)
-                watchedActions.Add(definition.ActionId);
+            if (!definition.Enabled)
+                continue;
+
+            foreach (var rule in definition.Rules)
+            {
+                if (!rule.IsAbility || rule.ActionId == 0)
+                    continue;
+
+                watchedActions.Add(rule.ActionId);
+
+                // A step that is not a button of its own (Blade of Faith) is shown by the game as another form of the first
+                // action of its chain (Confiteor): that one is watched too.
+                if (rule.Kind == ConditionKind.AbilityActivated && GameNames.ComboRoot(rule.ActionId) is var root && root != 0)
+                    watchedActions.Add(root);
+            }
+
+            foreach (var text in definition.Texts)
+            {
+                foreach (var source in text.Sources)
+                {
+                    if (source.Source is TextSource.AbilityCooldown or TextSource.AbilityCharges && source.ActionId != 0)
+                        watchedActions.Add(source.ActionId);
+                }
+            }
         }
 
         plugin.GameData.SetWatchedActions(watchedActions);
@@ -681,88 +871,121 @@ internal sealed class AuraEngine
         if (!IsLoaded(aura.Load, player, snapshot.Context))
             return AuraState.Hidden;
 
-        return aura.Trigger == AuraTriggerType.Cooldown
-            ? EvaluateCooldown(aura, snapshot, player)
-            : EvaluateStatus(aura, snapshot, player);
+        // The triggers are tried in order; the first one that matches decides. None matching hides the aura.
+        foreach (var rule in aura.Rules)
+        {
+            // An ability not learned yet (level too low, or the level is synced down in a dungeon or FATE) never matches.
+            // The player's level is the one the game uses, so it already includes the sync.
+            if (rule.IsAbility && rule.ActionId != 0 && GameNames.ActionLevel(rule.ActionId) > player.Level)
+                continue;
+
+            var state = Match(rule, snapshot, player);
+            if (state.Visible)
+                return state;
+        }
+
+        return AuraState.Hidden;
     }
 
-    private static AuraState EvaluateStatus(AuraDefinition aura, GameSnapshot snapshot, UnitSnapshot player)
+    private static AuraState Match(AuraRule rule, GameSnapshot snapshot, UnitSnapshot player) => rule.Kind switch
     {
-        if (aura.StatusId == 0)
+        ConditionKind.StatusPresent or ConditionKind.StatusMissing => MatchStatus(rule, snapshot, player),
+        ConditionKind.AbilityActivated => MatchActivated(rule, snapshot),
+        _ => MatchCooldown(rule, snapshot)
+    };
+
+    // An ability the game turns on right now: it glows, or the button of the first action of its chain has changed into it.
+    private static AuraState MatchActivated(AuraRule rule, GameSnapshot snapshot)
+    {
+        if (rule.ActionId == 0 || !snapshot.Cooldowns.TryGetValue(rule.ActionId, out var cooldown))
             return AuraState.Hidden;
 
-        // Nobody to look at (for example no target): show nothing, not even a "missing" reminder.
-        if (!TryFindStatus(aura, snapshot, player, out var found))
+        var root = GameNames.ComboRoot(rule.ActionId);
+        bool offered;
+
+        if (root != 0)
+        {
+            // A combo step: the game's combo is on the step before it, or (Confiteor into Blade of Faith) the button of the
+            // first action of the chain is now this step.
+            var parent = GameNames.ComboParent(rule.ActionId);
+            var combo = snapshot.Combo;
+            var byCombo = parent != 0 && combo is not null && combo.Action == parent && combo.Timer > 0f;
+            var byForm = snapshot.Cooldowns.TryGetValue(root, out var rootCooldown) && rootCooldown.CurrentActionId == rule.ActionId;
+            offered = byCombo || byForm;
+        }
+        else
+        {
+            // The glow of the game is on the current form of the ability.
+            offered = cooldown.Highlighted;
+        }
+
+        if (!offered)
+            return AuraState.Hidden;
+
+        // Standard number: the cooldown of the ability (the global cooldown does not count).
+        var remaining = cooldown.IsOnCooldown && !(cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds) ? cooldown.Remaining : 0f;
+
+        return new AuraState(true, true, remaining, 0, AuraPhase.Active, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
+            cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
+    }
+
+    private static AuraState MatchStatus(AuraRule rule, GameSnapshot snapshot, UnitSnapshot player)
+    {
+        if (rule.StatusId == 0)
+            return AuraState.Hidden;
+
+        // Nobody to look at (for example no target): nothing matches, not even a "missing" reminder.
+        if (!TryFindStatus(rule, snapshot, player, out var found))
             return AuraState.Hidden;
 
         var present = found is not null;
-        var visible = aura.ShowMode == AuraShowMode.WhenPresent ? present : !present;
+        var wantPresent = rule.Kind == ConditionKind.StatusPresent;
 
-        if (!visible)
+        if (present != wantPresent)
             return AuraState.Hidden;
 
-        return new AuraState(true, present, found?.RemainingTime ?? 0f, found?.Param ?? 0);
+        return new AuraState(true, present, found?.RemainingTime ?? 0f, found?.Param ?? 0, Rule: rule);
     }
 
-    private static AuraState EvaluateCooldown(AuraDefinition aura, GameSnapshot snapshot, UnitSnapshot player)
+    private static AuraState MatchCooldown(AuraRule rule, GameSnapshot snapshot)
     {
         // No ability chosen, or the data has not arrived yet (it comes one frame after the aura asks for it).
-        if (aura.ActionId == 0 || !snapshot.Cooldowns.TryGetValue(aura.ActionId, out var cooldown))
+        if (rule.ActionId == 0 || !snapshot.Cooldowns.TryGetValue(rule.ActionId, out var cooldown))
             return AuraState.Hidden;
 
         var onCooldown = cooldown.IsOnCooldown;
         var remaining = cooldown.Remaining;
 
-        // Combo step: only while the ability this one follows was the last one used and the combo is still running.
-        var combo = snapshot.Combo;
-        var comboTimer = 0f;
-        if (aura.OnlyAsComboStep)
-        {
-            var parent = GameNames.ComboParent(aura.ActionId);
-            if (parent == 0 || combo is null || combo.Action != parent || combo.Timer <= 0f)
-                return AuraState.Hidden;
-
-            comboTimer = combo.Timer;
-        }
-
         // The global cooldown is not a real cooldown: abilities used with it count as ready.
-        if (aura.IgnoreGlobalCooldown && cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds)
+        if (rule.IgnoreGlobalCooldown && cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds)
         {
             onCooldown = false;
             remaining = 0f;
         }
 
-        // The effect of the ability (optional): its remaining time is shown while it lasts.
-        StatusSnapshot? effect = null;
-        if (aura.StatusId != 0)
-            TryFindStatus(aura, snapshot, player, out effect);
+        var phase = onCooldown ? AuraPhase.Cooling : AuraPhase.Ready;
 
-        var phase = effect is not null
-            ? AuraPhase.Active
-            : onCooldown ? AuraPhase.Cooling : AuraPhase.Ready;
-
-        var visible = aura.CooldownShow switch
+        var matches = rule.Kind switch
         {
-            CooldownShowMode.OnlyOnCooldown => phase != AuraPhase.Ready,
-            CooldownShowMode.OnlyWhenReady => phase == AuraPhase.Ready,
+            ConditionKind.AbilityOnCooldown => phase == AuraPhase.Cooling,
+            ConditionKind.AbilityReady => phase == AuraPhase.Ready,
             _ => true
         };
 
-        if (!visible)
+        if (!matches)
             return AuraState.Hidden;
 
-        var timer = phase == AuraPhase.Active ? effect?.RemainingTime ?? 0f : aura.OnlyAsComboStep ? comboTimer : remaining;
-
-        return new AuraState(true, effect is not null, timer, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges, cooldown.CurrentActionId, cooldown.Highlighted);
+        return new AuraState(true, false, remaining, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
+            cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
     }
 
-    // Looks for the aura's status on the unit it watches.
+    // Looks for the status of the trigger on the unit it watches.
     // Returns false when there is nobody to look at; "found" is null when the unit does not have the status.
-    private static bool TryFindStatus(AuraDefinition aura, GameSnapshot snapshot, UnitSnapshot player, out StatusSnapshot? found)
+    private static bool TryFindStatus(AuraRule rule, GameSnapshot snapshot, UnitSnapshot player, out StatusSnapshot? found)
     {
         found = null;
 
-        var unit = aura.Unit switch
+        var unit = rule.Unit switch
         {
             AuraUnit.Player => player,
             AuraUnit.Target => snapshot.Target,
@@ -774,22 +997,16 @@ internal sealed class AuraEngine
         if (unit is null)
             return false;
 
-        // The main status first, then the extra effects in the order they were added.
-        for (var i = -1; i < aura.ExtraEffectIds.Count && found is null; i++)
+        foreach (var status in unit.Statuses)
         {
-            var wanted = i < 0 ? aura.StatusId : aura.ExtraEffectIds[i];
+            if (status.Id != rule.StatusId)
+                continue;
 
-            foreach (var status in unit.Statuses)
-            {
-                if (status.Id != wanted)
-                    continue;
+            if (rule.OnlyMine && status.SourceId != player.EntityId)
+                continue;
 
-                if (aura.OnlyMine && status.SourceId != player.EntityId)
-                    continue;
-
-                found = status;
-                break;
-            }
+            found = status;
+            break;
         }
 
         return true;
@@ -829,7 +1046,7 @@ internal sealed class AuraEngine
         var scale = ImGuiHelpers.GlobalScale;
         var drawList = ImGui.GetBackgroundDrawList();
 
-        var isCooldown = definition.Trigger == AuraTriggerType.Cooldown;
+        var isCooldown = state.AbilityBased || (state.Rule ?? definition.Rules.FirstOrDefault())?.IsAbility == true;
 
         // Rounded corners, like the unit frames. They can never be more than half of the shorter side.
         var rounding = MathF.Min(MathF.Round(Math.Clamp(definition.CornerRadiusPx, 0, 24) * scale), MathF.Min(size.X, size.Y) / 2f);
@@ -839,9 +1056,7 @@ internal sealed class AuraEngine
         var redBorder = missing || (cooling && definition.CooldownLook == CooldownLook.Red);
 
         // Cooldown auras show the ability's own icon, status auras the icon of the status.
-        var iconId = isCooldown
-            ? GameNames.ActionIconId(state.IconActionId != 0 ? state.IconActionId : definition.ActionId)
-            : GameNames.StatusIconId(definition.StatusId);
+        var iconId = ResolveIcon(state.Rule ?? definition.Rules.FirstOrDefault(), state.IconActionId, out var iconIsStatus);
 
         if (iconId != 0)
         {
@@ -849,7 +1064,8 @@ internal sealed class AuraEngine
 
             // The icon is cropped (never stretched) to the shape of the box.
             var crop = Math.Clamp(definition.IconCropPercent, 0, 30) / 100f;
-            var (uv0, uv1) = IconUv(size, isCooldown ? 1f : StatusIconAspect, crop);
+            var (marginLeft, marginRight) = definition.FillWidth ? IconMargins.Get(iconId) : (0f, 0f);
+            var (uv0, uv1) = IconUv(size, iconIsStatus ? StatusIconAspect : 1f, crop, marginLeft, marginRight);
 
             // A ghost is transparent. A missing status is reddish. A recharging ability is dimmed or red.
             var tint = Vector4.One;
@@ -892,50 +1108,125 @@ internal sealed class AuraEngine
         if (ghost)
             return;
 
-        // Glow around the icon: when the ability is ready, or while its effect is active.
-        if (isCooldown)
+        // Glow around the icon, as the trigger that decides asks for.
+        var rule = state.Rule;
+        if (rule is not null
+            && (rule.Glow
+                || (rule.GlowWhenReady && state.Phase == AuraPhase.Ready)
+                || (rule.GlowWhenHighlighted && state.Highlighted)))
         {
-            var glow = (state.Phase == AuraPhase.Ready && definition.GlowWhenReady)
-                       || (state.Phase == AuraPhase.Active && definition.GlowWhenActive)
-                       || (state.Highlighted && definition.GlowWhenHighlighted);
-
-            if (glow)
-                DrawGlow(drawList, pos, size, rounding);
-        }
-        else if (state.StatusPresent && definition.GlowWhenActive)
-        {
-            // A buff or debuff aura: glows while the status is there (a proc like Wrathful, like a lit hotbar button).
             DrawGlow(drawList, pos, size, rounding);
         }
 
-        // Text size is a font size in LOGICAL pixels, chosen per aura. Dalamud already builds the fonts scaled by the
-        // user's UI scale, so it must NOT be multiplied by the scale again.
-        var textPx = Math.Clamp(definition.TextSize, 8, 64);
-
-        // The charges / stack count have their own size; 0 = automatic (three quarters of the timer size).
-        var stackPx = definition.StackTextSize > 0 ? Math.Clamp(definition.StackTextSize, 8, 64) : textPx * 0.75f;
-
-        var showTimer = definition.ShowTimer && state.Remaining > 0f && (isCooldown || state.StatusPresent);
-        if (showTimer)
-            DrawOverlayText(drawList, FormatTime(state.Remaining), textPx, definition.Font, pos, size,
-                definition.TimerAnchor, new Vector2(definition.TimerOffsetX, definition.TimerOffsetY));
-
-        if (isCooldown)
+        // The texts over the icon. Every text has its own source, size (height of the letters, in logical pixels: the fonts are
+        // already built scaled by the user's UI scale, so it is not multiplied again), position and colour.
+        foreach (var text in definition.Texts)
         {
-            // Charges left, for abilities that have more than one.
-            if (definition.ShowStacks && state.MaxCharges > 1)
-                DrawOverlayText(drawList, state.Charges.ToString(), stackPx, definition.Font, pos, size,
-                    definition.StacksAnchor, new Vector2(definition.StacksOffsetX, definition.StacksOffsetY));
+            // The first source with a value wins.
+            string? value = null;
+            foreach (var source in text.Sources)
+            {
+                value = SourceValue(source, state);
+                if (value is not null)
+                    break;
+            }
+
+            if (value is null)
+                continue;
+
+            DrawOverlayText(drawList, value, Math.Clamp(text.Size, 4, 64), text.Font, pos, size,
+                text.Anchor, new Vector2(text.OffsetX, text.OffsetY), text.Color);
         }
-        else if (state.StatusPresent && definition.ShowStacks)
+    }
+
+    // What one source of a text gives right now, or null when it has nothing to show (no time left, no stacks...).
+    private string? SourceValue(AuraTextSource text, AuraState state)
+    {
+        var snapshot = frameSnapshot;
+        var player = snapshot?.Player;
+
+        switch (text.Source)
         {
-            // Only statuses that really stack show a number. (For other statuses the game stores something else
-            // there, for example the +30 % of Sprint.)
-            var maxStacks = GameNames.MaxStacks(definition.StatusId);
-            if (maxStacks > 1 && state.Stacks > 1 && state.Stacks <= maxStacks)
-                DrawOverlayText(drawList, state.Stacks.ToString(), stackPx, definition.Font, pos, size,
-                    definition.StacksAnchor, new Vector2(definition.StacksOffsetX, definition.StacksOffsetY));
+            case TextSource.OwnTime:
+                return state.Remaining > 0f && (state.AbilityBased || state.StatusPresent) ? FormatTime(state.Remaining) : null;
+
+            case TextSource.OwnStacks:
+                if (state.AbilityBased)
+                    return state.MaxCharges > 1 ? state.Charges.ToString() : null;
+
+                // Only statuses that really stack show a number. (For other statuses the game stores something else
+                // there, for example the +30 % of Sprint.)
+                return state.StatusPresent ? StackText(state.Rule?.StatusId ?? 0, state.Stacks) : null;
+
+            case TextSource.ComboTime:
+                return snapshot?.Combo is { Timer: > 0f } combo ? FormatTime(combo.Timer) : null;
+
+            case TextSource.StatusTime:
+            case TextSource.StatusStacks:
+                if (player is null || text.StatusId == 0)
+                    return null;
+
+                foreach (var status in player.Statuses)
+                {
+                    if (status.Id != text.StatusId)
+                        continue;
+
+                    return text.Source == TextSource.StatusTime
+                        ? status.RemainingTime > 0f ? FormatTime(status.RemainingTime) : null
+                        : StackText(text.StatusId, status.Param);
+                }
+
+                return null;
+
+            case TextSource.AbilityCooldown:
+            case TextSource.AbilityCharges:
+                if (snapshot is null || !snapshot.Cooldowns.TryGetValue(text.ActionId, out var cooldown))
+                    return null;
+
+                if (text.Source == TextSource.AbilityCharges)
+                    return cooldown.MaxCharges > 1 ? cooldown.Charges.ToString() : null;
+
+                // The global cooldown is not a real cooldown.
+                if (!cooldown.IsOnCooldown || (cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds))
+                    return null;
+
+                return cooldown.Remaining > 0f ? FormatTime(cooldown.Remaining) : null;
         }
+
+        return null;
+    }
+
+    // The stack count of a status as text, only for statuses that really stack.
+    private static string? StackText(uint statusId, int stacks)
+    {
+        var maxStacks = GameNames.MaxStacks(statusId);
+        return maxStacks > 1 && stacks > 1 && stacks <= maxStacks ? stacks.ToString() : null;
+    }
+
+    /// <summary>
+    /// The game icon of an aura: the one chosen by the user, or the one of what it tracks. "isStatusIcon" tells the shape
+    /// (status icons are taller than ability icons). <paramref name="currentForm"/> is the form the game shows for an ability now (0 = the chosen one).
+    /// </summary>
+    internal static uint ResolveIcon(AuraRule? rule, uint currentForm, out bool isStatusIcon)
+    {
+        isStatusIcon = false;
+
+        if (rule is null)
+            return 0;
+
+        if (rule.Icon == IconSource.Status && rule.IconStatusId != 0)
+        {
+            isStatusIcon = true;
+            return GameNames.StatusIconId(rule.IconStatusId);
+        }
+
+        if (rule.Icon == IconSource.Ability && rule.IconActionId != 0)
+            return GameNames.ActionIconId(rule.IconActionId);
+
+        isStatusIcon = !rule.IsAbility;
+        return rule.IsAbility
+            ? GameNames.ActionIconId(currentForm != 0 ? currentForm : rule.ActionId)
+            : GameNames.StatusIconId(rule.StatusId);
     }
 
     // A dark wedge over the part of the icon that is still recharging, like the game's own hotbar:
@@ -1131,14 +1422,18 @@ internal sealed class AuraEngine
     }
 
     // The part of the icon texture to show so that it fills a box of the given shape without distortion.
-    internal static (Vector2 Uv0, Vector2 Uv1) IconUv(Vector2 boxSize, float iconAspect, float inset)
+    internal static (Vector2 Uv0, Vector2 Uv1) IconUv(Vector2 boxSize, float iconAspect, float inset, float marginLeft = 0f, float marginRight = 0f)
     {
-        var u0 = inset;
-        var u1 = 1f - inset;
+        // The empty margin of the icon (when asked) is cut at the sides, on top of the crop.
+        var u0 = Math.Max(inset, marginLeft);
+        var u1 = 1f - Math.Max(inset, marginRight);
         var v0 = inset;
         var v1 = 1f - inset;
 
         var boxAspect = boxSize.X / Math.Max(1f, boxSize.Y);
+
+        // The shape of the part of the icon that is kept.
+        iconAspect *= (u1 - u0) / Math.Max(0.01f, v1 - v0);
 
         if (boxAspect > iconAspect)
         {
@@ -1176,19 +1471,21 @@ internal sealed class AuraEngine
     // White text with a thick black outline, readable on any icon.
     // The text is attached to a point of the icon (the anchor): the same point of the text is placed on it,
     // so a right anchor right-justifies the text and a centre anchor centres it. The offset then moves it (in pixels).
-    internal void DrawOverlayText(ImDrawListPtr drawList, string text, float wantedPx, OverlayFont font, Vector2 boxPos, Vector2 boxSize, AnchorPoint anchor, Vector2 offset)
+    internal void DrawOverlayText(ImDrawListPtr drawList, string text, float wantedPx, OverlayFont font, Vector2 boxPos, Vector2 boxSize, AnchorPoint anchor, Vector2 offset, Vector4? color = null)
     {
         var scale = ImGuiHelpers.GlobalScale;
 
-        using (plugin.Fonts.PushClosest(font, wantedPx))
+        // The size is the height of the letters (not of the font's line box).
+        using (var face = plugin.Fonts.PushCap(font, wantedPx))
         {
-            var textSize = ImGui.CalcTextSize(text);
+            var textSize = face.Measure(text);
             var fraction = anchor.Fraction();
 
-            var pos = boxPos + boxSize * fraction - textSize * fraction + offset * scale;
+            // Horizontally the same point of text and box meet; vertically the CENTRE of the letters goes on the anchor line.
+            var pos = boxPos + boxSize * fraction - new Vector2(textSize.X * fraction.X, textSize.Y * 0.5f) + offset * scale;
             pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
 
-            OutlinedText.Draw(drawList, pos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
+            face.Draw(drawList, pos, text, ImGui.GetColorU32(color ?? new Vector4(1f, 1f, 1f, 1f)));
         }
     }
 }

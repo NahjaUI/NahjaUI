@@ -16,10 +16,10 @@ using NahjaUI.Modules.UnitFrames;
 namespace NahjaUI.Modules.PartyFrames;
 
 /// <summary>
-/// Draws the party frames: one life bar per member, one under the other, with the name and the life text, a shield, a
-/// stripe for the role, a mana bar for the members you choose, and a ring and an arrow on the member you have targeted.
+/// Draws the party frames: one HP bar per member, one under the other, with the name and the HP text, a shield, a
+/// stripe for the role, a MP bar for the members you choose, and a ring and an arrow on the member you have targeted.
 /// It also hides the game's own party list. It only reads the game snapshot.
-/// Buffs and debuffs next to the bars come in a later step.
+/// Enhancements and enfeeblements next to the bars come in a later step.
 /// </summary>
 internal sealed class PartyFrameModule : IDisposable
 {
@@ -33,12 +33,9 @@ internal sealed class PartyFrameModule : IDisposable
     private static readonly uint[] HealerJobs = { 6, 24, 26, 28, 33, 40 };
     private static readonly uint[] RaiserJobs = { 27, 35 };
 
-    private static readonly Vector4 TankColor = new(0.31f, 0.55f, 0.88f, 1f);
-    private static readonly Vector4 HealerColor = new(0.31f, 0.75f, 0.45f, 1f);
-    private static readonly Vector4 DamageColor = new(0.85f, 0.33f, 0.31f, 1f);
     private static readonly Vector4 ChocoboColor = new(0.88f, 0.75f, 0.30f, 1f);
 
-    // What is shown in the preview when there is no real party: a full party of eight, with a shield, mana and a dead member.
+    // What is shown in the preview when there is no real party: a full party of eight, with a shield, MP and a dead member.
     private static readonly UnitSnapshot[] SampleParty =
     {
         Sample("Nahja Stark", 24, 100000, 10000, 10000, 0),
@@ -55,6 +52,7 @@ internal sealed class PartyFrameModule : IDisposable
     private const int PreviewSelectedIndex = 2;
 
     private readonly Plugin plugin;
+    private readonly NativeWindowHider hider = new();
 
     public PartyFrameModule(Plugin plugin)
     {
@@ -151,17 +149,15 @@ internal sealed class PartyFrameModule : IDisposable
         if (!look.Enabled || !look.HideNative)
             return;
 
-        args.PreventOriginal();
-
-        var addon = args.GetAddonPointer<AtkUnitBase>();
-        if (addon != null)
-            addon->IsVisible = false;
+        hider.Hide(args);
     }
 
     // ---------------------------------------------------------------- drawing
 
     public void Draw()
     {
+        var hideLook = plugin.Configuration.UnitFrames.Party.Look;
+        hider.ShowAgain(_ => hideLook.Enabled && hideLook.HideNative);
         var snapshot = plugin.GameData.Current;
         var preview = PreviewRequested || plugin.Layout.UnlockMode;
         PreviewRequested = false;
@@ -206,19 +202,19 @@ internal sealed class PartyFrameModule : IDisposable
             {
                 DrawMember(drawList, settings, member, rowPos, size, selected);
 
-                // The rows of buffs and debuffs next to the bar.
+                // The rows of enhancements and enfeeblements next to the bar.
                 var playerId = snapshot.Player?.EntityId ?? 0u;
 
-                IReadOnlyList<StatusSnapshot> buffs = isSample
-                    ? new ArraySegment<StatusSnapshot>(StatusRowRenderer.PreviewBuffs, 0, Math.Min(StatusRowRenderer.PreviewBuffs.Length, 2 + index % 4))
+                IReadOnlyList<StatusSnapshot> enhancements = isSample
+                    ? new ArraySegment<StatusSnapshot>(StatusRowRenderer.PreviewEnhancements, 0, Math.Min(StatusRowRenderer.PreviewEnhancements.Length, 2 + index % 4))
                     : member.Statuses;
 
-                IReadOnlyList<StatusSnapshot> debuffs = isSample
-                    ? new ArraySegment<StatusSnapshot>(StatusRowRenderer.PreviewDebuffs, 0, index % 3 + 1)
+                IReadOnlyList<StatusSnapshot> enfeeblements = isSample
+                    ? new ArraySegment<StatusSnapshot>(StatusRowRenderer.PreviewEnfeeblements, 0, index % 3 + 1)
                     : member.Statuses;
 
-                plugin.StatusRows.DrawRow(drawList, settings.Buffs, true, buffs, isSample, playerId, rowPos, size, "party");
-                plugin.StatusRows.DrawRow(drawList, settings.Debuffs, false, debuffs, isSample, playerId, rowPos, size, "party");
+                plugin.StatusRows.DrawRow(drawList, settings.Enhancements, true, enhancements, isSample, playerId, rowPos, size, "party");
+                plugin.StatusRows.DrawRow(drawList, settings.Enfeeblements, false, enfeeblements, isSample, playerId, rowPos, size, "party");
             });
 
             // Clicks only for real members, and not while the boxes are being moved.
@@ -244,9 +240,9 @@ internal sealed class PartyFrameModule : IDisposable
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         var fraction = member.MaxHp == 0 ? 0f : Math.Clamp(member.Hp / (float)member.MaxHp, 0f, 1f);
-        var fillColor = plugin.UnitFrameSystem.LifeColor(look, member, true);
+        var fillColor = plugin.UnitFrameSystem.HpColor(look, member, true);
 
-        // Background, then the life. The right end of the fill is straight, except when the life is full.
+        // Background, then the HP. The right end of the fill is straight, except when the HP is full.
         drawList.AddRectFilled(pos, max, ImGui.GetColorU32(look.BackgroundColor), rounding);
 
         var fillRight = MathF.Round(pos.X + size.X * fraction);
@@ -264,8 +260,8 @@ internal sealed class PartyFrameModule : IDisposable
         if (hasJobIcon)
         {
             var inset = MathF.Max(1f, MathF.Round(2f * scale));
-            var iconSide = MathF.Min(MathF.Round(settings.JobIconSizePx * scale), size.Y - inset * 2f);
-            iconSide = MathF.Max(iconSide, 4f);
+            // The icon is the size chosen, even if it is taller than the bar.
+            var iconSide = MathF.Max(MathF.Round(settings.JobIconSizePx * scale), 4f);
             var iconMin = new Vector2(pos.X + inset + 1f, MathF.Round(pos.Y + (size.Y - iconSide) / 2f));
             var iconId = JobIconId(member.JobId, settings.JobIconStyle);
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
@@ -285,20 +281,20 @@ internal sealed class PartyFrameModule : IDisposable
             FillRounded(drawList, pos, max, stripeRight, ImGui.GetColorU32(RoleColor(member)), rounding, ImDrawFlags.RoundCornersAll);
         }
 
-        if (!member.IsCompanion && ShowsMana(settings.ManaMode, member) && member.MaxMp > 0)
+        if (!member.IsCompanion && ShowsMp(settings.MpMode, member) && member.MaxMp > 0)
         {
-            var height = MathF.Max(2f, MathF.Round(look.ManaHeightPx * scale));
+            var height = MathF.Max(2f, MathF.Round(look.MpHeightPx * scale));
             var top = max.Y - height;
-            var manaFraction = Math.Clamp(member.Mp / (float)member.MaxMp, 0f, 1f);
+            var mpFraction = Math.Clamp(member.Mp / (float)member.MaxMp, 0f, 1f);
 
             // The strip sits inside the bar, along its bottom edge.
             drawList.AddRectFilled(new Vector2(pos.X, top), max, ImGui.GetColorU32(new Vector4(0.02f, 0.02f, 0.05f, 0.9f)), rounding, ImDrawFlags.RoundCornersBottom);
 
-            var manaRight = MathF.Round(pos.X + size.X * manaFraction);
-            if (manaRight > pos.X)
-                FillRounded(drawList, new Vector2(pos.X, top), max, manaRight, ImGui.GetColorU32(look.ManaColor), rounding, ImDrawFlags.RoundCornersBottom);
+            var mpRight = MathF.Round(pos.X + size.X * mpFraction);
+            if (mpRight > pos.X)
+                FillRounded(drawList, new Vector2(pos.X, top), max, mpRight, ImGui.GetColorU32(look.MpColor), rounding, ImDrawFlags.RoundCornersBottom);
 
-            // A thin dark line between the life and the mana.
+            // A thin dark line between the HP and the MP.
             drawList.AddLine(new Vector2(pos.X, top), new Vector2(max.X, top), ImGui.GetColorU32(look.BorderColor), thickness);
         }
 
@@ -318,30 +314,18 @@ internal sealed class PartyFrameModule : IDisposable
         if (!selected)
             return;
 
-        var color = ImGui.GetColorU32(settings.SelectionColor);
-
-        if (settings.SelectionRing)
-        {
-            var grow = new Vector2(thickness * 2f, thickness * 2f);
-            drawList.AddRect(pos - grow, max + grow, color, rounding + thickness * 2f, ImDrawFlags.None, thickness * 2f);
-        }
-
-        if (settings.SelectionArrow)
-        {
-            // A small triangle pointing at the bar, just outside its left edge.
-            var middle = pos.Y + size.Y / 2f;
-            var tip = pos.X - MathF.Round(6f * scale);
-            var back = tip - MathF.Round(8f * scale);
-            var half = MathF.Round(6f * scale);
-
-            drawList.AddTriangleFilled(new Vector2(back, middle - half), new Vector2(tip, middle), new Vector2(back, middle + half), color);
-        }
+        // The ring is always on and its color is the one of the whole interface (Appearance > Target ring color).
+        // A line is centered on its rectangle: pushing the rectangle out by half the line makes the ring start exactly where the
+        // bar ends (no gap of screen between them).
+        var ringWidth = thickness * 2f;
+        var grow = new Vector2(ringWidth / 2f, ringWidth / 2f);
+        drawList.AddRect(pos - grow, max + grow, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
     }
 
     // ---------------------------------------------------------------- helpers
 
     // Fills a rounded box only up to <clipRight>. The box keeps its full rounded shape and is cut by a clip rectangle, so a
-    // narrow fill (the stripe, a low life) still follows the corners of the bar instead of sticking out of them.
+    // narrow fill (the stripe, a low HP) still follows the corners of the bar instead of sticking out of them.
     private static void FillRounded(ImDrawListPtr drawList, Vector2 min, Vector2 max, float clipRight, uint color, float rounding, ImDrawFlags flags)
     {
         drawList.PushClipRect(min, new Vector2(MathF.Min(clipRight, max.X), max.Y), true);
@@ -349,23 +333,22 @@ internal sealed class PartyFrameModule : IDisposable
         drawList.PopClipRect();
     }
 
-    private static bool ShowsMana(PartyManaMode mode, UnitSnapshot member) => mode switch
+    private static bool ShowsMp(PartyMpMode mode, UnitSnapshot member) => mode switch
     {
-        PartyManaMode.Off => false,
-        PartyManaMode.Healers => Array.IndexOf(HealerJobs, member.JobId) >= 0,
-        PartyManaMode.HealersAndRaisers => Array.IndexOf(HealerJobs, member.JobId) >= 0 || Array.IndexOf(RaiserJobs, member.JobId) >= 0,
+        PartyMpMode.Off => false,
+        PartyMpMode.Healers => Array.IndexOf(HealerJobs, member.JobId) >= 0,
+        PartyMpMode.HealersAndRaisers => Array.IndexOf(HealerJobs, member.JobId) >= 0 || Array.IndexOf(RaiserJobs, member.JobId) >= 0,
         _ => true
     };
 
-    private static Vector4 RoleColor(UnitSnapshot member)
+    private Vector4 RoleColor(UnitSnapshot member)
     {
         // The chocobo has no role: a neutral gold stripe.
         if (member.IsCompanion)
             return ChocoboColor;
 
-        if (Array.IndexOf(TankJobs, member.JobId) >= 0)
-            return TankColor;
-
-        return Array.IndexOf(HealerJobs, member.JobId) >= 0 ? HealerColor : DamageColor;
+        // The three colours are the ones of Appearance > Role colors.
+        var frames = plugin.Configuration.UnitFrames;
+        return JobRoles.Color(frames, member.JobId, frames.DamageColor);
     }
 }

@@ -11,7 +11,7 @@ namespace NahjaUI.Game;
 internal sealed record ActionInfo(uint Id, string Name, int Level, float RecastSeconds, int MaxCharges);
 
 /// <summary>A status found by a name search.</summary>
-/// <param name="Category">1 = beneficial (buff), 2 = detrimental (debuff), 0 = other.</param>
+/// <param name="Category">1 = beneficial (enhancement), 2 = detrimental (enfeeblement), 0 = other.</param>
 internal sealed record StatusSearchResult(uint Id, string Name, byte Category);
 
 /// <summary>
@@ -86,7 +86,7 @@ internal static class GameNames
         return icon;
     }
 
-    /// <summary>1 = beneficial (buff), 2 = detrimental (debuff), 0 = other or unknown.</summary>
+    /// <summary>1 = beneficial (enhancement), 2 = detrimental (enfeeblement), 0 = other or unknown.</summary>
     public static byte StatusCategory(uint statusId)
     {
         if (StatusCategories.TryGetValue(statusId, out var cached))
@@ -156,6 +156,22 @@ internal static class GameNames
         return name;
     }
 
+    private static readonly Dictionary<uint, int> ActionLevels = new();
+
+    /// <summary>The level at which an action is learned (0 when unknown or not tied to a level).</summary>
+    public static int ActionLevel(uint actionId)
+    {
+        if (ActionLevels.TryGetValue(actionId, out var cached))
+            return cached;
+
+        var level = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row)
+            ? row.ClassJobLevel
+            : 0;
+
+        ActionLevels[actionId] = level;
+        return level;
+    }
+
     /// <summary>The action that must be used right before this one for the combo to continue, or 0 if it is not a combo step.</summary>
     public static uint ComboParent(uint actionId)
     {
@@ -168,6 +184,25 @@ internal static class GameNames
 
         ComboParents[actionId] = parent;
         return parent;
+    }
+
+    /// <summary>
+    /// The first action of a chain of combo steps (Blade of Valor -> Blade of Truth -> Blade of Faith -> Confiteor gives Confiteor),
+    /// or 0 when the action is not a combo step.
+    /// </summary>
+    public static uint ComboRoot(uint actionId)
+    {
+        var current = actionId;
+        for (var i = 0; i < 8; i++)
+        {
+            var parent = ComboParent(current);
+            if (parent == 0)
+                return current == actionId ? 0 : current;
+
+            current = parent;
+        }
+
+        return 0;
     }
 
     /// <summary>The icon id of an action, or 0 if it has none.</summary>
@@ -188,6 +223,9 @@ internal static class GameNames
     /// The abilities of a job that have a real cooldown (longer than a global cooldown) and are unlocked
     /// at the given level, in the order they are learned. Role actions are not included: use the search for them.
     /// </summary>
+    // Actions every job has (general actions that are not marked as player actions in the game's data): Sprint.
+    private static readonly HashSet<uint> UniversalActionIds = new() { 3 };
+
     public static IReadOnlyList<ActionInfo> AbilitiesOfJob(uint jobId, int level)
     {
         // Jobs inherit the actions of their starting class (White Mage uses Conjurer actions).
@@ -199,11 +237,13 @@ internal static class GameNames
 
         foreach (var row in Plugin.DataManager.GetExcelSheet<ActionSheet>())
         {
-            if (!row.IsPlayerAction || row.IsPvP)
+            var universal = UniversalActionIds.Contains(row.RowId);
+
+            if ((!row.IsPlayerAction && !universal) || row.IsPvP)
                 continue;
 
             var owner = row.ClassJob.RowId;
-            if (owner != jobId && (parentId == 0 || owner != parentId))
+            if (!universal && owner != jobId && (parentId == 0 || owner != parentId))
                 continue;
 
             if (row.ClassJobLevel > level)
@@ -227,28 +267,35 @@ internal static class GameNames
         return best.Values.OrderBy(a => a.Level).ThenBy(a => a.Name).ToList();
     }
 
-    /// <summary>Finds player actions whose name contains the text (not case sensitive).</summary>
+    /// <summary>
+    /// Finds actions whose name contains the text (not case sensitive). Actions of a job come first. Actions that cannot be put
+    /// on a hotbar (the follow-ups Blade of Faith, Truth and Valor) are included: they can still be tracked as combo steps.
+    /// </summary>
     public static IReadOnlyList<ActionInfo> SearchActions(string query, int maxResults)
     {
-        var results = new List<ActionInfo>();
+        var results = new List<(bool OfAJob, ActionInfo Info)>();
         if (string.IsNullOrWhiteSpace(query))
-            return results;
+            return new List<ActionInfo>();
 
         foreach (var row in Plugin.DataManager.GetExcelSheet<ActionSheet>())
         {
-            if (!row.IsPlayerAction || row.IsPvP)
+            if (row.IsPvP)
                 continue;
 
             var name = row.Name.ToString();
             if (string.IsNullOrEmpty(name) || !name.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            results.Add(new ActionInfo(row.RowId, name, row.ClassJobLevel, row.Recast100ms / 10f, Math.Max(1, (int)row.MaxCharges)));
-            if (results.Count >= maxResults)
-                break;
+            var ofAJob = row.IsPlayerAction || UniversalActionIds.Contains(row.RowId) || (row.ClassJob.RowId != 0 && row.ClassJobLevel > 0);
+            results.Add((ofAJob, new ActionInfo(row.RowId, name, row.ClassJobLevel, row.Recast100ms / 10f, Math.Max(1, (int)row.MaxCharges))));
         }
 
-        return results;
+        return results
+            .OrderByDescending(entry => entry.OfAJob)
+            .ThenBy(entry => entry.Info.Name.Length)
+            .Take(maxResults)
+            .Select(entry => entry.Info)
+            .ToList();
     }
 
     // ---------------------------------------------------------------- what is being cast

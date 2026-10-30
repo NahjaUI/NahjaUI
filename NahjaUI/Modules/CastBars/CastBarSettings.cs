@@ -20,7 +20,7 @@ public class CastBarSettings
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Hide the game's own cast bar, which this one replaces.</summary>
+    /// <summary>Hide the game's own cast bar, which this one replaces. Turn it off to compare both.</summary>
     public bool HideNative { get; set; } = true;
 
     /// <summary>The icon of the spell, inside the bar at its left.</summary>
@@ -33,7 +33,7 @@ public class CastBarSettings
     public CastTimeMode TimeMode { get; set; } = CastTimeMode.Remaining;
 
     /// <summary>Font size of the name and the time, in pixels (a fixed step, see OverlayFonts.AvailableSizes).</summary>
-    public int TextSize { get; set; } = 14;
+    public int TextSize { get; set; } = 10;
 
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplay;
 

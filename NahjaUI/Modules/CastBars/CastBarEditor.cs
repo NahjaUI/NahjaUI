@@ -22,10 +22,6 @@ internal sealed class CastBarEditor
         // While this page is open, the bars show a sample cast so they can be adjusted without casting anything.
         plugin.CastBarSystem.PreviewRequested = true;
 
-        ImGui.TextColored(Theme.TextMuted, "While this page is open the bars show a sample cast.");
-        ImGui.TextColored(Theme.TextMuted, "Move them in unlock mode (Layout page).");
-        ImGui.Spacing();
-
         var settings = plugin.Configuration.CastBars;
 
         DrawBar("Player cast bar", "##card_castbar_player", settings.Player, plugin.CastBarSystem.PlayerElement, false);
@@ -34,7 +30,7 @@ internal sealed class CastBarEditor
 
     private void DrawBar(string title, string cardId, CastBarSettings settings, LayoutElement element, bool isTarget)
     {
-        Widgets.Card(cardId, isTarget ? 27 : 28, () =>
+        Widgets.Card(cardId, isTarget ? 26 : 28, () =>
         {
             Widgets.SectionLabel(title);
 
@@ -79,11 +75,15 @@ internal sealed class CastBarEditor
 
             ImGui.Spacing();
 
-            var showIcon = settings.ShowIcon;
-            if (ImGui.Checkbox(isTarget ? "Show the spell icon inside the bar (allies only)" : "Show the spell icon inside the bar", ref showIcon))
+            // The game's target cast bar has no icon, so there is no option for it.
+            if (!isTarget)
             {
-                settings.ShowIcon = showIcon;
-                plugin.RequestSave();
+                var showIcon = settings.ShowIcon;
+                if (ImGui.Checkbox("Show the spell icon inside the bar", ref showIcon))
+                {
+                    settings.ShowIcon = showIcon;
+                    plugin.RequestSave();
+                }
             }
 
             var showName = settings.ShowName;

@@ -8,8 +8,8 @@ using NahjaUI.Core.Ui;
 namespace NahjaUI.Windows;
 
 /// <summary>
-/// What the main window turns into when it is minimized: a small bar with the NahjaUI mark and name, a button to open
-/// the window again and a button to close it. The bar can be dragged by its left part. Opening the window puts it
+/// What the main window turns into when it is minimized: a small bar with the NahjaUI mark and name, the arrow to open
+/// the window again and the cross to close it. The bar can be dragged by its left part. Opening the window puts it
 /// where the bar is (top right corner on top right corner).
 /// </summary>
 public sealed class MiniBarWindow : Window, IDisposable
@@ -105,10 +105,10 @@ public sealed class MiniBarWindow : Window, IDisposable
 
         var padding = MathF.Round(10f * scale);
         var gap = MathF.Round(4f * scale);
-        var button = MathF.Round(22f * scale);
         var centerY = pos.Y + size.Y / 2f;
 
-        // The two buttons at the right: open the window, close the bar.
+        // The two buttons at the right: the arrow (open the window) and the cross (close the bar).
+        var button = TitleButtons.Size;
         var closePos = new Vector2(MathF.Round(pos.X + size.X - padding - button), MathF.Round(centerY - button / 2f));
         var openPos = new Vector2(closePos.X - gap - button, closePos.Y);
 
@@ -140,68 +140,10 @@ public sealed class MiniBarWindow : Window, IDisposable
                 ImGui.SetWindowPos(pos + delta);
         }
 
-        if (IconButton("##nui_minibar_open", openPos, button, DrawOpenGlyph, "Open NahjaUI"))
+        if (TitleButtons.Draw("##nui_minibar_open", openPos, TitleButtons.Glyph.Arrow, "Open NahjaUI"))
             plugin.ExpandMainWindow();
 
-        if (IconButton("##nui_minibar_close", closePos, button, DrawCloseGlyph, "Close"))
+        if (TitleButtons.Draw("##nui_minibar_close", closePos, TitleButtons.Glyph.Close, "Close"))
             plugin.CloseMiniBar();
-    }
-
-    // A square button with a hand-drawn symbol, so it does not depend on any font.
-    private static bool IconButton(string id, Vector2 pos, float size, Action<ImDrawListPtr, Vector2, float, uint> glyph, string tooltip)
-    {
-        var scale = ImGuiHelpers.GlobalScale;
-
-        ImGui.SetCursorScreenPos(pos);
-        var clicked = ImGui.InvisibleButton(id, new Vector2(size, size));
-        var hovered = ImGui.IsItemHovered();
-
-        var drawList = ImGui.GetWindowDrawList();
-
-        if (hovered)
-        {
-            drawList.AddRectFilled(
-                pos,
-                pos + new Vector2(size, size),
-                ImGui.GetColorU32(Theme.WithAlpha(Theme.Accent, 0.30f)),
-                6f * scale);
-        }
-
-        glyph(drawList, pos, size, ImGui.GetColorU32(hovered ? Theme.Text : Theme.TextMuted));
-
-        if (hovered)
-            ImGui.SetTooltip(tooltip);
-
-        return clicked;
-    }
-
-    // A small square: "open the window".
-    private static void DrawOpenGlyph(ImDrawListPtr drawList, Vector2 pos, float size, uint color)
-    {
-        var inset = MathF.Round(size * 0.28f);
-        var thickness = MathF.Max(1f, MathF.Round(ImGuiHelpers.GlobalScale * 1.5f));
-
-        drawList.AddRect(
-            pos + new Vector2(inset, inset),
-            pos + new Vector2(size - inset, size - inset),
-            color,
-            2f * ImGuiHelpers.GlobalScale,
-            ImDrawFlags.None,
-            thickness);
-    }
-
-    // A cross: "close".
-    private static void DrawCloseGlyph(ImDrawListPtr drawList, Vector2 pos, float size, uint color)
-    {
-        var inset = MathF.Round(size * 0.30f);
-        var thickness = MathF.Max(1f, MathF.Round(ImGuiHelpers.GlobalScale * 1.5f));
-
-        var a = pos + new Vector2(inset, inset);
-        var b = pos + new Vector2(size - inset, size - inset);
-        var c = pos + new Vector2(size - inset, inset);
-        var d = pos + new Vector2(inset, size - inset);
-
-        drawList.AddLine(a, b, color, thickness);
-        drawList.AddLine(c, d, color, thickness);
     }
 }

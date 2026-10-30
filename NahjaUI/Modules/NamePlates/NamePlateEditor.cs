@@ -7,7 +7,7 @@ using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Modules.NamePlates;
 
-/// <summary>The "Nameplates" page of the main window. For now: enemies only.</summary>
+/// <summary>The "Nameplates" page of the main window: enemies and players.</summary>
 internal sealed class NamePlateEditor
 {
     private readonly Plugin plugin;
@@ -21,11 +21,7 @@ internal sealed class NamePlateEditor
     {
         var settings = plugin.Configuration.NamePlates;
 
-        ImGui.TextColored(Theme.TextMuted, "Plates over the enemies, drawn by NahjaUI. They follow the enemies, so they have no");
-        ImGui.TextColored(Theme.TextMuted, "place to move in unlock mode: use the offsets below.");
-        ImGui.Spacing();
-
-        Widgets.Card("##card_np_general", 7, () =>
+        Widgets.Card("##card_np_general", 6, () =>
         {
             Widgets.SectionLabel("Nameplates");
 
@@ -35,22 +31,17 @@ internal sealed class NamePlateEditor
                 Plugin.NamePlateGui.RequestRedraw();
             }
 
-            if (Check("Hide the game's plate of the enemies", settings.HideNative, out var hide))
-            {
-                settings.HideNative = hide;
-                Plugin.NamePlateGui.RequestRedraw();
-            }
+            if (Check("Show the game's flags and colors next to the name (test)", settings.ShowGameFlags, out var flagsShown))
+                settings.ShowGameFlags = flagsShown;
 
-            if (Check("Click on a plate to target (right click: menu)", settings.Clickable, out var clickable))
-                settings.Clickable = clickable;
+            if (Check("Always show the HP bar of my target", settings.ShowBarOnTarget, out var barOnTarget))
+                settings.ShowBarOnTarget = barOnTarget;
 
-            if (Check("Smaller plates when the enemy is far", settings.ScaleWithDistance, out var scaleFar))
-                settings.ScaleWithDistance = scaleFar;
         });
 
-        Widgets.Card("##card_np_life", 6, () =>
+        Widgets.Card("##card_np_hp", 6, () =>
         {
-            Widgets.SectionLabel("Life bar");
+            Widgets.SectionLabel("HP bar");
 
             settings.WidthPx = Number("Width (px)", settings.WidthPx, 40, 600, 2, 10);
             settings.HeightPx = Number("Height (px)", settings.HeightPx, 4, 100, 2, 10);
@@ -62,29 +53,9 @@ internal sealed class NamePlateEditor
             }
         });
 
-        Widgets.Card("##card_np_name", 10, () =>
+        Widgets.Card("##card_np_name", 17, () =>
         {
             Widgets.SectionLabel("Name");
-
-            if (Check("Show the name", settings.ShowName, out var showName))
-                settings.ShowName = showName;
-
-            var levelMode = settings.LevelMode;
-            if (EnumCombo("Level", ref levelMode, LevelModeLabel))
-            {
-                settings.LevelMode = levelMode;
-                plugin.RequestSave();
-            }
-
-            var levelColor = settings.LevelColor;
-            if (ImGui.ColorEdit4("Level color", ref levelColor, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.LevelColor = new Vector4(levelColor.X, levelColor.Y, levelColor.Z, 1f);
-                plugin.RequestSave();
-            }
-
-            if (Check("Hide the level when it is the same as mine", settings.HideSameLevel, out var hideSame))
-                settings.HideSameLevel = hideSame;
 
             var anchor = settings.NameAnchor;
             if (EnumCombo("Name position", ref anchor, point => point.Label()))
@@ -94,9 +65,8 @@ internal sealed class NamePlateEditor
             }
 
             settings.NameOffsetX = Number("Offset X (px)", settings.NameOffsetX, -300, 300, 1, 5);
-            settings.NameOffsetY = Number("Offset Y (px)", settings.NameOffsetY, -300, 300, 1, 5);
-
-            ImGui.TextColored(Theme.TextMuted, "The point of the bar the text is attached to (the text's own same point goes there).");
+            // Up is plus: the saved value counts downwards, so the sign is turned here.
+            settings.NameOffsetY = -Number("Offset Y (px)", -settings.NameOffsetY, -300, 300, 1, 5);
 
             if (ImGui.BeginCombo("Text size (px)", $"{settings.NameSize} px", ImGuiComboFlags.None))
             {
@@ -125,27 +95,64 @@ internal sealed class NamePlateEditor
                 settings.NameColor = new Vector4(nameColor.X, nameColor.Y, nameColor.Z, 1f);
                 plugin.RequestSave();
             }
+
+            if (Check("Show the game's icon next to the name", settings.ShowNameIcon, out var showIcon))
+                settings.ShowNameIcon = showIcon;
+
+            settings.NameIconSizePx = Number("Icon size (px)", settings.NameIconSizePx, 8, 64, 1, 4);
+            settings.NameIconGapPx = Number("Space icon - name (px)", settings.NameIconGapPx, 0, 30, 1, 2);
+
+            if (Check("Show the game's marker above the plate", settings.ShowMarkerIcon, out var showMarker))
+                settings.ShowMarkerIcon = showMarker;
+
+            settings.MarkerIconSizePx = Number("Marker size (px)", settings.MarkerIconSizePx, 12, 128, 1, 4);
+            settings.MarkerOffsetX = Number("Marker offset X (px)", settings.MarkerOffsetX, -300, 300, 1, 5);
+            settings.MarkerOffsetY = -Number("Marker offset Y (px)", -settings.MarkerOffsetY, -300, 300, 1, 5);
+
+            // Which plates show a name and how it is written (full name, surname, initials...) are the game's own options.
+            ImGui.TextColored(Theme.TextMuted, "When the name shows, how it is written and whether the title shows (it joins the name): set in the game.");
         });
 
-        Widgets.Card("##card_np_cast", 9, () =>
+        Widgets.Card("##card_np_level", 6, () =>
+        {
+            Widgets.SectionLabel("Level");
+
+            var levelMode = settings.LevelMode;
+            if (EnumCombo("Level", ref levelMode, LevelModeLabel))
+            {
+                settings.LevelMode = levelMode;
+                plugin.RequestSave();
+            }
+
+            var levelColor = settings.LevelColor;
+            if (ImGui.ColorEdit4("Level color", ref levelColor, ImGuiColorEditFlags.NoAlpha))
+            {
+                settings.LevelColor = new Vector4(levelColor.X, levelColor.Y, levelColor.Z, 1f);
+                plugin.RequestSave();
+            }
+
+            if (Check("Hide the level when it is the same as mine", settings.HideSameLevel, out var hideSame))
+                settings.HideSameLevel = hideSame;
+
+            ImGui.TextColored(Theme.TextMuted, "The level is written right after the name (enemies only).");
+        });
+
+        Widgets.Card("##card_np_cast", 8, () =>
         {
             Widgets.SectionLabel("Cast frame");
 
             if (Check("Show the cast frame", settings.ShowCast, out var showCast))
                 settings.ShowCast = showCast;
 
-            if (Check("Hide the game's cast bar of the enemies", settings.HideNativeCast, out var hideCast))
-                settings.HideNativeCast = hideCast;
-
             var castHeight = settings.CastHeightPx;
-            if (ImGui.SliderInt("Height under the life bar (px)", ref castHeight, 6, 30))
+            if (ImGui.SliderInt("Height under the HP bar (px)", ref castHeight, 6, 30))
             {
                 settings.CastHeightPx = castHeight;
                 plugin.RequestSave();
             }
 
             var castGap = settings.CastGapPx;
-            if (ImGui.SliderInt("Space under the life bar (px)", ref castGap, 0, 12))
+            if (ImGui.SliderInt("Space under the HP bar (px)", ref castGap, 0, 12))
             {
                 settings.CastGapPx = castGap;
                 plugin.RequestSave();

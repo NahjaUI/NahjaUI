@@ -29,7 +29,7 @@ public enum NameFormat
     Initials
 }
 
-/// <summary>What the life text says. Custom uses the template written by the user.</summary>
+/// <summary>What the HP text says. Custom uses the template written by the user.</summary>
 public enum HealthTextPreset
 {
     /// <summary>738K | 100%</summary>
@@ -50,33 +50,20 @@ public enum HealthTextPreset
     /// <summary>738K / 738K</summary>
     CurrentAndMax,
 
-    /// <summary>-12K (what is missing; nothing when the life is full)</summary>
+    /// <summary>-12K (what is missing; nothing when the HP is full)</summary>
     Deficit,
 
     Custom
 }
 
-/// <summary>Where the mana bar of a job is drawn.</summary>
-public enum ManaPlacement
-{
-    /// <summary>No mana bar on this job.</summary>
-    Off,
-
-    /// <summary>Under the life bar, as wide as it.</summary>
-    UnderLifeBar,
-
-    /// <summary>In its own box, which is moved in unlock mode (for example next to the job gauge).</summary>
-    OwnBox
-}
-
-/// <summary>How the life bar is coloured.</summary>
-public enum LifeColorMode
+/// <summary>How the HP bar is coloured.</summary>
+public enum HpColorMode
 {
     /// <summary>The same colour for everyone.</summary>
     Fixed,
 
-    /// <summary>The colour of the job of the unit (players only).</summary>
-    Class
+    /// <summary>The colour of the role of the unit's job: tank, healer or damage (players only).</summary>
+    Role
 }
 
 /// <summary>The character that separates the groups of three digits in long numbers.</summary>
@@ -111,11 +98,35 @@ public class FrameTextSettings
     public int OffsetY { get; set; }
 
     /// <summary>Font size in pixels (a fixed step, see OverlayFonts.AvailableSizes).</summary>
-    public int TextSize { get; set; } = 16;
+    public int TextSize { get; set; } = 11;
 
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplay;
 
     public Vector4 Color { get; set; } = new(1f, 1f, 1f, 1f);
+}
+
+/// <summary>What the number texts of a bar (HP, MP) need to know to turn a value into text.</summary>
+internal interface IValueTextFormat
+{
+    HealthTextPreset HealthPreset { get; }
+    string CustomTemplate { get; }
+    string Separator { get; }
+    int PercentDecimals { get; }
+    int AbbreviationDecimals { get; }
+    ThousandsSeparator Thousands { get; }
+}
+
+/// <summary>The MP text of the player: the same choices as the HP text.</summary>
+[Serializable]
+public class MpTextSettings : IValueTextFormat
+{
+    public FrameTextSettings Text { get; set; } = new() { Enabled = false, Anchor = AnchorPoint.Center };
+    public HealthTextPreset HealthPreset { get; set; } = HealthTextPreset.Current;
+    public string CustomTemplate { get; set; } = "{curk} | {pct}";
+    public string Separator { get; set; } = " | ";
+    public int PercentDecimals { get; set; } = 0;
+    public int AbbreviationDecimals { get; set; } = 0;
+    public ThousandsSeparator Thousands { get; set; } = ThousandsSeparator.Comma;
 }
 
 /// <summary>The settings of every unit frame.</summary>
@@ -133,27 +144,31 @@ public class UnitFramesSettings
     /// <summary>The party frames: one bar per member. Its look is a normal frame look, the rest is only about the party.</summary>
     public PartyFrameSettings Party { get; set; } = new();
 
-    /// <summary>The job colours the user changed (class job id to colour), shared by every frame. The others use the built-in ones, see JobColors.</summary>
-    public Dictionary<uint, Vector4> JobColorOverrides { get; set; } = new();
+    /// <summary>The colour of each role, shared by every frame (the HP bars set to the colour of the role, and the stripe of the party).</summary>
+    public Vector4 TankColor { get; set; } = new(0.31f, 0.55f, 0.88f, 1f);
+
+    public Vector4 HealerColor { get; set; } = new(0.31f, 0.75f, 0.45f, 1f);
+
+    public Vector4 DamageColor { get; set; } = new(0.85f, 0.33f, 0.31f, 1f);
 }
 
 /// <summary>
-/// The settings of one unit frame. Position and size of the life bar belong to the layout system.
-/// The defaults give the look of: name above the bar at the right, half over its edge; life text inside the bar at the left, below.
+/// The settings of one unit frame. Position and size of the HP bar belong to the layout system.
+/// The defaults give the look of: name above the bar at the right, half over its edge; HP text inside the bar at the left, below.
 /// </summary>
 [Serializable]
-public class UnitFrameSettings
+public class UnitFrameSettings : IValueTextFormat
 {
     public bool Enabled { get; set; } = true;
 
     /// <summary>Hide the game's own bar, which this one replaces. The target of target has none of its own: it is part of the target's bar.</summary>
     public bool HideNative { get; set; } = true;
 
-    /// <summary>The target: the player's look, mirrored (name at the top left, life text at the bottom right), and no mana.</summary>
+    /// <summary>The target: the player's look, mirrored (name at the top left, HP text at the bottom right), and no MP.</summary>
     public static UnitFrameSettings CreateTarget() => new()
     {
         HideNative = true,
-        ShowMana = false,
+        ShowMp = false,
         Name = new FrameTextSettings { Anchor = AnchorPoint.TopLeft, OffsetX = 4, OffsetY = -9 },
         Health = new FrameTextSettings { Anchor = AnchorPoint.BottomRight, OffsetX = -4, OffsetY = -2 }
     };
@@ -162,34 +177,37 @@ public class UnitFrameSettings
     public static UnitFrameSettings CreateSmall() => new()
     {
         HideNative = true,
-        ShowMana = false,
+        ShowMp = false,
         ShowShield = false,
         HealthPreset = HealthTextPreset.Percent,
         Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 4, OffsetY = 0, TextSize = 14 },
         Health = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -4, OffsetY = 0, TextSize = 14 }
     };
 
-    /// <summary>The buffs of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
-    public PartyAuraSettings Buffs { get; set; } = PartyAuraSettings.CreateFrameBuffs();
+    /// <summary>The enhancements of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
+    public PartyAuraSettings Enhancements { get; set; } = PartyAuraSettings.CreateFrameEnhancements();
 
-    /// <summary>The debuffs of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
-    public PartyAuraSettings Debuffs { get; set; } = PartyAuraSettings.CreateFrameDebuffs();
+    /// <summary>The enfeeblements of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
+    public PartyAuraSettings Enfeeblements { get; set; } = PartyAuraSettings.CreateFrameEnfeeblements();
 
-    /// <summary>Target frame: hide the game's own buffs and debuffs of the target while one of our two rows is on.</summary>
+    /// <summary>Target frame: hide the game's own enhancements and enfeeblements of the target while one of our two rows is on.</summary>
     public bool HideNativeStatuses { get; set; } = true;
 
     /// <summary>Left click on the frame targets the unit, right click opens a small menu. When off, clicks go through to the game.</summary>
     public bool Clickable { get; set; } = true;
+
+    /// <summary>Only used by the target of target: show its bar (background, HP, border) or just its name.</summary>
+    public bool ShowFrame { get; set; } = true;
 
     /// <summary>Corner rounding of the bar, in pixels.</summary>
     public int RoundingPx { get; set; } = 3;
 
     public Vector4 FriendlyColor { get; set; } = new(0.31f, 0.70f, 0.43f, 1f);
 
-    /// <summary>Fixed colour for the life, or the colour of the job.</summary>
-    public LifeColorMode LifeColorMode { get; set; } = LifeColorMode.Fixed;
+    /// <summary>Fixed colour for the HP, or the colour of the job.</summary>
+    public HpColorMode HpColorMode { get; set; } = HpColorMode.Fixed;
 
-    /// <summary>Life colour of a target that is a pet or a minion.</summary>
+    /// <summary>HP colour of a target that is a pet or a minion.</summary>
     public Vector4 PetColor { get; set; } = new(0.50f, 0.62f, 0.78f, 1f);
 
     /// <summary>Colour of a target that is an object: furniture, chest, aetheryte, event object...</summary>
@@ -206,7 +224,7 @@ public class UnitFrameSettings
 
     public Vector4 ShieldColor { get; set; } = new(0.96f, 0.91f, 0.66f, 1f);
 
-    /// <summary>How solid the shield is (0 to 1). Below 1 the life and the background show through it.</summary>
+    /// <summary>How solid the shield is (0 to 1). Below 1 the HP and the background show through it.</summary>
     public float ShieldOpacity { get; set; } = 0.65f;
 
     // ---- name
@@ -222,7 +240,7 @@ public class UnitFrameSettings
     /// <summary>Apply the name format only to players, and leave the names of enemies and NPCs as they are.</summary>
     public bool NameFormatOnlyPlayers { get; set; } = true;
 
-    // ---- life text
+    // ---- HP text
     public FrameTextSettings Health { get; set; } = new()
     {
         Anchor = AnchorPoint.BottomLeft,
@@ -235,7 +253,7 @@ public class UnitFrameSettings
     /// <summary>Used when the preset is Custom. Parts: {cur} {curk} {max} {maxk} {def} {defk} {pct}. The ones ending in k are abbreviated.</summary>
     public string CustomTemplate { get; set; } = "{curk} | {pct}";
 
-    /// <summary>Between the life and the percentage in the presets that show both.</summary>
+    /// <summary>Between the HP and the percentage in the presets that show both.</summary>
     public string Separator { get; set; } = " | ";
 
     /// <summary>Decimals of the percentage (0, 1 or 2).</summary>
@@ -246,38 +264,89 @@ public class UnitFrameSettings
 
     public ThousandsSeparator Thousands { get; set; } = ThousandsSeparator.Comma;
 
-    // ---- mana (the player's frame)
-    public bool ShowMana { get; set; } = true;
+    // ---- HP bar and MP bar of the player: two separate things, each one on or off for every job
 
-    /// <summary>The jobs (class job ids) with the mana bar UNDER the life bar. By default the healers and casters.</summary>
-    public List<uint> ManaJobs { get; set; } = new() { 24, 28, 33, 40, 25, 27, 35, 42, 36 };
+    /// <summary>The jobs (class job ids) with NO HP bar. Empty by default: every job, new ones included, has it.</summary>
+    public List<uint> HideHpJobs { get; set; } = new();
 
-    /// <summary>The jobs with the mana bar in its OWN box, which can be put anywhere (next to the job gauge, for example).</summary>
-    public List<uint> ManaOwnBoxJobs { get; set; } = new();
+    public bool IsHpOn(uint jobId) => !HideHpJobs.Contains(jobId);
 
-    public ManaPlacement GetManaPlacement(uint jobId)
+    public void SetHpOn(uint jobId, bool on)
     {
-        if (ManaOwnBoxJobs.Contains(jobId))
-            return ManaPlacement.OwnBox;
-
-        return ManaJobs.Contains(jobId) ? ManaPlacement.UnderLifeBar : ManaPlacement.Off;
+        HideHpJobs.RemoveAll(existing => existing == jobId);
+        if (!on)
+            HideHpJobs.Add(jobId);
     }
 
-    /// <summary>A job is only ever in one of the two lists.</summary>
-    public void SetManaPlacement(uint jobId, ManaPlacement placement)
-    {
-        ManaJobs.RemoveAll(existing => existing == jobId);
-        ManaOwnBoxJobs.RemoveAll(existing => existing == jobId);
+    /// <summary>Player only: the HP bar is drawn (the master switch of the Parameter bar page is Enabled).</summary>
+    public bool ShowHp { get; set; } = true;
 
-        if (placement == ManaPlacement.UnderLifeBar)
-            ManaJobs.Add(jobId);
-        else if (placement == ManaPlacement.OwnBox)
-            ManaOwnBoxJobs.Add(jobId);
+    public bool ParameterBarMigrated { get; set; }
+
+    /// <summary>
+    /// The page "Parameter bar" has one master switch (Enabled: ours is drawn and the game's is hidden) and then HP and MP
+    /// each on or off. Before, Enabled was only the HP bar: someone with the HP bar off and the MP bar on keeps that.
+    /// </summary>
+    public void MigrateParameterBar()
+    {
+        if (ParameterBarMigrated)
+            return;
+
+        if (!Enabled && ShowMp)
+        {
+            Enabled = true;
+            ShowHp = false;
+        }
+
+        ParameterBarMigrated = true;
     }
 
-    public int ManaHeightPx { get; set; } = 6;
+    /// <summary>The MP bar as a whole (its own bar, with its own position in the Layout).</summary>
+    public bool ShowMp { get; set; } = true;
 
-    public int ManaGapPx { get; set; } = 2;
+    /// <summary>The jobs with the MP bar on. By default the healers and the casters. (Crafters show CP and gatherers GP.)</summary>
+    public List<uint> MpOnJobs { get; set; } = new() { 24, 28, 33, 40, 25, 27, 35, 42, 36 };
 
-    public Vector4 ManaColor { get; set; } = new(0.36f, 0.55f, 0.94f, 1f);
+    public bool IsMpOn(uint jobId) => MpOnJobs.Contains(jobId);
+
+    public void SetMpOn(uint jobId, bool on)
+    {
+        MpOnJobs.RemoveAll(existing => existing == jobId);
+        if (on)
+            MpOnJobs.Add(jobId);
+    }
+
+    // The old lists (MP under the HP bar / in its own box). Only read once to move the choices to MpOnJobs.
+    public List<uint> MpJobs { get; set; } = new() { 24, 28, 33, 40, 25, 27, 35, 42, 36 };
+    public List<uint> MpOwnBoxJobs { get; set; } = new();
+    public bool MpMigrated { get; set; }
+
+    public void MigrateMpLists()
+    {
+        if (MpMigrated)
+            return;
+
+        MpOnJobs = new List<uint>(MpJobs);
+        foreach (var jobId in MpOwnBoxJobs)
+        {
+            if (!MpOnJobs.Contains(jobId))
+                MpOnJobs.Add(jobId);
+        }
+
+        MpMigrated = true;
+    }
+
+    // How the MP bar looks (its size is in the Layout, like its position).
+    public int MpRoundingPx { get; set; } = 3;
+
+    /// <summary>The number on the MP bar (off by default).</summary>
+    public MpTextSettings MpText { get; set; } = new();
+    public Vector4 MpBackgroundColor { get; set; } = new(0.04f, 0.05f, 0.09f, 0.92f);
+    public Vector4 MpBorderColor { get; set; } = new(0f, 0f, 0f, 1f);
+
+    public int MpHeightPx { get; set; } = 6;
+
+    public int MpGapPx { get; set; } = 2;
+
+    public Vector4 MpColor { get; set; } = new(0.36f, 0.55f, 0.94f, 1f);
 }

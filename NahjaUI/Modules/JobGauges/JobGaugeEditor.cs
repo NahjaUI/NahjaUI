@@ -19,20 +19,55 @@ internal sealed class JobGaugeEditor
 
     public void Draw()
     {
-        // While this page is open, the gauge shows sample values so it can be adjusted without playing the job.
-        plugin.JobGaugeSystem.PreviewRequested = true;
-
-        ImGui.TextColored(Theme.TextMuted, "While this page is open the gauge shows sample values.");
-        ImGui.TextColored(Theme.TextMuted, "Move it in unlock mode (Layout page).");
-        ImGui.Spacing();
 
         // Cards follow the order of the game's job list: tanks (PLD, WAR, DRK, GNB), healers (WHM, SCH, AST, SGE),
         // melee (MNK, DRG, NIN, SAM, RPR, VPR, BST), physical ranged (BRD, MCH, DNC), magical ranged (BLM, SMN, RDM, PCT, BLU).
         // New jobs are added in their place in this list.
-        DrawBarGauge("Paladin", "pld", plugin.Configuration.JobGauges.Paladin, plugin.JobGaugeSystem.PaladinElement, "Oath Gauge");
-        DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge");
-        DrawWhiteMage(plugin.Configuration.JobGauges.WhiteMage);
+        var current = plugin.GameData.Current.Player?.JobId ?? 0;
+        var currentEntry = Array.FindIndex(Entries, entry => entry.JobId == current);
+
+        // By default the gauge of the job being played. The combo lets the user edit another job's gauge meanwhile.
+        var shown = chosen >= 0 ? chosen : Math.Max(currentEntry, 0);
+
+        if (ImGui.BeginCombo("Job", Entries[shown].Name))
+        {
+            for (var i = 0; i < Entries.Length; i++)
+            {
+                var label = i == currentEntry ? $"{Entries[i].Name} (current)" : Entries[i].Name;
+                if (ImGui.Selectable(label, i == shown))
+                    chosen = i == currentEntry ? -1 : i;
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.Spacing();
+
+        // While this page is open, the gauge being edited (only that one) shows sample values, so it can be adjusted without playing the job.
+        plugin.JobGaugeSystem.PreviewJobId = Entries[shown].JobId;
+
+        switch (Entries[shown].JobId)
+        {
+            case 19:
+                DrawBarGauge("Paladin", "pld", plugin.Configuration.JobGauges.Paladin, plugin.JobGaugeSystem.PaladinElement, "Oath Gauge");
+                break;
+            case 21:
+                DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge");
+                break;
+            default:
+                DrawWhiteMage(plugin.Configuration.JobGauges.WhiteMage);
+                break;
+        }
     }
+
+    // The jobs that have a gauge, in the order of the game's job list. New jobs are added in their place.
+    private static readonly (uint JobId, string Name)[] Entries =
+    {
+        (19, "Paladin"), (21, "Warrior"), (24, "White Mage")
+    };
+
+    // The job picked by hand (index into Entries), or -1 to follow the job being played.
+    private int chosen = -1;
 
     private void DrawWhiteMage(WhiteMageGaugeSettings settings)
     {

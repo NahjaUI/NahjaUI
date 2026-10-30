@@ -5,22 +5,22 @@ using NahjaUI.Core.Ui;
 namespace NahjaUI.Modules.Tooltip;
 
 /// <summary>
-/// The box that shows the description of a buff or debuff while the mouse is over its icon: where it appears and how it looks.
+/// The box that shows the description of an enhancement or enfeeblement while the mouse is over its icon: where it appears and how it looks.
 /// </summary>
 [Serializable]
 public class TooltipSettings
 {
     public bool Enabled { get; set; } = true;
 
-    // Where it appears: the buffs and debuffs rows of each frame.
-    public bool PlayerBuffs { get; set; } = true;
-    public bool PlayerDebuffs { get; set; } = true;
-    public bool TargetBuffs { get; set; } = true;
-    public bool TargetDebuffs { get; set; } = true;
-    public bool FocusBuffs { get; set; } = true;
-    public bool FocusDebuffs { get; set; } = true;
-    public bool PartyBuffs { get; set; } = true;
-    public bool PartyDebuffs { get; set; } = true;
+    // Where it appears: the enhancements and enfeeblements rows of each frame.
+    public bool PlayerEnhancements { get; set; } = true;
+    public bool PlayerEnfeeblements { get; set; } = true;
+    public bool TargetEnhancements { get; set; } = true;
+    public bool TargetEnfeeblements { get; set; } = true;
+    public bool FocusEnhancements { get; set; } = true;
+    public bool FocusEnfeeblements { get; set; } = true;
+    public bool PartyEnhancements { get; set; } = true;
+    public bool PartyEnfeeblements { get; set; } = true;
 
     // What it says.
     public bool ShowId { get; set; } = true;
@@ -40,16 +40,16 @@ public class TooltipSettings
     public Vector4 BorderColor { get; set; } = Theme.Border;
 
     /// <summary>Does the tooltip show for this row? place: "player", "target", "focus" or "party".</summary>
-    public bool Allows(string place, bool isBuff) => Enabled && (place, isBuff) switch
+    public bool Allows(string place, bool isEnhancement) => Enabled && (place, isEnhancement) switch
     {
-        ("player", true) => PlayerBuffs,
-        ("player", false) => PlayerDebuffs,
-        ("target", true) => TargetBuffs,
-        ("target", false) => TargetDebuffs,
-        ("focus", true) => FocusBuffs,
-        ("focus", false) => FocusDebuffs,
-        ("party", true) => PartyBuffs,
-        ("party", false) => PartyDebuffs,
+        ("player", true) => PlayerEnhancements,
+        ("player", false) => PlayerEnfeeblements,
+        ("target", true) => TargetEnhancements,
+        ("target", false) => TargetEnfeeblements,
+        ("focus", true) => FocusEnhancements,
+        ("focus", false) => FocusEnfeeblements,
+        ("party", true) => PartyEnhancements,
+        ("party", false) => PartyEnfeeblements,
         _ => false
     };
 }

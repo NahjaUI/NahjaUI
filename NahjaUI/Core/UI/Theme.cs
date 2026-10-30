@@ -104,7 +104,7 @@ internal sealed class ThemeScope : IDisposable
         PushColor(ImGuiCol.ResizeGripActive, Theme.WithAlpha(accent, 0.90f));
 
         // Shape: rounded everywhere, generous spacing. All pixel values scale with the user's UI scale.
-        PushVar(ImGuiStyleVar.WindowRounding, 10f * scale);
+        PushVar(ImGuiStyleVar.WindowRounding, Math.Clamp(config.WindowRoundingPx, 0, 30) * scale);
         PushVar(ImGuiStyleVar.ChildRounding, 8f * scale);
         PushVar(ImGuiStyleVar.FrameRounding, 6f * scale);
         PushVar(ImGuiStyleVar.GrabRounding, 6f * scale);

@@ -84,7 +84,7 @@ internal sealed class ProfileManager
         ProfileBlock.UnitFrames => "Unit frames",
         ProfileBlock.CastBars => "Cast bars",
         ProfileBlock.JobGauges => "Job gauges",
-        ProfileBlock.Appearance => "Appearance (accent color, menu text size)",
+        ProfileBlock.Appearance => "Appearance (accent color, target ring color, menu text size)",
         _ => block.ToString()
     };
 
@@ -124,7 +124,9 @@ internal sealed class ProfileManager
                 ProfileBlock.Appearance => new JObject
                 {
                     ["accent"] = JToken.FromObject(config.AccentColor, Serializer),
-                    ["menuTextSize"] = config.MenuTextSize
+                    ["targetRing"] = JToken.FromObject(config.TargetRingColor, Serializer),
+                    ["menuTextSize"] = config.MenuTextSize,
+                    ["windowRounding"] = config.WindowRoundingPx
                 },
                 _ => JValue.CreateNull()
             };
@@ -310,9 +312,16 @@ internal sealed class ProfileManager
                 if (appearance["accent"] is JToken accent && accent.ToObject<System.Numerics.Vector4>(Serializer) is var color)
                     config.AccentColor = new System.Numerics.Vector4(color.X, color.Y, color.Z, 1f);
 
+                if (appearance["targetRing"] is JToken ring && ring.ToObject<System.Numerics.Vector4>(Serializer) is var ringColor)
+                    config.TargetRingColor = new System.Numerics.Vector4(ringColor.X, ringColor.Y, ringColor.Z, 1f);
+
                 var size = (int?)appearance["menuTextSize"];
                 if (size is not null)
                     config.MenuTextSize = Math.Clamp(size.Value, 8, 40);
+
+                var rounding = (int?)appearance["windowRounding"];
+                if (rounding is not null)
+                    config.WindowRoundingPx = Math.Clamp(rounding.Value, 0, 30);
             }
 
             // 4. Auras.

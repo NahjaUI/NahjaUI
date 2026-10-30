@@ -22,6 +22,19 @@ internal static class Widgets
     private const float PaddingY = 12f;
     private const float ItemSpacingY = 8f;
 
+    /// <summary>Ids of the cards the user has folded (only their title shows). Saved with the configuration.</summary>
+    public static HashSet<string> Collapsed { get; set; } = new();
+
+    /// <summary>Called when the user folds or opens a card, so the plugin can save the list.</summary>
+    public static Action? CollapsedChanged { get; set; }
+
+    // The card being drawn (null outside a card) and whether its title has been drawn already.
+    private static string? currentCard;
+    private static bool currentTitleDrawn;
+
+    // True while an empty clip rectangle hides what comes after the title of a folded card.
+    private static bool clipPushed;
+
     /// <summary>
     /// A rounded panel that takes exactly the height of its content, so it never needs a scroll bar of its own and the
     /// mouse wheel always scrolls the page. The height is measured while drawing and used from the next frame on;
@@ -33,7 +46,7 @@ internal static class Widgets
         var estimate = lines * ImGui.GetTextLineHeightWithSpacing() + 24f * scale;
 
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Card))
-            DrawBox(id, estimate, content);
+            DrawBox(id, estimate, content, true);
 
         ImGui.Spacing();
     }
@@ -55,20 +68,34 @@ internal static class Widgets
     }
 
     // The shared box: a bordered child window with no scrolling, sized from the last measurement.
-    private static void DrawBox(string id, float estimate, Action content)
+    private static void DrawBox(string id, float estimate, Action content, bool foldable = false)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var width = ImGui.GetContentRegionAvail().X - RightMargin * scale;
         var height = MeasuredHeights.TryGetValue(id, out var known) ? known : estimate;
         var measured = 0f;
 
+        // A folded card is only as tall as its title. Its content is still run but the box clips it, so nothing below the
+        // title can be seen or clicked.
+        var folded = foldable && Collapsed.Contains(id);
+        var shownHeight = folded ? ImGui.GetTextLineHeight() + 2f * ImGui.GetStyle().WindowPadding.Y : height;
+
         const ImGuiWindowFlags flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
 
-        using (var child = ImRaii.Child(id, new Vector2(width, height), true, flags))
+        using (var child = ImRaii.Child(id, new Vector2(width, shownHeight), true, flags))
         {
             if (child.Success)
             {
+                currentCard = foldable ? id : null;
+                currentTitleDrawn = false;
                 content();
+                currentCard = null;
+
+                if (clipPushed)
+                {
+                    ImGui.PopClipRect();
+                    clipPushed = false;
+                }
 
                 // The cursor sits one item spacing below the last item; the box needs the padding below it instead.
                 measured = MathF.Ceiling(ImGui.GetCursorPosY() - ItemSpacingY * scale + PaddingY * scale);
@@ -76,7 +103,7 @@ internal static class Widgets
         }
 
         // Remember it for the next frame (only real changes, so the height never jitters).
-        if (measured > 0f && MathF.Abs(measured - height) >= 1f)
+        if (!folded && measured > 0f && MathF.Abs(measured - height) >= 1f)
             MeasuredHeights[id] = measured;
     }
 
@@ -95,6 +122,52 @@ internal static class Widgets
     /// <summary>Small muted title in capitals that opens a group of settings.</summary>
     public static void SectionLabel(string text)
     {
-        ImGui.TextColored(Theme.TextMuted, text.ToUpperInvariant());
+        // The first title of a card is its header: clicking it folds or opens the card.
+        if (currentCard is null || currentTitleDrawn)
+        {
+            ImGui.TextColored(Theme.TextMuted, text.ToUpperInvariant());
+            return;
+        }
+
+        currentTitleDrawn = true;
+        var scale = ImGuiHelpers.GlobalScale;
+        var folded = Collapsed.Contains(currentCard);
+
+        var windowPos = ImGui.GetWindowPos();
+        var windowWidth = ImGui.GetWindowWidth();
+        var lineTop = ImGui.GetCursorScreenPos().Y;
+        var lineHeight = ImGui.GetTextLineHeight();
+
+        var rowMin = new Vector2(windowPos.X, lineTop - 4f * scale);
+        var rowMax = new Vector2(windowPos.X + windowWidth, lineTop + lineHeight + 4f * scale);
+        var hovered = ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(rowMin, rowMax);
+
+        ImGui.TextColored(hovered ? Theme.Text : Theme.TextMuted, text.ToUpperInvariant());
+
+        // A small triangle at the right: down when the card is open, pointing left when it is folded.
+        var drawList = ImGui.GetWindowDrawList();
+        var size = 4f * scale;
+        var center = new Vector2(windowPos.X + windowWidth - 18f * scale, lineTop + lineHeight / 2f);
+        var color = ImGui.GetColorU32(hovered ? Theme.Text : Theme.TextMuted);
+        if (folded)
+            drawList.AddTriangleFilled(new Vector2(center.X + size, center.Y - size), new Vector2(center.X + size, center.Y + size), new Vector2(center.X - size, center.Y), color);
+        else
+            drawList.AddTriangleFilled(new Vector2(center.X - size, center.Y - size / 2f), new Vector2(center.X + size, center.Y - size / 2f), new Vector2(center.X, center.Y + size / 2f + size / 2f), color);
+
+        if (hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+        {
+            if (!Collapsed.Remove(currentCard))
+                Collapsed.Add(currentCard);
+
+            CollapsedChanged?.Invoke();
+        }
+
+        // Folded: from here on everything is clipped away with an empty rectangle, so no part of the first control peeks out
+        // under the title and nothing can be hovered or clicked.
+        if (folded)
+        {
+            ImGui.PushClipRect(Vector2.Zero, Vector2.Zero, true);
+            clipPushed = true;
+        }
     }
 }

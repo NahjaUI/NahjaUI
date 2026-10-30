@@ -19,7 +19,6 @@ internal sealed class TooltipEditor
     {
         var s = plugin.Configuration.Tooltip;
 
-        ImGui.TextColored(Theme.TextMuted, "The box that describes a buff or debuff while the mouse is over its icon.");
         ImGui.TextColored(Theme.TextMuted, "Hover an icon on one of your frames to see how it looks.");
         ImGui.Spacing();
 
@@ -33,15 +32,15 @@ internal sealed class TooltipEditor
         {
             Widgets.SectionLabel("Where it appears");
 
-            ImGui.TextColored(Theme.TextMuted, "Buffs and debuffs of each frame. The target of target has none.");
-            Check("Player: buffs", s.PlayerBuffs, v => s.PlayerBuffs = v);
-            Check("Player: debuffs", s.PlayerDebuffs, v => s.PlayerDebuffs = v);
-            Check("Target: buffs", s.TargetBuffs, v => s.TargetBuffs = v);
-            Check("Target: debuffs", s.TargetDebuffs, v => s.TargetDebuffs = v);
-            Check("Focus: buffs", s.FocusBuffs, v => s.FocusBuffs = v);
-            Check("Focus: debuffs", s.FocusDebuffs, v => s.FocusDebuffs = v);
-            Check("Party: buffs", s.PartyBuffs, v => s.PartyBuffs = v);
-            Check("Party: debuffs", s.PartyDebuffs, v => s.PartyDebuffs = v);
+            ImGui.TextColored(Theme.TextMuted, "Enhancements and enfeeblements of each frame. The target of target has none.");
+            Check("Player: enhancements", s.PlayerEnhancements, v => s.PlayerEnhancements = v);
+            Check("Player: enfeeblements", s.PlayerEnfeeblements, v => s.PlayerEnfeeblements = v);
+            Check("Target: enhancements", s.TargetEnhancements, v => s.TargetEnhancements = v);
+            Check("Target: enfeeblements", s.TargetEnfeeblements, v => s.TargetEnfeeblements = v);
+            Check("Focus: enhancements", s.FocusEnhancements, v => s.FocusEnhancements = v);
+            Check("Focus: enfeeblements", s.FocusEnfeeblements, v => s.FocusEnfeeblements = v);
+            Check("Party: enhancements", s.PartyEnhancements, v => s.PartyEnhancements = v);
+            Check("Party: enfeeblements", s.PartyEnfeeblements, v => s.PartyEnfeeblements = v);
         });
 
         Widgets.Card("##card_tt_content", 5, () =>

@@ -7,7 +7,7 @@ namespace NahjaUI.Game;
 // The snapshot is a read-only picture of the game, built once per frame by GameDataProvider.
 // Modules read these records and never talk to Dalamud directly.
 
-/// <summary>A buff or debuff on a unit.</summary>
+/// <summary>An enhancement or enfeeblement on a unit.</summary>
 /// <param name="Id">Status id (row of the Status sheet).</param>
 /// <param name="SourceId">Entity id of whoever applied it. Compare with the player's entity id to know if it is yours.</param>
 /// <param name="RemainingTime">Seconds left. Statuses without a duration report 0 or a negative value.</param>
@@ -67,7 +67,7 @@ internal sealed record UnitSnapshot(
     UnitKind Kind = UnitKind.Character);
 
 /// <summary>What a target is, to give its frame a colour: a character (player, enemy, NPC that fights), a pet or minion,
-/// an NPC without life (shopkeepers, retainers), or an object (furniture, chests, aetherytes...).</summary>
+/// an NPC without HP (shopkeepers, retainers), or an object (furniture, chests, aetherytes...).</summary>
 internal enum UnitKind
 {
     Character,
@@ -106,10 +106,27 @@ internal sealed record ContextSnapshot(uint TerritoryId, bool InCombat, bool InD
 /// <param name="Ndc">Where the game hangs the plate, in screen coordinates from -1 to 1 (x to the right, y UP). It already accounts for the height of the enemy.</param>
 /// <param name="Scale">Size of the plate the game would use, from 0 (far) to 1 (near).</param>
 /// <param name="Cast">What the enemy is casting, or null.</param>
-internal sealed record NamePlateSnapshot(uint EntityId, string Name, int Level, uint Hp, uint MaxHp, Vector2 Ndc, float Scale, CastSnapshot? Cast);
+/// <summary>Who a plate belongs to, from the point of view of the player.</summary>
+internal enum NamePlateRelation
+{
+    Enemy,
+    Self,
+    Party,
+    OtherPlayer,
+    /// <summary>A fighting character that is not hostile and not a player: pets, the chocobo, friendly battle NPCs. Has HP.</summary>
+    Friendly,
+    /// <summary>Everything without HP: NPCs, doors and objects, minions, retainers, gathering points, treasure. Text only.</summary>
+    Other
+}
 
-/// <summary>An enemy of the game's enemy list: its data, and whether it is attacking you.</summary>
-internal sealed record EnemyEntrySnapshot(UnitSnapshot Unit, bool TargetsMe);
+internal sealed record NamePlateSnapshot(uint EntityId, string Name, int Level, uint Hp, uint MaxHp, Vector2 Ndc, float Scale, CastSnapshot? Cast,
+    NamePlateRelation Relation = NamePlateRelation.Enemy, ulong Key = 0, bool IsTarget = false);
+
+/// <summary>An enemy of the game's enmity list: its data, and whether it is attacking you.</summary>
+/// <param name="ActiveInList">Test values (-1 unknown): the game's "active in list" flag of the row.</param>
+/// <param name="LockedInList">Test values (-1 unknown): the game's "locked in list" flag of the row.</param>
+/// <param name="Targetable">Test values (-1 unknown): whether the enemy can be targeted right now.</param>
+internal sealed record EnemyEntrySnapshot(UnitSnapshot Unit, bool TargetsMe, int ActiveInList = -1, int LockedInList = -1, int Targetable = -1);
 
 /// <summary>Everything the plugin knows about the game during one frame.</summary>
 internal sealed record GameSnapshot(
@@ -128,7 +145,7 @@ internal sealed record GameSnapshot(
     IReadOnlyList<NamePlateSnapshot>? NamePlates = null,
     PaladinGaugeSnapshot? Paladin = null,
     ComboSnapshot? Combo = null,
-    IReadOnlyList<EnemyEntrySnapshot>? EnemyList = null)
+    IReadOnlyList<EnemyEntrySnapshot>? EnmityList = null)
 {
     public static readonly GameSnapshot Empty = new(
         false, null, null, null, null, Array.Empty<UnitSnapshot>(), ContextSnapshot.None,

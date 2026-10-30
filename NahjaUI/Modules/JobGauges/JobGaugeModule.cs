@@ -46,6 +46,7 @@ internal sealed class JobGaugeModule : IDisposable
     private static readonly PaladinGaugeSnapshot PaladinSample = new(70);
 
     private readonly Plugin plugin;
+    private readonly NativeWindowHider hider = new();
 
     public JobGaugeModule(Plugin plugin)
     {
@@ -103,10 +104,10 @@ internal sealed class JobGaugeModule : IDisposable
     public LayoutElement PaladinElement { get; }
 
     /// <summary>
-    /// Set by the settings page every frame it is open: the gauge then shows sample values so its look can be adjusted
+    /// Set by the settings page every frame it is open, to the job being edited: that gauge then shows sample values so its look can be adjusted
     /// without being a White Mage in combat. (Unlock mode shows the sample too.)
     /// </summary>
-    public bool PreviewRequested { get; set; }
+    public uint PreviewJobId { get; set; }
 
     public void Dispose()
     {
@@ -116,33 +117,35 @@ internal sealed class JobGaugeModule : IDisposable
     // ---------------------------------------------------------------- hiding the game's gauge
 
     // Runs right before the game draws its own gauge. Skipping the drawing hides it completely, even during its animations.
-    private unsafe void OnNativePreDraw(AddonEvent type, AddonArgs args)
+    private void OnNativePreDraw(AddonEvent type, AddonArgs args)
+    {
+        if (!HidesNative(args.AddonName))
+            return;
+
+        hider.Hide(args);
+    }
+
+    // Does this module want the game's gauge window hidden right now?
+    private bool HidesNative(string windowName)
     {
         var gauges = plugin.Configuration.JobGauges;
-        var hide = args.AddonName switch
+        return windowName switch
         {
             NativeWarriorGauge => gauges.Warrior is { Enabled: true, HideNative: true },
             NativePaladinGauge => gauges.Paladin is { Enabled: true, HideNative: true },
             _ => gauges.WhiteMage is { Enabled: true, HideNative: true }
         };
-        if (!hide)
-            return;
-
-        args.PreventOriginal();
-
-        var addon = args.GetAddonPointer<AtkUnitBase>();
-        if (addon != null)
-            addon->IsVisible = false;
     }
 
     // ---------------------------------------------------------------- drawing
 
     public void Draw()
     {
+        hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
         var player = snapshot.IsLoggedIn ? snapshot.Player : null;
-        var settingsPage = PreviewRequested;
-        PreviewRequested = false;
+        var previewJob = PreviewJobId;
+        PreviewJobId = 0;
 
         // Unlock mode only offers the gauge of the job you are playing (all of them while the job is unknown).
         var isWhiteMage = player is null || player.JobId == WhiteMageJobId;
@@ -159,9 +162,9 @@ internal sealed class JobGaugeModule : IDisposable
         var whiteMage = plugin.Configuration.JobGauges.WhiteMage;
         if (whiteMage.Enabled)
         {
-            // The gauge only exists while the player is a White Mage. The settings page shows a sample always,
+            // The gauge only exists while the player is a White Mage. The settings page shows a sample of the job being edited,
             // unlock mode only for the job you are playing.
-            var gauge = snapshot.WhiteMage ?? (settingsPage || (unlock && isWhiteMage) ? Sample : null);
+            var gauge = snapshot.WhiteMage ?? (previewJob == WhiteMageJobId || (unlock && isWhiteMage) ? Sample : null);
             if (gauge is not null)
                 DrawWhiteMage(whiteMage, gauge);
         }
@@ -169,7 +172,7 @@ internal sealed class JobGaugeModule : IDisposable
         var warrior = plugin.Configuration.JobGauges.Warrior;
         if (warrior.Enabled)
         {
-            var gauge = snapshot.Warrior ?? (settingsPage || (unlock && isWarrior) ? WarriorSample : null);
+            var gauge = snapshot.Warrior ?? (previewJob == WarriorJobId || (unlock && isWarrior) ? WarriorSample : null);
             if (gauge is not null)
                 DrawBar(warrior, WarriorElement, gauge.BeastGauge);
         }
@@ -177,7 +180,7 @@ internal sealed class JobGaugeModule : IDisposable
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)
         {
-            var gauge = snapshot.Paladin ?? (settingsPage || (unlock && isPaladin) ? PaladinSample : null);
+            var gauge = snapshot.Paladin ?? (previewJob == PaladinJobId || (unlock && isPaladin) ? PaladinSample : null);
             if (gauge is not null)
                 DrawBar(paladin, PaladinElement, gauge.OathGauge);
         }
@@ -227,13 +230,13 @@ internal sealed class JobGaugeModule : IDisposable
     {
         var scale = ImGuiHelpers.GlobalScale;
 
-        // The size is in logical pixels: the fonts are already built scaled by the UI scale.
-        using (plugin.Fonts.PushClosest(font, fontSize))
+        // The size is the height of the letters, in logical pixels.
+        using (var face = plugin.Fonts.PushCap(font, fontSize))
         {
-            var textSize = ImGui.CalcTextSize(text);
+            var textSize = face.Measure(text);
             var textPos = new Vector2(MathF.Round(pos.X + (size.X - textSize.X) / 2f), MathF.Round(pos.Y + (size.Y - textSize.Y) / 2f));
 
-            OutlinedText.Draw(drawList, textPos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
+            face.Draw(drawList, textPos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
         }
     }
 
@@ -329,13 +332,13 @@ internal sealed class JobGaugeModule : IDisposable
         var left = pos.X + MathF.Round((size.X - total) / 2f);
         var centerX = left + pipIndex * (pipWidth + gap) + pipWidth / 2f;
 
-        // The size is in logical pixels: the fonts are already built scaled by the UI scale.
-        using (plugin.Fonts.PushClosest(settings.Font, settings.TextSize))
+        // The size is the height of the letters, in logical pixels.
+        using (var face = plugin.Fonts.PushCap(settings.Font, settings.TextSize))
         {
-            var textSize = ImGui.CalcTextSize(text);
+            var textSize = face.Measure(text);
             var textPos = new Vector2(MathF.Round(centerX - textSize.X / 2f), MathF.Round(pos.Y + (size.Y - textSize.Y) / 2f));
 
-            OutlinedText.Draw(drawList, textPos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
+            face.Draw(drawList, textPos, text, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f)));
         }
     }
 }

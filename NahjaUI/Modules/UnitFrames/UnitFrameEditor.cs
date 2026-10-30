@@ -13,8 +13,42 @@ namespace NahjaUI.Modules.UnitFrames;
 /// <summary>The "Unit frames" page of the main window: pick a frame at the top, then edit it in the cards below.</summary>
 internal sealed class UnitFrameEditor
 {
-    // The jobs of the mana list, grouped as in the game: tanks, healers, melee, ranged, casters.
-    private static readonly uint[] Jobs = { 19, 21, 32, 37, 24, 28, 33, 40, 20, 22, 30, 34, 39, 41, 23, 31, 38, 25, 27, 35, 42, 36 };
+    // The jobs of the game by role, in the order of the game (for the on/off lists of the HP bar and the MP bar).
+    private static readonly (string Role, uint[] Jobs)[] JobsByRole =
+    {
+        ("Tanks", new uint[] { 19, 21, 32, 37 }),
+        ("Healers", new uint[] { 24, 28, 33, 40 }),
+        ("Melee", new uint[] { 20, 22, 30, 34, 39, 41 }),
+        ("Ranged", new uint[] { 23, 31, 38 }),
+        ("Casters", new uint[] { 25, 27, 35, 42, 36 }),
+        ("Crafters", new uint[] { 8, 9, 10, 11, 12, 13, 14, 15 }),
+        ("Gatherers", new uint[] { 16, 17, 18 })
+    };
+
+    // The roles with Beastmaster (a melee, after Viper) added: its id is read from the game's job list by its abbreviation.
+    private static uint beastmasterId;
+    private static bool beastmasterLooked;
+
+    private static List<(string Role, uint[] Jobs)> RolesWithBeastmaster()
+    {
+        if (!beastmasterLooked)
+        {
+            beastmasterId = GameNames.JobIdByAbbreviation("BST");
+            beastmasterLooked = true;
+        }
+
+        var roles = new List<(string Role, uint[] Jobs)>(JobsByRole);
+        if (beastmasterId != 0)
+        {
+            for (var i = 0; i < roles.Count; i++)
+            {
+                if (roles[i].Role == "Melee")
+                    roles[i] = (roles[i].Role, System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Append(roles[i].Jobs, beastmasterId)));
+            }
+        }
+
+        return roles;
+    }
 
     private const int JobsPerRow = 6;
 
@@ -27,19 +61,26 @@ internal sealed class UnitFrameEditor
         (" ", "Space")
     };
 
-    private static readonly string[] FrameNames = { "Player", "Target", "Target of target", "Focus" };
-
-    // The picker has two more buttons after the frames: the party frames, and the class colors shared by all of them.
-    private const int PartyPage = 4;
-    private const int ClassColorsPage = 5;
-    private static readonly string[] PickerNames = { "Player", "Target", "Target of target", "Focus", "Party", "Class colors" };
+    // The pages of the picker: the HP bar and the MP bar of the player are two separate pages.
+    private const int HpPage = 0;
+    private const int MpPage = 1;
+    private const int TargetPage = 2;
+    private const int TargetOfTargetPage = 3;
+    private const int FocusPage = 4;
+    private const int PartyPage = 5;
+    // (The MP page is a tab inside the Parameter bar page, not a button of the picker.)
+    private static readonly string[] PickerNames = { "Parameter bar", "MP bar", "Target", "Target of target", "Focus", "Party" };
+    private static readonly string[] FrameNames = { "Player HP bar", "Player MP bar", "Target frame", "Target of target frame", "Focus frame" };
 
     private readonly Plugin plugin;
 
     // Which frame the cards below edit (an index into FrameNames).
     private int selectedFrame;
 
-    // The name search of the list of the buffs and the one of the debuffs of the party.
+    // Inside the Parameter bar page: 0 HP bar, 1 MP bar.
+    private int parameterTab;
+
+    // The name search of the list of the enhancements and the one of the enfeeblements of the party.
     private sealed class StatusSearchState
     {
         public string Text = string.Empty;
@@ -47,10 +88,10 @@ internal sealed class UnitFrameEditor
         public IReadOnlyList<StatusSearchResult> Results = Array.Empty<StatusSearchResult>();
     }
 
-    private readonly StatusSearchState buffSearch = new();
-    private readonly StatusSearchState debuffSearch = new();
-    private readonly StatusSearchState frameBuffSearch = new();
-    private readonly StatusSearchState frameDebuffSearch = new();
+    private readonly StatusSearchState enhancementSearch = new();
+    private readonly StatusSearchState enfeeblementSearch = new();
+    private readonly StatusSearchState frameEnhancementSearch = new();
+    private readonly StatusSearchState frameEnfeeblementSearch = new();
 
     // The search of the "always show" list of each card of icons, by card.
     private readonly Dictionary<string, StatusSearchState> extraSearches = new();
@@ -65,20 +106,11 @@ internal sealed class UnitFrameEditor
         // While this page is open, the frame shows sample values if the real unit is not there.
         plugin.UnitFrameSystem.PreviewRequested = true;
 
-        ImGui.TextColored(Theme.TextMuted, "Move the frames in unlock mode (Layout page). Texts are attached to a point of the bar.");
-        ImGui.Spacing();
-
         DrawFramePicker();
 
         var frames = plugin.Configuration.UnitFrames;
         var system = plugin.UnitFrameSystem;
 
-        // The class colors are the same for every frame, so they have their own page instead of a card in each frame.
-        if (selectedFrame == ClassColorsPage)
-        {
-            DrawClassColors(frames.Player);
-            return;
-        }
 
         // The party frames: the same cards as the other frames (their look), then the ones that are only about the party.
         if (selectedFrame == PartyPage)
@@ -88,55 +120,73 @@ internal sealed class UnitFrameEditor
             var party = frames.Party;
             DrawGeneral(party.Look, plugin.PartyFrameSystem.PartyElement, true);
             DrawPartyOptions(party);
-            DrawPartyAuras("##card_pf_buffs", "Buffs", party.Buffs, true, buffSearch);
-            DrawPartyAuras("##card_pf_debuffs", "Debuffs", party.Debuffs, false, debuffSearch);
+            DrawPartyAuras("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
+            DrawPartyAuras("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch);
             DrawName(party.Look);
             DrawHealth(party.Look);
             return;
         }
 
+        // The Parameter bar (the game's name for the HP and MP bars of the player): one switch for both, then a tab each.
+        if (selectedFrame == HpPage)
+        {
+            DrawParameterBarSwitch(frames.Player);
+
+            if (parameterTab == 1)
+            {
+                DrawMp(frames.Player);
+                return;
+            }
+        }
+
         var (settings, element) = selectedFrame switch
         {
-            1 => (frames.Target, system.TargetElement),
-            2 => (frames.TargetOfTarget, system.TargetOfTargetElement),
-            3 => (frames.Focus, system.FocusElement),
+            TargetPage => (frames.Target, system.TargetElement),
+            TargetOfTargetPage => (frames.TargetOfTarget, system.TargetOfTargetElement),
+            FocusPage => (frames.Focus, system.FocusElement),
             _ => (frames.Player, system.PlayerElement)
         };
 
-        var isPlayer = selectedFrame == 0;
+        var isPlayer = selectedFrame == HpPage;
 
         DrawGeneral(settings, element, isPlayer);
 
-        // Buffs and debuffs next to the bar (not on the target of target).
-        if (selectedFrame != 2)
+        // Enhancements and enfeeblements next to the bar (not on the target of target; the player has its own page, "Status effects").
+        if (selectedFrame != TargetOfTargetPage && selectedFrame != HpPage)
         {
             DrawFrameStatusOptions(settings);
-            DrawPartyAuras($"##card_uf{selectedFrame}_buffs", "Buffs", settings.Buffs, true, frameBuffSearch);
-            DrawPartyAuras($"##card_uf{selectedFrame}_debuffs", "Debuffs", settings.Debuffs, false, frameDebuffSearch);
+            DrawPartyAuras($"##card_uf{selectedFrame}_enhancements", "Enhancements", settings.Enhancements, true, frameEnhancementSearch);
+            DrawPartyAuras($"##card_uf{selectedFrame}_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, frameEnfeeblementSearch);
         }
 
         DrawName(settings);
         DrawHealth(settings);
 
-        // Only your own frame has a mana bar.
+        // The jobs card is always the last one of the page.
         if (isPlayer)
-            DrawMana(settings);
+            DrawHpJobs(settings);
     }
 
     // A row of buttons, one per frame; the selected one is lit with the accent colour.
     private void DrawFramePicker()
     {
+        var first = true;
         for (var i = 0; i < PickerNames.Length; i++)
         {
+            if (i == MpPage)
+                continue;
+
+            if (!first)
+                ImGui.SameLine();
+
+            first = false;
+
             var selected = i == selectedFrame;
 
             ImGui.PushStyleColor(ImGuiCol.Button, selected ? Theme.Mix(Theme.Field, Theme.Accent, 0.85f) : Theme.Field);
             if (ImGui.Button(PickerNames[i]))
                 selectedFrame = i;
             ImGui.PopStyleColor();
-
-            if (i < PickerNames.Length - 1)
-                ImGui.SameLine();
         }
 
         ImGui.Spacing();
@@ -146,35 +196,51 @@ internal sealed class UnitFrameEditor
 
     private void DrawGeneral(UnitFrameSettings settings, LayoutElement element, bool isPlayer)
     {
-        Widgets.Card("##card_uf_general", 25, () =>
+        Widgets.Card("##card_uf_general", selectedFrame == TargetOfTargetPage ? 26 : 25, () =>
         {
-            Widgets.SectionLabel(selectedFrame == PartyPage ? "Party frames (the first bar; the others follow it downwards)" : $"{FrameNames[selectedFrame]} frame");
+            Widgets.SectionLabel(selectedFrame == PartyPage ? "Party frames (the first bar; the others follow it downwards)" : FrameNames[selectedFrame]);
 
-            var enabled = settings.Enabled;
-            if (ImGui.Checkbox("Enabled", ref enabled))
+            // The player's Enabled is the master switch of the Parameter bar page (the card above).
+            if (!isPlayer)
             {
-                settings.Enabled = enabled;
-                plugin.RequestSave();
+                var enabled = settings.Enabled;
+                if (ImGui.Checkbox("Enabled", ref enabled))
+                {
+                    settings.Enabled = enabled;
+                    plugin.RequestSave();
+                }
             }
 
+            // The game gives the target of target no menu: only the left click targets it.
             var clickable = settings.Clickable;
-            if (ImGui.Checkbox("Clickable: left click targets, right click opens a menu", ref clickable))
+            var clickLabel = selectedFrame == TargetOfTargetPage ? "Clickable: left click targets" : "Clickable: left click targets, right click opens a menu";
+            if (ImGui.Checkbox(clickLabel, ref clickable))
             {
                 settings.Clickable = clickable;
                 plugin.RequestSave();
             }
 
+            if (selectedFrame == TargetOfTargetPage)
+            {
+                var showFrame = settings.ShowFrame;
+                if (ImGui.Checkbox("Show the HP bar (off: only the name)", ref showFrame))
+                {
+                    settings.ShowFrame = showFrame;
+                    plugin.RequestSave();
+                }
+            }
+
             // The game shows the target of target inside its target bar, so it has no bar of its own to hide.
             var nativeLabel = selectedFrame switch
             {
-                0 => "Hide the game's life and mana bar",
-                1 => "Hide the game's target bar (and its target of target)",
-                3 => "Hide the game's focus bar",
+                HpPage => "Hide the game's HP and MP bar",
+                TargetPage => "Hide the game's target bar (and its target of target)",
+                FocusPage => "Hide the game's focus bar",
                 PartyPage => "Hide the game's party list",
                 _ => null
             };
 
-            if (nativeLabel is not null)
+            if (nativeLabel is not null && !isPlayer)
             {
                 var hideNative = settings.HideNative;
                 if (ImGui.Checkbox(nativeLabel, ref hideNative))
@@ -183,10 +249,10 @@ internal sealed class UnitFrameEditor
                     plugin.RequestSave();
                 }
 
-                if (selectedFrame == 1)
+                if (selectedFrame == TargetPage)
                     ImGui.TextColored(Theme.TextMuted, "Needs the target info set to separate parts in the game's HUD layout.");
             }
-            else
+            else if (!isPlayer)
             {
                 ImGui.TextColored(Theme.TextMuted, "The game's target of target is part of its target bar: hide it with the Target frame.");
             }
@@ -219,17 +285,17 @@ internal sealed class UnitFrameEditor
 
             ImGui.Spacing();
 
-            var colorMode = settings.LifeColorMode;
-            if (EnumCombo("Life color", ref colorMode, LifeColorModeLabel))
+            var colorMode = settings.HpColorMode;
+            if (EnumCombo("HP color", ref colorMode, HpColorModeLabel))
             {
-                settings.LifeColorMode = colorMode;
+                settings.HpColorMode = colorMode;
                 plugin.RequestSave();
             }
 
-            var life = settings.FriendlyColor;
-            if (ImGui.ColorEdit4("Fixed life color", ref life, ImGuiColorEditFlags.NoAlpha))
+            var hp = settings.FriendlyColor;
+            if (ImGui.ColorEdit4("Fixed HP color", ref hp, ImGuiColorEditFlags.NoAlpha))
             {
-                settings.FriendlyColor = new Vector4(life.X, life.Y, life.Z, 1f);
+                settings.FriendlyColor = new Vector4(hp.X, hp.Y, hp.Z, 1f);
                 plugin.RequestSave();
             }
 
@@ -237,7 +303,7 @@ internal sealed class UnitFrameEditor
             if (!isPlayer)
             {
                 var hostile = settings.HostileColor;
-                if (ImGui.ColorEdit4("Enemy life color", ref hostile, ImGuiColorEditFlags.NoAlpha))
+                if (ImGui.ColorEdit4("Enemy HP color", ref hostile, ImGuiColorEditFlags.NoAlpha))
                 {
                     settings.HostileColor = new Vector4(hostile.X, hostile.Y, hostile.Z, 1f);
                     plugin.RequestSave();
@@ -248,7 +314,7 @@ internal sealed class UnitFrameEditor
             if (!isPlayer)
             {
                 var pet = settings.PetColor;
-                if (ImGui.ColorEdit4("Pet / minion life color", ref pet, ImGuiColorEditFlags.NoAlpha))
+                if (ImGui.ColorEdit4("Pet / minion HP color", ref pet, ImGuiColorEditFlags.NoAlpha))
                 {
                     settings.PetColor = new Vector4(pet.X, pet.Y, pet.Z, 1f);
                     plugin.RequestSave();
@@ -279,7 +345,7 @@ internal sealed class UnitFrameEditor
             ImGui.Spacing();
 
             var showShield = settings.ShowShield;
-            if (ImGui.Checkbox("Show shields on the life bar", ref showShield))
+            if (ImGui.Checkbox("Show shields on the HP bar", ref showShield))
             {
                 settings.ShowShield = showShield;
                 plugin.RequestSave();
@@ -301,10 +367,10 @@ internal sealed class UnitFrameEditor
         });
     }
 
-    // What is only about the party: space between bars, mana bar, and how the targeted member is marked.
+    // What is only about the party: space between bars, MP bar, and how the targeted member is marked.
     private void DrawPartyOptions(PartyFrameSettings party)
     {
-        Widgets.Card("##card_pf_options", 24, () =>
+        Widgets.Card("##card_pf_options", 20, () =>
         {
             Widgets.SectionLabel("Party options");
 
@@ -360,7 +426,7 @@ internal sealed class UnitFrameEditor
                 }
 
                 var iconSize = party.JobIconSizePx;
-                if (ImGui.SliderInt("Icon size (px)", ref iconSize, 8, 40))
+                if (ImGui.SliderInt("Icon size (px)", ref iconSize, 8, 64))
                 {
                     party.JobIconSizePx = iconSize;
                     plugin.RequestSave();
@@ -369,66 +435,41 @@ internal sealed class UnitFrameEditor
 
             ImGui.Spacing();
 
-            var manaMode = party.ManaMode;
-            if (EnumCombo("Mana bar", ref manaMode, PartyManaLabel))
+            var mpMode = party.MpMode;
+            if (EnumCombo("MP bar", ref mpMode, PartyMpLabel))
             {
-                party.ManaMode = manaMode;
+                party.MpMode = mpMode;
                 plugin.RequestSave();
             }
 
-            var manaHeight = party.Look.ManaHeightPx;
-            if (ImGui.SliderInt("Mana bar height (px)", ref manaHeight, 2, 12))
+            var mpHeight = party.Look.MpHeightPx;
+            if (ImGui.SliderInt("MP bar height (px)", ref mpHeight, 2, 12))
             {
-                party.Look.ManaHeightPx = manaHeight;
+                party.Look.MpHeightPx = mpHeight;
                 plugin.RequestSave();
             }
 
-            var manaColor = party.Look.ManaColor;
-            if (ImGui.ColorEdit4("Mana color", ref manaColor, ImGuiColorEditFlags.NoAlpha))
+            var mpColor = party.Look.MpColor;
+            if (ImGui.ColorEdit4("MP color", ref mpColor, ImGuiColorEditFlags.NoAlpha))
             {
-                party.Look.ManaColor = new Vector4(manaColor.X, manaColor.Y, manaColor.Z, 1f);
+                party.Look.MpColor = new Vector4(mpColor.X, mpColor.Y, mpColor.Z, 1f);
                 plugin.RequestSave();
             }
-
-            ImGui.Spacing();
-
-            var ring = party.SelectionRing;
-            if (ImGui.Checkbox("Ring around the member I have targeted", ref ring))
-            {
-                party.SelectionRing = ring;
-                plugin.RequestSave();
-            }
-
-            var arrow = party.SelectionArrow;
-            if (ImGui.Checkbox("Arrow next to the member I have targeted", ref arrow))
-            {
-                party.SelectionArrow = arrow;
-                plugin.RequestSave();
-            }
-
-            var selection = party.SelectionColor;
-            if (ImGui.ColorEdit4("Targeted member color", ref selection, ImGuiColorEditFlags.NoAlpha))
-            {
-                party.SelectionColor = new Vector4(selection.X, selection.Y, selection.Z, 1f);
-                plugin.RequestSave();
-            }
-
-            ImGui.TextColored(Theme.TextMuted, "With no party, sample members are shown while this page is open or in unlock mode.");
         });
     }
 
     // Options shared by the two rows of a frame.
     private void DrawFrameStatusOptions(UnitFrameSettings settings)
     {
-        if (selectedFrame != 1)
+        if (selectedFrame != TargetPage)
             return;
 
         Widgets.Card($"##card_uf{selectedFrame}_native_status", 3, () =>
         {
-            Widgets.SectionLabel("Buffs and debuffs of the game");
+            Widgets.SectionLabel("Enhancements and enfeeblements of the game");
 
             var hide = settings.HideNativeStatuses;
-            if (ImGui.Checkbox("Hide the game's buffs and debuffs of the target while mine are on", ref hide))
+            if (ImGui.Checkbox("Hide the game's enhancements and enfeeblements of the target while mine are on", ref hide))
             {
                 settings.HideNativeStatuses = hide;
                 plugin.RequestSave();
@@ -436,10 +477,10 @@ internal sealed class UnitFrameEditor
         });
     }
 
-    // One row of icons of the party (buffs or debuffs): what it shows, where it goes, how big the icons are.
-    private void DrawPartyAuras(string cardId, string title, PartyAuraSettings row, bool isBuff, StatusSearchState search)
+    // One row of icons of the party (enhancements or enfeeblements): what it shows, where it goes, how big the icons are.
+    private void DrawPartyAuras(string cardId, string title, PartyAuraSettings row, bool isEnhancement, StatusSearchState search)
     {
-        var kind = isBuff ? "buff" : "debuff";
+        var kind = isEnhancement ? "enhancement" : "enfeeblement";
 
         // Run the name search only when the text changed.
         if (search.Text != search.Applied)
@@ -511,10 +552,11 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var offsetY = row.OffsetY;
+            // Up is plus (the saved value counts downwards, so the sign is turned in the editors).
+            var offsetY = -row.OffsetY;
             if (ImGui.InputInt("Offset Y (px)", ref offsetY, 1, 5))
             {
-                row.OffsetY = Math.Clamp(offsetY, -500, 500);
+                row.OffsetY = -Math.Clamp(offsetY, -500, 500);
                 plugin.RequestSave();
             }
 
@@ -599,10 +641,10 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var timerY = row.TimerOffsetY;
+            var timerY = -row.TimerOffsetY;
             if (ImGui.InputInt("Time offset Y (px)", ref timerY, 1, 5))
             {
-                row.TimerOffsetY = timerY;
+                row.TimerOffsetY = -timerY;
                 plugin.RequestSave();
             }
 
@@ -615,9 +657,8 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            // 0 = automatic (three quarters of the time size), as in the auras.
-            var stackSize = row.StackTextSize;
-            if (ImGui.SliderInt("Stack size (px, 0 = automatic)", ref stackSize, 0, 24))
+            var stackSize = row.StackTextSize > 0 ? row.StackTextSize : 8;
+            if (ImGui.SliderInt("Stack size (px)", ref stackSize, 4, 24))
             {
                 row.StackTextSize = stackSize;
                 plugin.RequestSave();
@@ -637,10 +678,10 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var stacksY = row.StacksOffsetY;
+            var stacksY = -row.StacksOffsetY;
             if (ImGui.InputInt("Stack offset Y (px)", ref stacksY, 1, 5))
             {
-                row.StacksOffsetY = stacksY;
+                row.StacksOffsetY = -stacksY;
                 plugin.RequestSave();
             }
 
@@ -660,7 +701,7 @@ internal sealed class UnitFrameEditor
             }
             else
             {
-                DrawPartyStatusList(row, isBuff, kind, search);
+                DrawPartyStatusList(row, isEnhancement, kind, search);
             }
 
             DrawExtraStatusList(row, kind, cardId, extra);
@@ -710,7 +751,7 @@ internal sealed class UnitFrameEditor
     }
 
     // The list of statuses of a row: what is in it, a way to add from what the party has right now, and a name search.
-    private void DrawPartyStatusList(PartyAuraSettings row, bool isBuff, string kind, StatusSearchState search)
+    private void DrawPartyStatusList(PartyAuraSettings row, bool isEnhancement, string kind, StatusSearchState search)
     {
         ImGui.Spacing();
         ImGui.TextColored(Theme.TextMuted, row.Filter == PartyAuraFilter.OnlyListed ? $"Only these {kind}s are shown:" : $"These {kind}s are hidden:");
@@ -739,7 +780,7 @@ internal sealed class UnitFrameEditor
         ImGui.Spacing();
         ImGui.TextColored(Theme.TextMuted, $"On your party right now (click to add):");
 
-        var wanted = (byte)(isBuff ? 1 : 2);
+        var wanted = (byte)(isEnhancement ? 1 : 2);
         var seen = new HashSet<uint>();
 
         foreach (var member in plugin.GameData.Current.Party)
@@ -776,8 +817,8 @@ internal sealed class UnitFrameEditor
 
             var resultKind = result.Category switch
             {
-                1 => "buff",
-                2 => "debuff",
+                1 => "enhancement",
+                2 => "enfeeblement",
                 _ => string.Empty
             };
 
@@ -790,7 +831,7 @@ internal sealed class UnitFrameEditor
     }
 
     // A text size chosen from the fixed steps: each one is a real font, so the text is always sharp.
-    private static bool SizeCombo(string label, ref int value)
+    internal static bool SizeCombo(string label, ref int value)
     {
         var changed = false;
 
@@ -832,49 +873,55 @@ internal sealed class UnitFrameEditor
         _ => "Me first, then the others"
     };
 
-    private static string PartyManaLabel(PartyManaMode mode) => mode switch
+    private static string PartyMpLabel(PartyMpMode mode) => mode switch
     {
-        PartyManaMode.Off => "No one",
-        PartyManaMode.Healers => "Healers",
-        PartyManaMode.HealersAndRaisers => "Healers and jobs that can raise",
+        PartyMpMode.Off => "No one",
+        PartyMpMode.Healers => "Healers",
+        PartyMpMode.HealersAndRaisers => "Healers and jobs that can raise",
         _ => "Everyone"
     };
 
     // One swatch per job. What is changed here is kept apart from the built-in colours, so it can always be reset.
-    private void DrawClassColors(UnitFrameSettings settings)
+    // Shown on the Appearance page: three colours, one per role, used by every frame (and the stripe of the party).
+    internal void DrawRoleColorsCard()
     {
-        Widgets.Card("##card_uf_classcolors", 12, () =>
+        var frames = plugin.Configuration.UnitFrames;
+
+        Widgets.Card("##card_uf_rolecolors", 9, () =>
         {
-            Widgets.SectionLabel("Class colors");
-            ImGui.TextColored(Theme.TextMuted, "The same for every frame (player, target, target of target and focus). Used when a frame's life color is set to the class color.");
-            ImGui.TextColored(Theme.TextMuted, "Click a swatch to change it.");
+            Widgets.SectionLabel("Role colors");
+            ImGui.TextColored(Theme.TextMuted, "The same for every frame (player, target, target of target, focus and party). Used when a frame's HP color is set to the color of the role,");
+            ImGui.TextColored(Theme.TextMuted, "and for the stripe of the party. Nameplates take their colors from the game's own options.");
             ImGui.Spacing();
 
-            var overrides = plugin.Configuration.UnitFrames.JobColorOverrides;
-
-            for (var i = 0; i < JobColors.Order.Length; i++)
+            var tank = frames.TankColor;
+            if (ImGui.ColorEdit4("Tank", ref tank, ImGuiColorEditFlags.NoAlpha))
             {
-                var jobId = JobColors.Order[i];
-                var color = JobColors.Get(overrides, jobId, settings.FriendlyColor);
+                frames.TankColor = new Vector4(tank.X, tank.Y, tank.Z, 1f);
+                plugin.RequestSave();
+            }
 
-                var flags = ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.NoAlpha;
-                if (ImGui.ColorEdit4($"##class_color_{jobId}", ref color, flags))
-                {
-                    overrides[jobId] = new Vector4(color.X, color.Y, color.Z, 1f);
-                    plugin.RequestSave();
-                }
+            var healer = frames.HealerColor;
+            if (ImGui.ColorEdit4("Healer", ref healer, ImGuiColorEditFlags.NoAlpha))
+            {
+                frames.HealerColor = new Vector4(healer.X, healer.Y, healer.Z, 1f);
+                plugin.RequestSave();
+            }
 
-                ImGui.SameLine();
-                ImGui.Text(GameNames.JobAbbreviation(jobId));
-
-                if ((i + 1) % JobsPerRow != 0 && i < JobColors.Order.Length - 1)
-                    ImGui.SameLine();
+            var damage = frames.DamageColor;
+            if (ImGui.ColorEdit4("Damage", ref damage, ImGuiColorEditFlags.NoAlpha))
+            {
+                frames.DamageColor = new Vector4(damage.X, damage.Y, damage.Z, 1f);
+                plugin.RequestSave();
             }
 
             ImGui.Spacing();
-            if (ImGui.Button("Reset all class colors"))
+            if (ImGui.Button("Reset role colors"))
             {
-                overrides.Clear();
+                var defaults = new UnitFramesSettings();
+                frames.TankColor = defaults.TankColor;
+                frames.HealerColor = defaults.HealerColor;
+                frames.DamageColor = defaults.DamageColor;
                 plugin.RequestSave();
             }
         });
@@ -882,7 +929,7 @@ internal sealed class UnitFrameEditor
 
     private void DrawName(UnitFrameSettings settings)
     {
-        Widgets.Card("##card_uf_name", 14, () =>
+        Widgets.Card("##card_uf_name", selectedFrame == HpPage ? 13 : 14, () =>
         {
             Widgets.SectionLabel("Name");
 
@@ -900,11 +947,15 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var onlyPlayers = settings.NameFormatOnlyPlayers;
-            if (ImGui.Checkbox("Only shorten the names of players", ref onlyPlayers))
+            // Your own frame is always a player, so the option only makes sense where the unit can be an enemy or an NPC.
+            if (selectedFrame != HpPage)
             {
-                settings.NameFormatOnlyPlayers = onlyPlayers;
-                plugin.RequestSave();
+                var onlyPlayers = settings.NameFormatOnlyPlayers;
+                if (ImGui.Checkbox("Only shorten the names of players", ref onlyPlayers))
+                {
+                    settings.NameFormatOnlyPlayers = onlyPlayers;
+                    plugin.RequestSave();
+                }
             }
 
             ImGui.Spacing();
@@ -916,48 +967,65 @@ internal sealed class UnitFrameEditor
 
     private void DrawHealth(UnitFrameSettings settings)
     {
-        var custom = settings.HealthPreset == HealthTextPreset.Custom;
-
-        Widgets.Card("##card_uf_health", custom ? 22 : 19, () =>
+        // What it looks like right now, with the real HP of this frame's unit (or a sample one).
+        var snapshot = plugin.GameData.Current;
+        var unit = selectedFrame switch
         {
-            Widgets.SectionLabel("Life text");
+            TargetPage => snapshot.Target,
+            TargetOfTargetPage => snapshot.TargetOfTarget,
+            FocusPage => snapshot.Focus,
+            _ => snapshot.Player
+        };
 
-            var enabled = settings.Health.Enabled;
-            if (ImGui.Checkbox("Show the life text", ref enabled))
+        DrawValueText("##card_uf_health", "HP", settings, settings.Health, unit?.Hp ?? 104071u, unit?.MaxHp ?? 140000u);
+    }
+
+    // The card of a number text (HP or MP): what it says, separator, decimals, thousands, and the look of the text.
+    // Both bars use it, so they have exactly the same choices.
+    private void DrawValueText(string cardId, string name, IValueTextFormat format, FrameTextSettings text, uint current, uint max)
+    {
+        var custom = format.HealthPreset == HealthTextPreset.Custom;
+
+        Widgets.Card(cardId, custom ? 22 : 19, () =>
+        {
+            Widgets.SectionLabel($"{name} text");
+
+            var enabled = text.Enabled;
+            if (ImGui.Checkbox($"Show the {name} text", ref enabled))
             {
-                settings.Health.Enabled = enabled;
+                text.Enabled = enabled;
                 plugin.RequestSave();
             }
 
-            var preset = settings.HealthPreset;
-            if (EnumCombo("What it says", ref preset, HealthPresetLabel))
+            var preset = format.HealthPreset;
+            if (EnumCombo("What it says", ref preset, value => HealthPresetLabel(value, name)))
             {
-                settings.HealthPreset = preset;
+                SetPreset(format, preset);
                 plugin.RequestSave();
             }
 
             if (custom)
             {
-                var template = settings.CustomTemplate ?? string.Empty;
+                var template = format.CustomTemplate ?? string.Empty;
                 if (ImGui.InputText("Template", ref template, 64))
                 {
-                    settings.CustomTemplate = template;
+                    SetTemplate(format, template);
                     plugin.RequestSave();
                 }
 
                 ImGui.TextColored(Theme.TextMuted, "{cur} {max} {def} in full, {curk} {maxk} {defk} abbreviated, {pct} percentage.");
-                ImGui.TextColored(Theme.TextMuted, "def is the missing life.");
+                ImGui.TextColored(Theme.TextMuted, $"def is the missing {name}.");
             }
 
             // The separator only matters for the presets that show two things.
-            var separatorLabel = SeparatorLabel(settings.Separator);
+            var separatorLabel = SeparatorLabel(format.Separator);
             if (ImGui.BeginCombo("Separator", separatorLabel, ImGuiComboFlags.None))
             {
                 foreach (var (value, label) in Separators)
                 {
-                    if (ImGui.Selectable(label, value == settings.Separator))
+                    if (ImGui.Selectable(label, value == format.Separator))
                     {
-                        settings.Separator = value;
+                        SetSeparator(format, value);
                         plugin.RequestSave();
                     }
                 }
@@ -965,163 +1033,237 @@ internal sealed class UnitFrameEditor
                 ImGui.EndCombo();
             }
 
-            var percentDecimals = settings.PercentDecimals;
+            var percentDecimals = format.PercentDecimals;
             if (ImGui.SliderInt("Percentage decimals", ref percentDecimals, 0, 2))
             {
-                settings.PercentDecimals = percentDecimals;
+                SetPercentDecimals(format, percentDecimals);
                 plugin.RequestSave();
             }
 
-            var abbreviationDecimals = settings.AbbreviationDecimals;
+            var abbreviationDecimals = format.AbbreviationDecimals;
             if (ImGui.SliderInt("Decimals of 738K", ref abbreviationDecimals, 0, 2))
             {
-                settings.AbbreviationDecimals = abbreviationDecimals;
+                SetAbbreviationDecimals(format, abbreviationDecimals);
                 plugin.RequestSave();
             }
 
-            var thousands = settings.Thousands;
+            var thousands = format.Thousands;
             if (EnumCombo("Thousands separator", ref thousands, ThousandsLabel))
             {
-                settings.Thousands = thousands;
+                SetThousands(format, thousands);
                 plugin.RequestSave();
             }
 
             ImGui.Spacing();
 
-            if (TextControls(settings.Health))
+            if (TextControls(text))
                 plugin.RequestSave();
 
-            // What it looks like right now, with the real life of this frame's unit (or a sample one).
-            var snapshot = plugin.GameData.Current;
-            var unit = selectedFrame switch
-            {
-                1 => snapshot.Target,
-                2 => snapshot.TargetOfTarget,
-                3 => snapshot.Focus,
-                _ => snapshot.Player
-            };
-
-            var hp = unit?.Hp ?? 104071u;
-            var maxHp = unit?.MaxHp ?? 140000u;
-
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, $"Now it reads: {UnitTextFormatter.FormatHealth(settings, hp, maxHp)}");
+            ImGui.TextColored(Theme.TextMuted, $"Now it reads: {UnitTextFormatter.FormatHealth(format, current, max)}");
         });
     }
 
-    private void DrawMana(UnitFrameSettings settings)
+    // The two kinds of settings (a frame and the MP text) keep the same properties; the editor writes them through these.
+    private static void SetPreset(IValueTextFormat f, HealthTextPreset v) { if (f is UnitFrameSettings u) u.HealthPreset = v; else if (f is MpTextSettings m) m.HealthPreset = v; }
+    private static void SetTemplate(IValueTextFormat f, string v) { if (f is UnitFrameSettings u) u.CustomTemplate = v; else if (f is MpTextSettings m) m.CustomTemplate = v; }
+    private static void SetSeparator(IValueTextFormat f, string v) { if (f is UnitFrameSettings u) u.Separator = v; else if (f is MpTextSettings m) m.Separator = v; }
+    private static void SetPercentDecimals(IValueTextFormat f, int v) { if (f is UnitFrameSettings u) u.PercentDecimals = v; else if (f is MpTextSettings m) m.PercentDecimals = v; }
+    private static void SetAbbreviationDecimals(IValueTextFormat f, int v) { if (f is UnitFrameSettings u) u.AbbreviationDecimals = v; else if (f is MpTextSettings m) m.AbbreviationDecimals = v; }
+    private static void SetThousands(IValueTextFormat f, ThousandsSeparator v) { if (f is UnitFrameSettings u) u.Thousands = v; else if (f is MpTextSettings m) m.Thousands = v; }
+
+    // ---------------------------------------------------------------- HP bar and MP bar of the player
+
+    // The jobs where your HP bar is on. Everything is on by default, new jobs included.
+    // The master switch of the Parameter bar page and the two tabs (HP bar, MP bar).
+    private void DrawParameterBarSwitch(UnitFrameSettings settings)
     {
-        Widgets.Card("##card_uf_mana", 27, () =>
+        Widgets.Card("##card_uf_parameter", 7, () =>
         {
-            Widgets.SectionLabel("Mana bar");
+            Widgets.SectionLabel("Parameter bar");
 
-            var showMana = settings.ShowMana;
-            if (ImGui.Checkbox("Show the mana bar", ref showMana))
+            var enabled = settings.Enabled;
+            if (ImGui.Checkbox("Enabled", ref enabled))
             {
-                settings.ShowMana = showMana;
+                settings.Enabled = enabled;
                 plugin.RequestSave();
             }
 
-            // When it goes under the life bar it is as wide as it.
-            var height = settings.ManaHeightPx;
-            if (ImGui.SliderInt("Height under the life bar (px)", ref height, 2, 24))
-            {
-                settings.ManaHeightPx = height;
-                plugin.RequestSave();
-            }
-
-            var gap = settings.ManaGapPx;
-            if (ImGui.SliderInt("Space under the life bar (px)", ref gap, 0, 12))
-            {
-                settings.ManaGapPx = gap;
-                plugin.RequestSave();
-            }
-
+            ImGui.TextColored(Theme.TextMuted, "On: NahjaUI draws your HP and MP and the game's parameter bar is hidden.");
+            ImGui.TextColored(Theme.TextMuted, "Off: the game's bar is shown and nothing of this page is drawn.");
             ImGui.Spacing();
 
-            // In its own box it has its own size, like its position (moved in unlock mode).
-            var boxLayout = plugin.UnitFrameSystem.ManaElement.Layout;
+            string[] tabs = { "HP bar", "MP bar" };
+            for (var i = 0; i < tabs.Length; i++)
+            {
+                if (i > 0)
+                    ImGui.SameLine();
+
+                ImGui.PushStyleColor(ImGuiCol.Button, i == parameterTab ? Theme.Mix(Theme.Field, Theme.Accent, 0.85f) : Theme.Field);
+                if (ImGui.Button(tabs[i]))
+                    parameterTab = i;
+                ImGui.PopStyleColor();
+            }
+        });
+    }
+
+    private void DrawHpJobs(UnitFrameSettings settings)
+    {
+        Widgets.Card("##card_uf_hp_jobs", 22, () =>
+        {
+            Widgets.SectionLabel("HP bar on each job");
+
+            var showHp = settings.ShowHp;
+            if (ImGui.Checkbox("Show the HP bar", ref showHp))
+            {
+                settings.ShowHp = showHp;
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, "Click a job to turn its HP bar on or off.");
+
+            if (DrawJobToggles("hp", settings.IsHpOn, settings.SetHpOn))
+                plugin.RequestSave();
+        });
+    }
+
+    private void DrawMp(UnitFrameSettings settings)
+    {
+        var player = plugin.GameData.Current.Player;
+        DrawMpBarCard(settings);
+        DrawValueText("##card_uf_mp_text", "MP", settings.MpText, settings.MpText.Text, player?.Mp ?? 8400u, player?.MaxMp ?? 12000u);
+        DrawMpJobs(settings);
+    }
+
+    private void DrawMpJobs(UnitFrameSettings settings)
+    {
+        Widgets.Card("##card_uf_mp_jobs", 23, () =>
+        {
+            Widgets.SectionLabel("MP bar on each job");
+
+            var showMp = settings.ShowMp;
+            if (ImGui.Checkbox("Show the MP bar", ref showMp))
+            {
+                settings.ShowMp = showMp;
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, "Click a job to turn its MP bar on or off. Crafters show CP and gatherers GP.");
+
+            if (DrawJobToggles("mp", settings.IsMpOn, settings.SetMpOn))
+                plugin.RequestSave();
+        });
+    }
+
+    private void DrawMpBarCard(UnitFrameSettings settings)
+    {
+        Widgets.Card("##card_uf_mp", 9, () =>
+        {
+            Widgets.SectionLabel("MP bar");
+
+            var boxLayout = plugin.UnitFrameSystem.MpElement.Layout;
 
             var boxWidth = boxLayout.Width;
-            if (ImGui.InputInt("Own box width (px)", ref boxWidth, 2, 10))
+            if (ImGui.InputInt("Width (px)", ref boxWidth, 2, 10))
             {
                 boxLayout.Width = Math.Clamp(boxWidth, 1, 4000);
                 plugin.RequestSave();
             }
 
             var boxHeight = boxLayout.Height;
-            if (ImGui.InputInt("Own box height (px)", ref boxHeight, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref boxHeight, 2, 10))
             {
                 boxLayout.Height = Math.Clamp(boxHeight, 1, 1000);
                 plugin.RequestSave();
             }
 
-            var color = settings.ManaColor;
-            if (ImGui.ColorEdit4("Mana color", ref color, ImGuiColorEditFlags.NoAlpha))
+            var rounding = settings.MpRoundingPx;
+            if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
             {
-                settings.ManaColor = new Vector4(color.X, color.Y, color.Z, 1f);
+                settings.MpRoundingPx = rounding;
                 plugin.RequestSave();
             }
 
-            ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Choose where the mana bar goes on each job. Click a job to change it:");
-            ImGui.TextColored(Theme.TextMuted, "off, under the life bar, or in its own box (moved in unlock mode).");
-
-            // A shortcut for the job being played.
-            if (plugin.GameData.Current.Player?.JobId is { } jobNow)
+            var color = settings.MpColor;
+            if (ImGui.ColorEdit4("MP color", ref color, ImGuiColorEditFlags.NoAlpha))
             {
-                var current = settings.GetManaPlacement(jobNow);
-                if (EnumCombo($"Mana on my current job ({GameNames.JobAbbreviation(jobNow)})", ref current, PlacementLabel))
-                {
-                    settings.SetManaPlacement(jobNow, current);
-                    plugin.RequestSave();
-                }
+                settings.MpColor = new Vector4(color.X, color.Y, color.Z, 1f);
+                plugin.RequestSave();
             }
 
-            ImGui.Spacing();
-
-            // One button per job; each click goes to the next place: off, under the life bar, own box.
-            var buttonWidth = 112f * ImGuiHelpers.GlobalScale;
-
-            for (var i = 0; i < Jobs.Length; i++)
+            var background = settings.MpBackgroundColor;
+            if (ImGui.ColorEdit4("Background color", ref background, ImGuiColorEditFlags.None))
             {
-                var jobId = Jobs[i];
-                var placement = settings.GetManaPlacement(jobId);
+                settings.MpBackgroundColor = background;
+                plugin.RequestSave();
+            }
 
-                var tint = placement switch
-                {
-                    ManaPlacement.UnderLifeBar => Theme.Mix(Theme.Field, Theme.Accent, 0.45f),
-                    ManaPlacement.OwnBox => Theme.Mix(Theme.Field, Theme.Accent, 0.85f),
-                    _ => Theme.Field
-                };
+            var border = settings.MpBorderColor;
+            if (ImGui.ColorEdit4("Border color", ref border, ImGuiColorEditFlags.NoAlpha))
+            {
+                settings.MpBorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
+                plugin.RequestSave();
+            }
+        });
+    }
 
-                ImGui.PushStyleColor(ImGuiCol.Button, tint);
-                var clicked = ImGui.Button($"{GameNames.JobAbbreviation(jobId)}  {PlacementShort(placement)}##mana_job_{jobId}", new Vector2(buttonWidth, 0f));
+    // One button per job, by role, lit when the job is on. All / None for each role.
+    private bool DrawJobToggles(string key, Func<uint, bool> isOn, Action<uint, bool> setOn)
+    {
+        var changed = false;
+        var buttonWidth = 84f * ImGuiHelpers.GlobalScale;
+
+        foreach (var (role, jobs) in RolesWithBeastmaster())
+        {
+            ImGui.TextColored(Theme.TextMuted, role);
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton($"All##{key}_all_{role}"))
+            {
+                foreach (var jobId in jobs)
+                    setOn(jobId, true);
+
+                changed = true;
+            }
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"None##{key}_none_{role}"))
+            {
+                foreach (var jobId in jobs)
+                    setOn(jobId, false);
+
+                changed = true;
+            }
+
+            for (var i = 0; i < jobs.Length; i++)
+            {
+                var jobId = jobs[i];
+                var on = isOn(jobId);
+
+                ImGui.PushStyleColor(ImGuiCol.Button, on ? Theme.Mix(Theme.Field, Theme.Accent, 0.85f) : Theme.Field);
+                var clicked = ImGui.Button($"{GameNames.JobAbbreviation(jobId)}  {(on ? "on" : "off")}##{key}_job_{jobId}", new Vector2(buttonWidth, 0f));
                 ImGui.PopStyleColor();
 
                 if (clicked)
                 {
-                    var next = placement switch
-                    {
-                        ManaPlacement.Off => ManaPlacement.UnderLifeBar,
-                        ManaPlacement.UnderLifeBar => ManaPlacement.OwnBox,
-                        _ => ManaPlacement.Off
-                    };
-
-                    settings.SetManaPlacement(jobId, next);
-                    plugin.RequestSave();
+                    setOn(jobId, !on);
+                    changed = true;
                 }
 
-                if ((i + 1) % 4 != 0 && i < Jobs.Length - 1)
+                if ((i + 1) % 6 != 0 && i < jobs.Length - 1)
                     ImGui.SameLine();
             }
-        });
+
+            ImGui.Spacing();
+        }
+
+        return changed;
     }
 
     // ---------------------------------------------------------------- helpers
 
     // The point of the bar, the two offsets, the size, the font and the colour of one text.
-    private static bool TextControls(FrameTextSettings text)
+    internal static bool TextControls(FrameTextSettings text)
     {
         var changed = false;
 
@@ -1139,14 +1281,12 @@ internal sealed class UnitFrameEditor
             changed = true;
         }
 
-        var y = text.OffsetY;
+        var y = -text.OffsetY;
         if (ImGui.InputInt("Offset Y (px)", ref y, 1, 5))
         {
-            text.OffsetY = y;
+            text.OffsetY = -y;
             changed = true;
         }
-
-        ImGui.TextColored(Theme.TextMuted, "The point of the bar the text is attached to (the text's own same point goes there).");
 
         // Font sizes are fixed steps: each one is a real font, so the text is always sharp.
         if (ImGui.BeginCombo("Text size (px)", $"{text.TextSize} px", ImGuiComboFlags.None))
@@ -1180,28 +1320,13 @@ internal sealed class UnitFrameEditor
         return changed;
     }
 
-    private static string LifeColorModeLabel(LifeColorMode mode) => mode switch
+    private static string HpColorModeLabel(HpColorMode mode) => mode switch
     {
-        LifeColorMode.Fixed => "One fixed color",
-        LifeColorMode.Class => "The color of the class (job)",
+        HpColorMode.Fixed => "One fixed color",
+        HpColorMode.Role => "The color of the role (tank, healer, damage)",
         _ => mode.ToString()
     };
 
-    private static string PlacementLabel(ManaPlacement placement) => placement switch
-    {
-        ManaPlacement.Off => "No mana bar",
-        ManaPlacement.UnderLifeBar => "Under the life bar",
-        ManaPlacement.OwnBox => "In its own box",
-        _ => placement.ToString()
-    };
-
-    private static string PlacementShort(ManaPlacement placement) => placement switch
-    {
-        ManaPlacement.Off => "off",
-        ManaPlacement.UnderLifeBar => "under",
-        ManaPlacement.OwnBox => "own box",
-        _ => placement.ToString()
-    };
 
     private static string SeparatorLabel(string value)
     {
@@ -1225,15 +1350,15 @@ internal sealed class UnitFrameEditor
         _ => format.ToString()
     };
 
-    private static string HealthPresetLabel(HealthTextPreset preset) => preset switch
+    private static string HealthPresetLabel(HealthTextPreset preset, string name) => preset switch
     {
-        HealthTextPreset.CurrentAndPercent => "Life abbreviated and percentage (738K | 100%)",
-        HealthTextPreset.CurrentFullAndPercent => "Life in full and percentage (738,000 | 100%)",
-        HealthTextPreset.Current => "Life abbreviated (738K)",
-        HealthTextPreset.CurrentFull => "Life in full (738,000)",
+        HealthTextPreset.CurrentAndPercent => $"{name} abbreviated and percentage (738K | 100%)",
+        HealthTextPreset.CurrentFullAndPercent => $"{name} in full and percentage (738,000 | 100%)",
+        HealthTextPreset.Current => $"{name} abbreviated (738K)",
+        HealthTextPreset.CurrentFull => $"{name} in full (738,000)",
         HealthTextPreset.Percent => "Percentage only (100%)",
-        HealthTextPreset.CurrentAndMax => "Life and maximum (738K / 738K)",
-        HealthTextPreset.Deficit => "Missing life (-12K)",
+        HealthTextPreset.CurrentAndMax => $"{name} and maximum (738K / 738K)",
+        HealthTextPreset.Deficit => $"Missing {name} (-12K)",
         HealthTextPreset.Custom => "Custom template",
         _ => preset.ToString()
     };
@@ -1247,7 +1372,7 @@ internal sealed class UnitFrameEditor
         _ => separator.ToString()
     };
 
-    private static string FontLabel(OverlayFont font) => font switch
+    internal static string FontLabel(OverlayFont font) => font switch
     {
         OverlayFont.GameNumbers => "Game numbers (Meidinger)",
         OverlayFont.GameUi => "Game interface (Axis)",
@@ -1260,7 +1385,7 @@ internal sealed class UnitFrameEditor
     };
 
     // A drop-down list for any enum. Returns true when the user picked a different value.
-    private static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler) where T : struct, Enum
+    internal static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler) where T : struct, Enum
     {
         var changed = false;
 

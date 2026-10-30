@@ -63,6 +63,15 @@ internal static class OutlinedText
         drawList.AddText(pos, color, text);
     }
 
+    /// <summary>The same with an outline of the given color (an ImGui colour value).</summary>
+    public static void Draw(ImDrawListPtr drawList, Vector2 pos, string text, uint color, uint outline)
+    {
+        foreach (var offset in Offsets)
+            drawList.AddText(pos + offset, outline, text);
+
+        drawList.AddText(pos, color, text);
+    }
+
     /// <summary>Draws the text at <paramref name="pos"/> in the given colour (an ImGui colour value), with a black outline.</summary>
     public static void Draw(ImDrawListPtr drawList, Vector2 pos, string text, uint color)
     {

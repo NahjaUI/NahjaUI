@@ -4,7 +4,7 @@ using System.Numerics;
 namespace NahjaUI.Modules.UnitFrames;
 
 /// <summary>
-/// The colour of each job, for the life bar when "class color" is chosen.
+/// The colour of each job, for the HP bar when "class color" is chosen.
 /// The game has no official colour per job (it only colours by role). These are the colours FFLogs uses for the jobs,
 /// as transcribed in a public list (stocky37's "fflogs-colours.yaml", January 2022) for the jobs that existed then,
 /// plus Viper, Pictomancer and Blue Mage as given by the owner from the current FFLogs. Every one can be changed in the

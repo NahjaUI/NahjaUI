@@ -263,10 +263,11 @@ internal sealed class UnlockOverlay
             ImGui.SameLine();
 
             ImGui.SetNextItemWidth(fieldWidth);
-            var y = data.OffsetY;
+            // Up is plus (the saved value counts downwards, so the sign is turned here).
+            var y = -data.OffsetY;
             if (ImGui.InputInt("Y", ref y, 1, 10) && !data.Locked)
             {
-                data.OffsetY = y;
+                data.OffsetY = -y;
                 plugin.RequestSave();
             }
 

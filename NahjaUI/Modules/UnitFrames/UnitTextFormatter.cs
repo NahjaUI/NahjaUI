@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace NahjaUI.Modules.UnitFrames;
 
-/// <summary>Turns names, life and numbers into the text a frame shows, following the user's settings.</summary>
+/// <summary>Turns names, HP and numbers into the text a frame shows, following the user's settings.</summary>
 internal static class UnitTextFormatter
 {
     // ---------------------------------------------------------------- names
@@ -38,9 +38,9 @@ internal static class UnitTextFormatter
         };
     }
 
-    // ---------------------------------------------------------------- life
+    // ---------------------------------------------------------------- HP
 
-    public static string FormatHealth(UnitFrameSettings settings, uint current, uint max)
+    public static string FormatHealth(IValueTextFormat settings, uint current, uint max)
     {
         if (settings.HealthPreset == HealthTextPreset.Deficit && current >= max)
             return string.Empty;
@@ -84,7 +84,7 @@ internal static class UnitTextFormatter
     }
 
     /// <summary>738,000 as 738K and 1,250,000 as 1.2M. With the dot as thousands separator the decimal mark is a comma.</summary>
-    public static string Abbreviate(uint value, UnitFrameSettings settings)
+    public static string Abbreviate(uint value, IValueTextFormat settings)
     {
         var decimals = Math.Clamp(settings.AbbreviationDecimals, 0, 2);
         string text;
@@ -111,8 +111,8 @@ internal static class UnitTextFormatter
         return settings.Thousands == ThousandsSeparator.Dot ? text.Replace('.', ',') : text;
     }
 
-    // The percentage is rounded down, so a life that is not full never reads 100 %.
-    public static string Percent(uint current, uint max, UnitFrameSettings settings)
+    // The percentage is rounded down, so a HP that is not full never reads 100 %.
+    public static string Percent(uint current, uint max, IValueTextFormat settings)
     {
         var decimals = Math.Clamp(settings.PercentDecimals, 0, 2);
         var percent = max == 0 ? 0.0 : Math.Min(current * 100.0 / max, 100.0);

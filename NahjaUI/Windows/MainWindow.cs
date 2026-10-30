@@ -15,15 +15,14 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly string[] Pages = { "General", "Auras", "Unit frames", "Nameplates", "Enemy list", "Tooltip", "Cast bars", "Job gauges", "Appearance", "Profiles", "Layout", "Debug" };
+    private static readonly string[] Pages = { "General", "Auras", "Unit frames", "Status effects", "Nameplates", "Enmity list", "Tooltip", "Cast bars", "Job gauges", "Appearance", "Profiles", "Layout", "Debug" };
 
     private readonly Plugin plugin;
     private readonly ProfilesPage profilesPage;
     private ThemeScope? themeScope;
 
-    // Only used by the preview card on the Appearance page.
-    private bool previewToggle = true;
-    private int previewValue = 46;
+    // Set by the Appearance page: put the window back in the centre of the screen on the next frame.
+    private bool centerRequested;
 
     // The tool that lists the game's own windows (Debug page).
     private string windowFilter = "Target";
@@ -35,23 +34,16 @@ public class MainWindow : Window, IDisposable
     private Vector2 lastSize;
 
     public MainWindow(Plugin plugin)
-        // The spaces in front of the title keep the first letter clear of the rounded corner.
-        // The game's own collapse arrow is off: the minimize button below turns the window into a small bar instead.
-        : base("   NahjaUI###NahjaUIMainWindow", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse)
+        // No title bar of the game's window system: the window draws its own (icon, name, arrow and cross), see DrawTitleBar.
+        // It is moved by that bar, so the window itself cannot be dragged from anywhere else.
+        : base("NahjaUI###NahjaUIMainWindow", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove)
     {
         this.plugin = plugin;
         profilesPage = new ProfilesPage(plugin);
 
-        TitleBarButtons.Add(new TitleBarButton
-        {
-            Icon = FontAwesomeIcon.WindowMinimize,
-            ShowTooltip = () => ImGui.SetTooltip("Minimize to a small bar"),
-            Click = button =>
-            {
-                if (button == ImGuiMouseButton.Left)
-                    plugin.MinimizeMainWindow();
-            }
-        });
+        ShowCloseButton = false;
+        AllowPinning = false;
+        AllowClickthrough = false;
 
         Size = new Vector2(860, 560);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -80,6 +72,19 @@ public class MainWindow : Window, IDisposable
     {
         themeScope?.Dispose();
         themeScope = new ThemeScope(plugin.Configuration);
+
+        // The first time (no saved position) and when asked: the window goes to the centre of the screen.
+        var mainViewport = ImGui.GetMainViewport();
+        var viewportCenter = mainViewport.Pos + mainViewport.Size / 2f;
+        if (centerRequested)
+        {
+            centerRequested = false;
+            ImGui.SetNextWindowPos(viewportCenter, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+        }
+        else
+        {
+            ImGui.SetNextWindowPos(viewportCenter, ImGuiCond.FirstUseEver, new Vector2(0.5f, 0.5f));
+        }
 
         // Coming back from the small bar: the window opens where the bar was.
         if (placeFrames > 0 && lastSize.X > 0f)
@@ -117,20 +122,13 @@ public class MainWindow : Window, IDisposable
         lastSize = ImGui.GetWindowSize();
         TopRight = new Vector2(windowPos.X + lastSize.X, windowPos.Y);
 
-        // Double click on the title bar: minimize to the small bar (a double click on the bar brings the window back).
-        // The right end is left out so the title bar buttons keep working.
-        if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows))
-        {
-            var titleHeight = ImGui.GetFrameHeight();
-            var mouse = ImGui.GetIO().MousePos;
+        // The title bar: icon and name at the left, arrow (minimize) and cross (close) at the right. It is also the handle to move the window.
+        var titleHeight = DrawTitleBar(scale, windowPos);
+        if (titleHeight < 0f)
+            return;
 
-            if (mouse.Y >= windowPos.Y && mouse.Y <= windowPos.Y + titleHeight
-                && mouse.X >= windowPos.X && mouse.X <= windowPos.X + lastSize.X - titleHeight * 3f)
-            {
-                plugin.MinimizeMainWindow();
-                return;
-            }
-        }
+        // The content starts under the title bar.
+        ImGui.SetCursorPos(new Vector2(ImGui.GetStyle().WindowPadding.X, titleHeight));
 
         // Padding of buttons and fields goes here, not in PreDraw, so the title bar buttons do not overlap.
         using var contentStyle = new ContentStyleScope();
@@ -150,6 +148,82 @@ public class MainWindow : Window, IDisposable
             if (content.Success)
                 DrawContent(scale);
         }
+    }
+
+    // Draws the title bar and handles it. Returns its height, or -1 when the window was minimized (nothing else must be drawn).
+    private float DrawTitleBar(float scale, Vector2 windowPos)
+    {
+        var drawList = ImGui.GetWindowDrawList();
+        var width = ImGui.GetWindowSize().X;
+        var height = MathF.Round(MathF.Max(34f * scale, ImGui.GetTextLineHeight() + 14f * scale));
+        var rounding = MathF.Min(MathF.Round(plugin.Configuration.WindowRoundingPx * scale), height / 2f + 12f * scale);
+
+        drawList.AddRectFilled(windowPos, windowPos + new Vector2(width, height), ImGui.GetColorU32(Theme.Sidebar), rounding, ImDrawFlags.RoundCornersTop);
+
+        var padding = MathF.Round(12f * scale);
+        var gap = MathF.Round(4f * scale);
+        var button = TitleButtons.Size;
+        var centerY = windowPos.Y + height / 2f;
+
+        // The two buttons at the right.
+        var closePos = new Vector2(MathF.Round(windowPos.X + width - padding - button), MathF.Round(centerY - button / 2f));
+        var minimizePos = new Vector2(closePos.X - gap - button, closePos.Y);
+
+        // The icon and the name at the left.
+        var markSize = MathF.Round(22f * scale);
+        var markPos = new Vector2(MathF.Round(windowPos.X + padding), MathF.Round(centerY - markSize / 2f));
+        NahjaMark.Draw(drawList, markPos, markSize);
+
+        var textPos = new Vector2(MathF.Round(markPos.X + markSize + 8f * scale), MathF.Round(centerY - ImGui.GetTextLineHeight() / 2f));
+        drawList.AddText(textPos, ImGui.GetColorU32(Theme.Text), "NahjaUI");
+
+        // The rest of the bar moves the window; a double click minimizes it.
+        ImGui.SetCursorScreenPos(windowPos + new Vector2(1f, 1f));
+        ImGui.InvisibleButton("##nui_title_drag", new Vector2(minimizePos.X - gap - windowPos.X, height - 2f));
+
+        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+        {
+            plugin.MinimizeMainWindow();
+            return -1f;
+        }
+
+        // Right click on the bar: the same "centre the window" as the Appearance page.
+        if (ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+            ImGui.OpenPopup("##nui_title_menu");
+
+        if (ImGui.BeginPopup("##nui_title_menu"))
+        {
+            if (ImGui.Selectable("Center the window"))
+                centerRequested = true;
+
+            ImGui.EndPopup();
+        }
+
+        if (ImGui.IsItemActive())
+        {
+            var delta = ImGui.GetIO().MouseDelta;
+            if (delta != Vector2.Zero)
+            {
+                // Never lose the bar: at least a part of it always stays on the screen.
+                var viewport = ImGui.GetMainViewport();
+                var size = ImGui.GetWindowSize();
+                var wanted = windowPos + delta;
+                var x = Math.Clamp(wanted.X, viewport.Pos.X - size.X + 80f * scale, viewport.Pos.X + viewport.Size.X - 80f * scale);
+                var y = Math.Clamp(wanted.Y, viewport.Pos.Y, viewport.Pos.Y + viewport.Size.Y - height);
+                ImGui.SetWindowPos(new Vector2(MathF.Round(x), MathF.Round(y)));
+            }
+        }
+
+        if (TitleButtons.Draw("##nui_title_minimize", minimizePos, TitleButtons.Glyph.Arrow, "Minimize to a small bar"))
+        {
+            plugin.MinimizeMainWindow();
+            return -1f;
+        }
+
+        if (TitleButtons.Draw("##nui_title_close", closePos, TitleButtons.Glyph.Close, "Close"))
+            IsOpen = false;
+
+        return height;
     }
 
     // ---------------------------------------------------------------- sidebar
@@ -253,11 +327,14 @@ public class MainWindow : Window, IDisposable
             case "Unit frames":
                 plugin.UnitFrameEditorPage.Draw();
                 break;
+            case "Status effects":
+                plugin.StatusEffectsEditorPage.Draw();
+                break;
             case "Nameplates":
                 plugin.NamePlateEditorPage.Draw();
                 break;
-            case "Enemy list":
-                plugin.EnemyListEditorPage.Draw();
+            case "Enmity list":
+                plugin.EnmityListEditorPage.Draw();
                 break;
             case "Tooltip":
                 plugin.TooltipEditorPage.Draw();
@@ -290,11 +367,12 @@ public class MainWindow : Window, IDisposable
 
     private static string PageSubtitle(string page) => page switch
     {
-        "Auras" => "Track the buffs and debuffs you care about",
-        "Unit frames" => "Life, name and mana of you and your targets",
-        "Nameplates" => "Plates over the enemies: life, name and cast",
-        "Enemy list" => "The enemies fighting you: life, aggro and casts",
-        "Tooltip" => "The description box of buffs and debuffs",
+        "Auras" => "Track the enhancements and enfeeblements you care about",
+        "Unit frames" => "HP, name and MP of you and your targets",
+        "Status effects" => "Your enhancements and enfeeblements, in the groups of the game's layout",
+        "Nameplates" => "Plates over enemies and players: HP, name and cast",
+        "Enmity list" => "The enemies fighting you: HP, enmity and casts",
+        "Tooltip" => "The description box of enhancements and enfeeblements",
         "Cast bars" => "Your cast and your target's cast",
         "Job gauges" => "The gauge of your job, drawn by NahjaUI",
         "Appearance" => "Theme and look of the interface",
@@ -318,7 +396,7 @@ public class MainWindow : Window, IDisposable
         {
             ImGui.TextColored(Theme.Accent, "About NahjaUI");
             ImGui.Spacing();
-            ImGui.TextWrapped("A modular interface suite for FINAL FANTASY XIV with an aura engine, so you only see the buffs, debuffs and cooldowns you choose.");
+            ImGui.TextWrapped("A modular interface suite for FINAL FANTASY XIV with an aura engine, so you only see the enhancements, enfeeblements and cooldowns you choose.");
             ImGui.Spacing();
             ImGui.TextColored(Theme.TextMuted, "Current milestone: H4 - first auras.");
         });
@@ -328,7 +406,7 @@ public class MainWindow : Window, IDisposable
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 5, () =>
+        Widgets.Card("##card_theme", 8, () =>
         {
             Widgets.SectionLabel("Theme");
 
@@ -338,18 +416,6 @@ public class MainWindow : Window, IDisposable
                 config.AccentColor = new Vector4(accent.X, accent.Y, accent.Z, 1f);
                 plugin.RequestSave();
             }
-
-            ImGui.Spacing();
-            if (ImGui.Button("Reset to default"))
-            {
-                config.AccentColor = Theme.DefaultAccent;
-                plugin.RequestSave();
-            }
-        });
-
-        Widgets.Card("##card_fonts", 7, () =>
-        {
-            Widgets.SectionLabel("Fonts");
 
             if (ImGui.BeginCombo("Menu text size (px)", $"{config.MenuTextSize} px"))
             {
@@ -363,6 +429,37 @@ public class MainWindow : Window, IDisposable
                 }
 
                 ImGui.EndCombo();
+            }
+
+            var rounding = config.WindowRoundingPx;
+            if (ImGui.SliderInt("Window corner rounding (px)", ref rounding, 0, 24))
+            {
+                config.WindowRoundingPx = rounding;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            if (ImGui.Button("Center the window"))
+                centerRequested = true;
+
+            ImGui.SameLine();
+            if (ImGui.Button("Reset to default"))
+            {
+                config.AccentColor = Theme.DefaultAccent;
+                config.WindowRoundingPx = 10;
+                plugin.RequestSave();
+            }
+        });
+
+        Widgets.Card("##card_game_interface", 8, () =>
+        {
+            Widgets.SectionLabel("Game interface");
+
+            var ringColor = config.TargetRingColor;
+            if (ImGui.ColorEdit4("Target ring color", ref ringColor, ImGuiColorEditFlags.NoAlpha))
+            {
+                config.TargetRingColor = new Vector4(ringColor.X, ringColor.Y, ringColor.Z, 1f);
+                plugin.RequestSave();
             }
 
             var decimals = config.TimerDecimalsBelowSeconds;
@@ -380,18 +477,8 @@ public class MainWindow : Window, IDisposable
             ImGui.TextColored(Theme.TextMuted, "New auras and cast bars already start with it.");
         });
 
-        Widgets.Card("##card_preview", 6, () =>
-        {
-            Widgets.SectionLabel("Preview");
-
-            Widgets.PrimaryButton("Primary");
-            ImGui.SameLine();
-            ImGui.Button("Secondary");
-
-            ImGui.Spacing();
-            ImGui.Checkbox("Toggle", ref previewToggle);
-            ImGui.SliderInt("Slider", ref previewValue, 0, 100);
-        });
+        // The colour of each role, for the frames we draw (the nameplates use the game's own options).
+        plugin.UnitFrameEditorPage.DrawRoleColorsCard();
     }
 
     // ---------------------------------------------------------------- layout page
@@ -422,7 +509,8 @@ public class MainWindow : Window, IDisposable
 
             foreach (var element in movable)
             {
-                if (ImGui.Selectable(element.Name, layout.SelectedId == element.Id))
+                var listName = layout.IsPerJob(element.Id) ? element.Name + "  (per job)" : element.Name;
+                if (ImGui.Selectable(listName + "##" + element.Id, layout.SelectedId == element.Id))
                     layout.SelectedId = element.Id;
             }
         });
@@ -434,7 +522,7 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        Widgets.Card("##card_editor", 14, () => DrawElementEditor(selected));
+        Widgets.Card("##card_editor", 17, () => DrawElementEditor(selected));
     }
 
     private void DrawElementEditor(LayoutElement element)
@@ -467,10 +555,11 @@ public class MainWindow : Window, IDisposable
             plugin.RequestSave();
         }
 
-        var y = data.OffsetY;
+        // Up is plus (the saved value counts downwards, so the sign is turned here).
+        var y = -data.OffsetY;
         if (ImGui.InputInt("Offset Y", ref y, 1, 10))
         {
-            data.OffsetY = y;
+            data.OffsetY = -y;
             plugin.RequestSave();
         }
 
@@ -490,6 +579,24 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Spacing();
 
+        // One position (and size) for each job: it follows the job you play, so a job with a big gauge and another without it can
+        // each have the bars where they fit.
+        var perJob = plugin.Layout.IsPerJob(element.Id);
+        if (ImGui.Checkbox("A different position for each job", ref perJob))
+        {
+            plugin.Layout.SetPerJob(element, perJob, CurrentJobId());
+            plugin.RequestSave();
+        }
+
+        if (perJob)
+        {
+            var jobId = CurrentJobId();
+            var jobName = jobId == 0 ? "no job" : GameNames.JobAbbreviation(jobId);
+            ImGui.TextColored(Theme.TextMuted, $"What you change here is saved for {jobName}. Jobs you have not moved it on start from where it was when you turned this on.");
+        }
+
+        ImGui.Spacing();
+
         var locked = data.Locked;
         if (ImGui.Checkbox("Locked (cannot be moved in unlock mode)", ref locked))
         {
@@ -502,6 +609,12 @@ public class MainWindow : Window, IDisposable
             element.ResetToDefaults();
             plugin.RequestSave();
         }
+    }
+
+    private uint CurrentJobId()
+    {
+        var snapshot = plugin.GameData.Current;
+        return snapshot.IsLoggedIn ? snapshot.Player?.JobId ?? 0u : 0u;
     }
 
     private static bool AnchorCombo(string label, ref AnchorPoint value)
@@ -594,7 +707,7 @@ public class MainWindow : Window, IDisposable
                     ImGui.Dummy(cell);
                     used += cell.X + gap;
 
-                    // A mid grey, like a life bar or the game behind it.
+                    // A mid grey, like a HP bar or the game behind it.
                     drawList.AddRectFilled(min, min + cell, ImGui.GetColorU32(new Vector4(0.30f, 0.33f, 0.40f, 1f)), 3f * scale);
 
                     using (plugin.Fonts.PushClosest(font, labSize))
@@ -608,6 +721,56 @@ public class MainWindow : Window, IDisposable
                         ImGui.GetColorU32(Theme.TextMuted), LabStyles[i].Name);
                 }
             }
+        });
+    }
+
+    // The last combo the game reported (it disappears when its timer ends, so the last one seen is kept to read it afterwards).
+    private uint lastComboAction;
+    private float lastComboTimer;
+
+    private void DrawComboCard(GameSnapshot snapshot)
+    {
+        if (snapshot.Combo is { Action: not 0 } combo)
+        {
+            lastComboAction = combo.Action;
+            lastComboTimer = combo.Timer;
+        }
+
+        Widgets.Card("##card_combo", 6, () =>
+        {
+            Widgets.SectionLabel("Combo");
+
+            var now = snapshot.Combo;
+            ImGui.Text(now is { Action: not 0 }
+                ? $"Now: {GameNames.ActionName(now.Action)} ({now.Action}), {now.Timer:0.0} s left"
+                : "Now: no combo running");
+
+            ImGui.Text(lastComboAction == 0
+                ? "Last seen: none yet"
+                : $"Last seen: {GameNames.ActionName(lastComboAction)} ({lastComboAction}), {lastComboTimer:0.0} s left when last read");
+
+            // What the game's data says each follow-up needs before it.
+            foreach (var id in new uint[] { 25748, 25749, 25750 })
+            {
+                var parent = GameNames.ComboParent(id);
+                ImGui.Text($"{GameNames.ActionName(id)} ({id}) follows: {(parent == 0 ? "nothing" : $"{GameNames.ActionName(parent)} ({parent})")}");
+            }
+        });
+    }
+
+    private void DrawActionFlagsCard(GameSnapshot snapshot)
+    {
+        var lines = GameDataProvider.ReadActionFlags(snapshot.Player?.JobId ?? 0);
+
+        Widgets.Card("##card_action_flags", lines.Count + 3, () =>
+        {
+            Widgets.SectionLabel("Action flags (glow and forms)");
+
+            if (lines.Count == 0)
+                ImGui.TextColored(Theme.TextMuted, "Nothing glowing and no action in another form right now.");
+
+            foreach (var line in lines)
+                ImGui.Text(line);
         });
     }
 
@@ -644,6 +807,9 @@ public class MainWindow : Window, IDisposable
             ImGui.Text($"Party size: {context.PartySize}");
         });
 
+        DrawComboCard(snapshot);
+        DrawActionFlagsCard(snapshot);
+
         DrawUnitCard("##card_player", "Player", snapshot.Player);
         DrawUnitCard("##card_target", "Target", snapshot.Target);
         DrawUnitCard("##card_focus", "Focus target", snapshot.Focus);
@@ -664,6 +830,8 @@ public class MainWindow : Window, IDisposable
                 ImGui.Text($"{member.Name}  {GameNames.JobAbbreviation(member.JobId)} Lv {member.Level}   HP {member.Hp}/{member.MaxHp}   statuses: {member.Statuses.Count}");
             }
         });
+
+        StatusDebugCard.Draw(snapshot);
 
         Widgets.Card("##card_game_windows", 16, () =>
         {

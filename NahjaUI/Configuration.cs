@@ -7,8 +7,9 @@ using NahjaUI.Core.Ui;
 using NahjaUI.Modules.Auras;
 using NahjaUI.Modules.CastBars;
 using NahjaUI.Modules.JobGauges;
-using NahjaUI.Modules.EnemyList;
+using NahjaUI.Modules.EnmityList;
 using NahjaUI.Modules.NamePlates;
+using NahjaUI.Modules.StatusEffects;
 using NahjaUI.Modules.Tooltip;
 using NahjaUI.Modules.UnitFrames;
 
@@ -27,6 +28,15 @@ public class Configuration : IPluginConfiguration
     // The single accent colour of the theme.
     public Vector4 AccentColor { get; set; } = Theme.DefaultAccent;
 
+    // The ring that marks your target on the enmity list, the nameplates and the party frames (one color for all of them).
+    /// <summary>Corner rounding of the NahjaUI windows, in logical pixels.</summary>
+    public int WindowRoundingPx { get; set; } = 10;
+
+    public Vector4 TargetRingColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    // Ids of the cards of the menu that the user has folded (only the title shows).
+    public List<string> CollapsedCards { get; set; } = new();
+
     // Timers (auras, icons next to the bars) show tenths of a second only below this many seconds. 0 = never.
     public int TimerDecimalsBelowSeconds { get; set; } = 3;
 
@@ -35,6 +45,10 @@ public class Configuration : IPluginConfiguration
 
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
+
+    // Elements that have a different position for each job: element id to (job id to layout). Job 0 is the base,
+    // the position a job that was never moved starts from. The live position of the current job is in Layouts.
+    public Dictionary<string, Dictionary<uint, ElementLayout>> JobLayouts { get; set; } = new();
 
     // The auras the user has created.
     public List<AuraDefinition> Auras { get; set; } = new();
@@ -51,13 +65,16 @@ public class Configuration : IPluginConfiguration
     // The unit frames (the player's for now).
     public UnitFramesSettings UnitFrames { get; set; } = new();
 
-    // The nameplates over the enemies (first step: life bar and name).
+    // The enhancements and enfeeblements of the player.
+    public StatusEffectsSettings StatusEffects { get; set; } = new();
+
+    // The nameplates over the enemies (first step: HP bar and name).
     public NamePlateSettings NamePlates { get; set; } = new();
 
     // The list of enemies that fight you.
-    public EnemyListSettings EnemyList { get; set; } = new();
+    public EnmityListSettings EnmityList { get; set; } = new();
 
-    // The box that describes a buff or debuff under the mouse.
+    // The box that describes an enhancement or enfeeblement under the mouse.
     public TooltipSettings Tooltip { get; set; } = new();
 
     // The top level of the Auras explorer, in the order the user chose: groups and loose auras mixed.
