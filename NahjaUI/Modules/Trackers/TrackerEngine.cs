@@ -9,12 +9,12 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 
-namespace NahjaUI.Modules.Auras;
+namespace NahjaUI.Modules.Trackers;
 
-/// <summary>What a cooldown aura is doing right now.</summary>
-internal enum AuraPhase
+/// <summary>What a cooldown tracker is doing right now.</summary>
+internal enum TrackerPhase
 {
-    /// <summary>Not a cooldown aura.</summary>
+    /// <summary>Not a cooldown tracker.</summary>
     None,
 
     /// <summary>The ability can be used.</summary>
@@ -27,96 +27,98 @@ internal enum AuraPhase
     Active
 }
 
-/// <summary>The result of evaluating one aura for one frame.</summary>
+/// <summary>The result of evaluating one tracker for one frame.</summary>
 /// <param name="Visible">Whether the icon is drawn.</param>
-/// <param name="StatusPresent">Status auras: the status is there. Cooldown auras: the effect is active.</param>
+/// <param name="StatusPresent">Status trackers: the status is there. Cooldown trackers: the effect is active.</param>
 /// <param name="Remaining">Seconds to show in the timer (status time, recharge time or effect time).</param>
-/// <param name="Stacks">Status auras: stack count.</param>
-/// <param name="Phase">Cooldown auras: ready, cooling or active.</param>
-/// <param name="Total">Cooldown auras: seconds one charge takes to recharge (for the sweep).</param>
-/// <param name="Charges">Cooldown auras: charges available.</param>
-/// <param name="MaxCharges">Cooldown auras: charges the ability can hold.</param>
-/// <param name="Highlighted">Cooldown auras: the game is making the button of the current form glow.</param>
+/// <param name="Stacks">Status trackers: stack count.</param>
+/// <param name="Phase">Cooldown trackers: ready, cooling or active.</param>
+/// <param name="Total">Cooldown trackers: seconds one charge takes to recharge (for the sweep).</param>
+/// <param name="Charges">Cooldown trackers: charges available.</param>
+/// <param name="MaxCharges">Cooldown trackers: charges the ability can hold.</param>
+/// <param name="Highlighted">Cooldown trackers: the game is making the button of the current form glow.</param>
 /// <param name="AbilityBased">The trigger that matched works with an ability (not a status).</param>
 /// <param name="Rule">The icon trigger that matched: it decides the picture and the glow.</param>
-/// <param name="IconActionId">Cooldown auras: the action whose icon is shown (the form the game shows now; 0 = the chosen one).</param>
-internal readonly record struct AuraState(
+/// <param name="FoundStatusId">Status triggers that use a filter: the status of the filter that was found (it gives the icon and the stacks).</param>
+/// <param name="IconActionId">Cooldown trackers: the action whose icon is shown (the form the game shows now; 0 = the chosen one).</param>
+internal readonly record struct TrackerState(
     bool Visible,
     bool StatusPresent,
     float Remaining,
     int Stacks,
-    AuraPhase Phase = AuraPhase.None,
+    TrackerPhase Phase = TrackerPhase.None,
     float Total = 0f,
     int Charges = 0,
     int MaxCharges = 1,
     uint IconActionId = 0,
     bool Highlighted = false,
     bool AbilityBased = false,
-    AuraRule? Rule = null)
+    TrackerRule? Rule = null,
+    uint FoundStatusId = 0)
 {
-    public static readonly AuraState Hidden = new(false, false, 0f, 0);
+    public static readonly TrackerState Hidden = new(false, false, 0f, 0);
 }
 
-/// <summary>An aura together with its layout element and its latest state.</summary>
-internal sealed class AuraRuntime
+/// <summary>A tracker together with its layout element and its latest state.</summary>
+internal sealed class TrackerRuntime
 {
-    public AuraRuntime(AuraDefinition definition, LayoutElement element)
+    public TrackerRuntime(TrackerDefinition definition, LayoutElement element)
     {
         Definition = definition;
         Element = element;
     }
 
-    public AuraDefinition Definition { get; }
+    public TrackerDefinition Definition { get; }
 
     /// <summary>Holds the size of the icon, and its position when it is not inside a group.</summary>
     public LayoutElement Element { get; }
 
-    public AuraState State { get; set; } = AuraState.Hidden;
+    public TrackerState State { get; set; } = TrackerState.Hidden;
     public int ConsecutiveErrors { get; set; }
 }
 
 /// <summary>A group together with its layout element (the box that is moved in unlock mode).</summary>
-internal sealed class AuraGroupRuntime
+internal sealed class TrackerGroupRuntime
 {
-    public AuraGroupRuntime(AuraGroupDefinition definition, LayoutElement element)
+    public TrackerGroupRuntime(TrackerGroupDefinition definition, LayoutElement element)
     {
         Definition = definition;
         Element = element;
     }
 
-    public AuraGroupDefinition Definition { get; }
+    public TrackerGroupDefinition Definition { get; }
     public LayoutElement Element { get; }
 
-    /// <summary>The enabled auras of this group, in display order. Rebuilt every frame.</summary>
-    public List<AuraRuntime> Members { get; } = new();
+    /// <summary>The enabled trackers of this group, in display order. Rebuilt every frame.</summary>
+    public List<TrackerRuntime> Members { get; } = new();
 }
 
 /// <summary>
-/// Every frame: evaluate each enabled aura against the game snapshot, line up the auras of each group,
+/// Every frame: evaluate each enabled tracker against the game snapshot, line up the trackers of each group,
 /// and draw the visible icons. It only reads the snapshot and never calls Dalamud game services directly.
 /// </summary>
-internal sealed class AuraEngine
+internal sealed class TrackerEngine
 {
-    // An aura that throws this many errors in a row is switched off until the plugin is reloaded.
+    // A tracker that throws this many errors in a row is switched off until the plugin is reloaded.
     private const int MaxConsecutiveErrors = 5;
 
     // A cooldown up to this many seconds is the global cooldown, not a real cooldown.
     private const float GlobalCooldownSeconds = 3.5f;
 
     private readonly Plugin plugin;
-    private readonly List<AuraRuntime> runtimes = new();
-    private readonly List<AuraGroupRuntime> groups = new();
-    private readonly List<AuraRuntime> shown = new();
+    private readonly List<TrackerRuntime> runtimes = new();
+    private readonly List<TrackerGroupRuntime> groups = new();
+    private readonly List<TrackerRuntime> shown = new();
     private readonly HashSet<uint> watchedActions = new();
 
-    public AuraEngine(Plugin plugin)
+    public TrackerEngine(Plugin plugin)
     {
         this.plugin = plugin;
         LoadFromConfiguration();
     }
 
     /// <summary>
-    /// Forgets every aura and group in memory and builds them again from the configuration. Used after a profile is
+    /// Forgets every tracker and group in memory and builds them again from the configuration. Used after a profile is
     /// imported. Saved positions are kept (only the elements are detached, not forgotten).
     /// </summary>
     public void ReloadFromConfiguration()
@@ -134,139 +136,309 @@ internal sealed class AuraEngine
         LoadFromConfiguration();
     }
 
-    // Cooldown auras used to have an "effect while active". Now the time of that status is a text of the aura.
-    private static void MigrateEffect(AuraDefinition aura)
+    // Cooldown trackers used to have an "effect while active". Now the time of that status is a text of the tracker.
+    private static void MigrateEffect(TrackerDefinition tracker)
     {
-        if (aura.Trigger == AuraTriggerType.Cooldown && aura.StatusId != 0)
+        if (tracker.Trigger == TrackerTriggerType.Cooldown && tracker.StatusId != 0)
         {
-            aura.Texts.Add(new AuraTextDefinition
+            tracker.Texts.Add(new TrackerTextDefinition
             {
                 Source = TextSource.StatusTime,
-                StatusId = aura.StatusId,
+                StatusId = tracker.StatusId,
                 Anchor = AnchorPoint.TopRight
             });
         }
 
-        if (aura.Trigger == AuraTriggerType.Cooldown)
+        if (tracker.Trigger == TrackerTriggerType.Cooldown)
         {
-            aura.StatusId = 0;
-            aura.ExtraEffectIds.Clear();
+            tracker.StatusId = 0;
+            tracker.ExtraEffectIds.Clear();
         }
     }
 
-    // Auras saved before the text list existed: their timer and stack texts become texts of their own.
-    private static void MigrateTexts(AuraDefinition aura)
+    // Trackers saved before the text list existed: their timer and stack texts become texts of their own.
+    private static void MigrateTexts(TrackerDefinition tracker)
     {
-        if (aura.TextsMigrated)
+        if (tracker.TextsMigrated)
             return;
 
-        aura.TextsMigrated = true;
-        aura.Texts.Clear();
+        tracker.TextsMigrated = true;
+        tracker.Texts.Clear();
 
-        if (aura.ShowTimer)
+        if (tracker.ShowTimer)
         {
-            aura.Texts.Add(new AuraTextDefinition
+            tracker.Texts.Add(new TrackerTextDefinition
             {
                 Source = TextSource.OwnTime,
-                Font = aura.Font,
-                Size = aura.TextSize,
-                Anchor = aura.TimerAnchor,
-                OffsetX = aura.TimerOffsetX,
-                OffsetY = aura.TimerOffsetY
+                Font = tracker.Font,
+                Size = tracker.TextSize,
+                Anchor = tracker.TimerAnchor,
+                OffsetX = tracker.TimerOffsetX,
+                OffsetY = tracker.TimerOffsetY
             });
         }
 
-        if (aura.ShowStacks)
+        if (tracker.ShowStacks)
         {
-            aura.Texts.Add(new AuraTextDefinition
+            tracker.Texts.Add(new TrackerTextDefinition
             {
                 Source = TextSource.OwnStacks,
-                Font = aura.Font,
-                Size = aura.StackTextSize > 0 ? aura.StackTextSize : 8,
-                Anchor = aura.StacksAnchor,
-                OffsetX = aura.StacksOffsetX,
-                OffsetY = aura.StacksOffsetY
+                Font = tracker.Font,
+                Size = tracker.StackTextSize > 0 ? tracker.StackTextSize : 9,
+                Anchor = tracker.StacksAnchor,
+                OffsetX = tracker.StacksOffsetX,
+                OffsetY = tracker.StacksOffsetY
             });
         }
     }
 
-    // Auras saved before the trigger list: what they watched becomes one trigger, and each text gets its first source.
-    private static void MigrateRules(AuraDefinition aura)
+    // The stacks (or charges) of a tracker are always written at the bottom right, size 9, with no offset. Done once for the trackers saved before.
+    private void NormalizeStackTexts()
     {
-        foreach (var text in aura.Texts)
-        {
-            if (text.Sources.Count == 0)
-                text.Sources.Add(new AuraTextSource { Source = text.Source, StatusId = text.StatusId, ActionId = text.ActionId });
-        }
-
-        if (aura.RulesMigrated)
+        if (plugin.Configuration.StackTextsNormalized)
             return;
 
-        aura.RulesMigrated = true;
-        aura.Rules.Clear();
-
-        var rule = new AuraRule
+        static void Fix(TrackerTextDefinition text)
         {
-            Icon = aura.Icon,
-            IconStatusId = aura.IconStatusId,
-            IconActionId = aura.IconActionId
+            var isStacks = text.Sources.Count > 0
+                ? text.Sources.Any(s => s.Source is TextSource.OwnStacks or TextSource.StatusStacks or TextSource.AbilityCharges)
+                : text.Source is TextSource.OwnStacks or TextSource.StatusStacks or TextSource.AbilityCharges;
+
+            if (!isStacks)
+                return;
+
+            text.Size = 9;
+            text.Anchor = AnchorPoint.BottomRight;
+            text.OffsetX = 0;
+            text.OffsetY = 0;
+        }
+
+        static void FixTracker(TrackerDefinition tracker)
+        {
+            foreach (var text in tracker.Texts)
+                Fix(text);
+
+            foreach (var rule in tracker.Rules)
+            {
+                foreach (var text in rule.Texts)
+                    Fix(text);
+            }
+
+            tracker.StackTextSize = 9;
+            tracker.StacksAnchor = AnchorPoint.BottomRight;
+            tracker.StacksOffsetX = 0;
+            tracker.StacksOffsetY = 0;
+        }
+
+        foreach (var tracker in plugin.Configuration.Trackers)
+            FixTracker(tracker);
+
+        foreach (var group in plugin.Configuration.TrackerGroups)
+        {
+            if (group.Template is { } template)
+                FixTracker(template);
+        }
+
+        plugin.Configuration.StackTextsNormalized = true;
+        plugin.RequestSave();
+    }
+
+    // A text of stacks (or charges) only makes sense where the game can give them: a status that can stack, an ability with charges.
+    // The ones on trackers that can never have any (an enhancement with one use, a cooldown with one charge) are removed once.
+    private void RemoveUselessStackTexts()
+    {
+        if (plugin.Configuration.UselessStackTextsRemoved)
+            return;
+
+        var statuses = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>();
+
+        bool CanHaveStacks(TrackerRule rule)
+        {
+            if (rule.UsesFilter)
+                return true;
+
+            if (rule.Kind is ConditionKind.StatusPresent or ConditionKind.StatusMissing or ConditionKind.StatusAlways)
+                return rule.StatusId == 0 || !statuses.TryGetRow(rule.StatusId, out var status) || status.MaxStacks > 1;
+
+            // The most charges the ability can have at the top level (traits add charges).
+            return rule.ActionId == 0 || FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetMaxCharges(rule.ActionId, 100) > 1;
+        }
+
+        foreach (var tracker in plugin.Configuration.Trackers)
+        {
+            foreach (var rule in tracker.Rules)
+            {
+                if (CanHaveStacks(rule))
+                    continue;
+
+                rule.Texts.RemoveAll(text => text.Sources.Count > 0 && text.Sources.All(source => source.Source == TextSource.OwnStacks));
+            }
+        }
+
+        plugin.Configuration.UselessStackTextsRemoved = true;
+        plugin.RequestSave();
+    }
+
+    // Trackers saved before the trigger list: what they watched becomes one trigger, and each text gets its first source.
+    private static void MigrateRules(TrackerDefinition tracker)
+    {
+        foreach (var text in tracker.Texts)
+        {
+            if (text.Sources.Count == 0)
+                text.Sources.Add(new TrackerTextSource { Source = text.Source, StatusId = text.StatusId, ActionId = text.ActionId });
+        }
+
+        if (!tracker.RulesMigrated)
+            BuildRules(tracker);
+
+        foreach (var rule in tracker.Rules)
+            MigrateEffects(tracker, rule);
+
+        MigrateRuleTexts(tracker);
+    }
+
+    // Trackers saved before every trigger had its own texts: each trigger gets a copy of the texts of the tracker (so nothing changes
+    // on screen), and the tracker's own list is emptied.
+    private static void MigrateRuleTexts(TrackerDefinition tracker)
+    {
+        if (tracker.RuleTextsMigrated)
+            return;
+
+        tracker.RuleTextsMigrated = true;
+
+        foreach (var rule in tracker.Rules)
+        {
+            rule.Texts.Clear();
+
+            foreach (var text in tracker.Texts)
+            {
+                var json = Newtonsoft.Json.JsonConvert.SerializeObject(text);
+                var copy = Newtonsoft.Json.JsonConvert.DeserializeObject<TrackerTextDefinition>(json);
+                if (copy is not null)
+                    rule.Texts.Add(copy);
+            }
+        }
+
+        tracker.Texts.Clear();
+    }
+
+    // The old glow flags and the tracker's recharge look become the effects of the trigger.
+    private static void MigrateEffects(TrackerDefinition tracker, TrackerRule rule)
+    {
+        if (rule.EffectsMigrated)
+            return;
+
+        rule.EffectsMigrated = true;
+
+        rule.GlowWhen = rule.Glow ? EffectWhen.Always
+            : rule.GlowWhenMissing ? EffectWhen.StatusMissing
+            : rule.GlowWhenReady ? EffectWhen.Ready
+            : rule.GlowWhenHighlighted ? EffectWhen.Highlighted
+            : EffectWhen.Never;
+
+        // What used to be automatic: a missing status was reddish; a recharging ability was red, dimmed or normal.
+        switch (rule.Kind)
+        {
+            case ConditionKind.StatusMissing:
+                rule.RedWhen = EffectWhen.Always;
+                break;
+
+            case ConditionKind.StatusAlways:
+                rule.RedWhen = EffectWhen.StatusMissing;
+                break;
+
+            case ConditionKind.AbilityOnCooldown:
+            case ConditionKind.AbilityAlways:
+                var when = rule.Kind == ConditionKind.AbilityOnCooldown ? EffectWhen.Always : EffectWhen.Recharging;
+                if (tracker.CooldownLook == CooldownLook.Red)
+                    rule.RedWhen = when;
+                else if (tracker.CooldownLook == CooldownLook.Dimmed)
+                    rule.DimWhen = when;
+
+                break;
+        }
+    }
+
+    private static void BuildRules(TrackerDefinition tracker)
+    {
+        tracker.RulesMigrated = true;
+        tracker.Rules.Clear();
+
+        var rule = new TrackerRule
+        {
+            Icon = tracker.Icon,
+            IconStatusId = tracker.IconStatusId,
+            IconActionId = tracker.IconActionId
         };
 
-        switch (aura.Trigger)
+        switch (tracker.Trigger)
         {
-            case AuraTriggerType.Cooldown:
-                rule.Kind = aura.CooldownShow switch
+            case TrackerTriggerType.Cooldown:
+                rule.Kind = tracker.CooldownShow switch
                 {
                     CooldownShowMode.OnlyOnCooldown => ConditionKind.AbilityOnCooldown,
                     CooldownShowMode.OnlyWhenReady => ConditionKind.AbilityReady,
                     _ => ConditionKind.AbilityAlways
                 };
-                rule.ActionId = aura.ActionId;
-                rule.IgnoreGlobalCooldown = aura.IgnoreGlobalCooldown;
-                rule.GlowWhenReady = aura.GlowWhenReady;
-                rule.GlowWhenHighlighted = aura.GlowWhenHighlighted;
+                rule.ActionId = tracker.ActionId;
+                rule.IgnoreGlobalCooldown = tracker.IgnoreGlobalCooldown;
+                rule.GlowWhenReady = tracker.GlowWhenReady;
+                rule.GlowWhenHighlighted = tracker.GlowWhenHighlighted;
                 break;
 
-            case AuraTriggerType.Activated:
+            case TrackerTriggerType.Activated:
                 rule.Kind = ConditionKind.AbilityActivated;
-                rule.ActionId = aura.ActionId;
-                rule.Glow = aura.GlowWhenActive;
-                rule.GlowWhenHighlighted = aura.GlowWhenHighlighted;
+                rule.ActionId = tracker.ActionId;
+                rule.Glow = tracker.GlowWhenActive;
+                rule.GlowWhenHighlighted = tracker.GlowWhenHighlighted;
                 break;
 
             default:
-                rule.Kind = aura.ShowMode == AuraShowMode.WhenMissing ? ConditionKind.StatusMissing : ConditionKind.StatusPresent;
-                rule.Unit = aura.Unit;
-                rule.StatusId = aura.StatusId;
-                rule.OnlyMine = aura.OnlyMine;
-                rule.Glow = aura.GlowWhenActive;
+                rule.Kind = tracker.ShowMode == TrackerShowMode.WhenMissing ? ConditionKind.StatusMissing : ConditionKind.StatusPresent;
+                rule.Unit = tracker.Unit;
+                rule.StatusId = tracker.StatusId;
+                rule.OnlyMine = tracker.OnlyMine;
+                rule.Glow = tracker.GlowWhenActive;
                 break;
         }
 
-        aura.Rules.Add(rule);
+        tracker.Rules.Add(rule);
     }
 
     private void LoadFromConfiguration()
     {
-        // Older auras that were "only as a combo step" are now activated-ability auras.
-        foreach (var old in plugin.Configuration.Auras)
+        // Trackers and group templates saved before the icon trim: "Fill the width" becomes Sides, off becomes None.
+        foreach (var old in plugin.Configuration.Trackers)
+            old.Trim ??= old.FillWidth ? IconTrim.Sides : IconTrim.None;
+
+        foreach (var group in plugin.Configuration.TrackerGroups)
+        {
+            if (group.Template is { } groupTemplate)
+                groupTemplate.Trim ??= groupTemplate.FillWidth ? IconTrim.Sides : IconTrim.None;
+        }
+
+        // Older trackers that were "only as a combo step" are now activated-ability trackers.
+        foreach (var old in plugin.Configuration.Trackers)
         {
             MigrateTexts(old);
             MigrateEffect(old);
 
-            if (old.Trigger == AuraTriggerType.Cooldown && old.OnlyAsComboStep)
+            if (old.Trigger == TrackerTriggerType.Cooldown && old.OnlyAsComboStep)
             {
-                old.Trigger = AuraTriggerType.Activated;
+                old.Trigger = TrackerTriggerType.Activated;
                 old.OnlyAsComboStep = false;
             }
 
             MigrateRules(old);
         }
 
-        foreach (var definition in plugin.Configuration.AuraGroups)
+        NormalizeStackTexts();
+        RemoveUselessStackTexts();
+
+        foreach (var definition in plugin.Configuration.TrackerGroups)
             RegisterGroup(definition);
 
-        foreach (var definition in plugin.Configuration.Auras)
+        foreach (var definition in plugin.Configuration.Trackers)
         {
             // Forget a group that no longer exists.
             if (definition.GroupId is not null && FindGroup(definition.GroupId) is null)
@@ -275,7 +447,7 @@ internal sealed class AuraEngine
             Register(definition);
         }
 
-        // Groups made before group sizes and group styles existed take them from their first aura.
+        // Groups made before group sizes and group styles existed take them from their first tracker.
         foreach (var group in groups)
         {
             var definition = group.Definition;
@@ -289,7 +461,7 @@ internal sealed class AuraEngine
 
             if (definition.Template is null)
             {
-                definition.Template = new AuraDefinition();
+                definition.Template = new TrackerDefinition();
 
                 if (first is not null)
                     definition.Template.CopyStyleFrom(first.Definition);
@@ -299,10 +471,12 @@ internal sealed class AuraEngine
         ReconcileRootOrder();
     }
 
-    public IReadOnlyList<AuraRuntime> Auras => runtimes;
-    public IReadOnlyList<AuraGroupRuntime> Groups => groups;
+    public IReadOnlyList<TrackerRuntime> Trackers => runtimes;
+    public IReadOnlyList<TrackerGroupRuntime> Groups => groups;
 
-    public AuraGroupRuntime? FindGroup(string? id)
+    internal Plugin Plugin => plugin;
+
+    public TrackerGroupRuntime? FindGroup(string? id)
     {
         return id is null ? null : groups.FirstOrDefault(g => g.Definition.Id == id);
     }
@@ -310,39 +484,45 @@ internal sealed class AuraEngine
     // ---------------------------------------------------------------- creating and removing
 
     /// <summary>
-    /// Creates a new, empty aura. It goes into the given group, or to the end of the top level of the list.
+    /// Creates a new, empty tracker. It goes into the given group, or to the end of the top level of the list.
     /// </summary>
-    public AuraRuntime AddNew(AuraGroupRuntime? intoGroup = null)
+    public TrackerRuntime AddNew(TrackerGroupRuntime? intoGroup = null)
     {
-        var definition = new AuraDefinition { TextsMigrated = true, RulesMigrated = true };
-        definition.Rules.Add(new AuraRule());
-        definition.Texts.Add(new AuraTextDefinition { Sources = { new AuraTextSource() } });
-        plugin.Configuration.Auras.Add(definition);
+        var definition = new TrackerDefinition { TextsMigrated = true, RulesMigrated = true, RuleTextsMigrated = true, Trim = IconTrim.AllAround };
+        definition.Rules.Add(NewRule());
+        plugin.Configuration.Trackers.Add(definition);
 
         var runtime = Register(definition);
 
         if (intoGroup is null)
-            plugin.Configuration.RootOrder.Add(AuraKey(definition));
+            plugin.Configuration.RootOrder.Add(TrackerKey(definition));
         else
-            MoveAuraIntoGroup(runtime, intoGroup, null, false);
+            MoveTrackerIntoGroup(runtime, intoGroup, null, false);
 
         plugin.RequestSave();
         return runtime;
     }
 
-    /// <summary>Makes a copy of an aura and puts it right below the original (inside the same group, or at the top level).</summary>
-    public AuraRuntime Duplicate(AuraRuntime original)
+    /// <summary>A new trigger: it tracks nothing yet and has one text, the time.</summary>
+    public static TrackerRule NewRule() => new()
     {
-        // A deep copy through JSON: every setting of the aura, now and in the future, is copied without listing them here.
+        EffectsMigrated = true,
+        Texts = { new TrackerTextDefinition { Sources = { new TrackerTextSource() } } }
+    };
+
+    /// <summary>Makes a copy of a tracker and puts it right below the original (inside the same group, or at the top level).</summary>
+    public TrackerRuntime Duplicate(TrackerRuntime original)
+    {
+        // A deep copy through JSON: every setting of the tracker, now and in the future, is copied without listing them here.
         var json = Newtonsoft.Json.JsonConvert.SerializeObject(original.Definition);
-        var definition = Newtonsoft.Json.JsonConvert.DeserializeObject<AuraDefinition>(json) ?? new AuraDefinition();
+        var definition = Newtonsoft.Json.JsonConvert.DeserializeObject<TrackerDefinition>(json) ?? new TrackerDefinition();
         definition.Id = Guid.NewGuid().ToString("N");
         definition.Name = string.IsNullOrWhiteSpace(original.Definition.Name) ? definition.Name : $"{original.Definition.Name} (copy)";
 
-        plugin.Configuration.Auras.Add(definition);
+        plugin.Configuration.Trackers.Add(definition);
         var runtime = Register(definition);
 
-        // Same size and place as the original (a loose aura has a place of its own).
+        // Same size and place as the original (a loose tracker has a place of its own).
         runtime.Element.Layout.CopyPositionFrom(original.Element.Layout);
         runtime.Element.Layout.Width = original.Element.Layout.Width;
         runtime.Element.Layout.Height = original.Element.Layout.Height;
@@ -350,31 +530,31 @@ internal sealed class AuraEngine
         var group = FindGroup(definition.GroupId);
         if (group is not null)
         {
-            MoveAuraIntoGroup(runtime, group, original, true);
+            MoveTrackerIntoGroup(runtime, group, original, true);
         }
         else
         {
             definition.GroupId = null;
-            PlaceAtRoot(AuraKey(definition), AuraKey(original.Definition), true);
+            PlaceAtRoot(TrackerKey(definition), TrackerKey(original.Definition), true);
         }
 
         plugin.RequestSave();
         return runtime;
     }
 
-    public void Remove(AuraRuntime runtime)
+    public void Remove(TrackerRuntime runtime)
     {
-        plugin.Configuration.Auras.Remove(runtime.Definition);
-        plugin.Configuration.RootOrder.Remove(AuraKey(runtime.Definition));
+        plugin.Configuration.Trackers.Remove(runtime.Definition);
+        plugin.Configuration.RootOrder.Remove(TrackerKey(runtime.Definition));
         runtimes.Remove(runtime);
         plugin.Layout.Unregister(runtime.Element.Id);
         plugin.RequestSave();
     }
 
-    public AuraGroupRuntime AddGroup()
+    public TrackerGroupRuntime AddGroup()
     {
-        var definition = new AuraGroupDefinition { IconWidth = 44, IconHeight = 44, Template = new AuraDefinition() };
-        plugin.Configuration.AuraGroups.Add(definition);
+        var definition = new TrackerGroupDefinition { IconWidth = 44, IconHeight = 44, Template = new TrackerDefinition { Trim = IconTrim.AllAround } };
+        plugin.Configuration.TrackerGroups.Add(definition);
         plugin.Configuration.RootOrder.Add(GroupKey(definition));
 
         var runtime = RegisterGroup(definition);
@@ -382,8 +562,49 @@ internal sealed class AuraEngine
         return runtime;
     }
 
-    /// <summary>Deletes a group. Its auras are kept: they take the place of the group at the top level.</summary>
-    public void RemoveGroup(AuraGroupRuntime group)
+    /// <summary>Makes a copy of a group with a copy of each of its trackers. It goes right below the original in the list and in the same place on screen.</summary>
+    public TrackerGroupRuntime DuplicateGroup(TrackerGroupRuntime original)
+    {
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(original.Definition);
+        var definition = Newtonsoft.Json.JsonConvert.DeserializeObject<TrackerGroupDefinition>(json) ?? new TrackerGroupDefinition();
+        definition.Id = Guid.NewGuid().ToString("N");
+        definition.Name = string.IsNullOrWhiteSpace(original.Definition.Name) ? definition.Name : $"{original.Definition.Name} (copy)";
+
+        plugin.Configuration.TrackerGroups.Add(definition);
+        var copy = RegisterGroup(definition);
+        copy.Element.Layout.CopyPositionFrom(original.Element.Layout);
+        PlaceAtRoot(GroupKey(definition), GroupKey(original.Definition), true);
+
+        TrackerRuntime? previous = null;
+        foreach (var member in MembersOf(original).ToList())
+        {
+            var memberJson = Newtonsoft.Json.JsonConvert.SerializeObject(member.Definition);
+            var memberDefinition = Newtonsoft.Json.JsonConvert.DeserializeObject<TrackerDefinition>(memberJson) ?? new TrackerDefinition();
+            memberDefinition.Id = Guid.NewGuid().ToString("N");
+            memberDefinition.GroupId = definition.Id;
+
+            plugin.Configuration.Trackers.Add(memberDefinition);
+            var runtime = Register(memberDefinition);
+            runtime.Element.Layout.CopyPositionFrom(member.Element.Layout);
+            MoveTrackerIntoGroup(runtime, copy, previous, true);
+            previous = runtime;
+        }
+
+        plugin.RequestSave();
+        return copy;
+    }
+
+    /// <summary>Deletes a group together with all its trackers.</summary>
+    public void RemoveGroupWithTrackers(TrackerGroupRuntime group)
+    {
+        foreach (var member in MembersOf(group).ToList())
+            Remove(member);
+
+        RemoveGroup(group);
+    }
+
+    /// <summary>Deletes a group. Its trackers are kept: they take the place of the group at the top level.</summary>
+    public void RemoveGroup(TrackerGroupRuntime group)
     {
         var order = plugin.Configuration.RootOrder;
         var groupKey = GroupKey(group.Definition);
@@ -397,11 +618,11 @@ internal sealed class AuraEngine
         foreach (var member in MembersOf(group))
         {
             member.Definition.GroupId = null;
-            order.Insert(Math.Min(index, order.Count), AuraKey(member.Definition));
+            order.Insert(Math.Min(index, order.Count), TrackerKey(member.Definition));
             index++;
         }
 
-        plugin.Configuration.AuraGroups.Remove(group.Definition);
+        plugin.Configuration.TrackerGroups.Remove(group.Definition);
         groups.Remove(group);
         plugin.Layout.Unregister(group.Element.Id);
         plugin.RequestSave();
@@ -409,14 +630,14 @@ internal sealed class AuraEngine
 
     // ---------------------------------------------------------------- the explorer tree
 
-    public static string AuraKey(AuraDefinition definition) => $"aura:{definition.Id}";
+    public static string TrackerKey(TrackerDefinition definition) => $"tracker:{definition.Id}";
 
-    public static string GroupKey(AuraGroupDefinition definition) => $"group:{definition.Id}";
+    public static string GroupKey(TrackerGroupDefinition definition) => $"group:{definition.Id}";
 
-    /// <summary>One entry at the top level of the list: a group or a loose aura.</summary>
-    internal readonly record struct RootEntry(AuraGroupRuntime? Group, AuraRuntime? Aura);
+    /// <summary>One entry at the top level of the list: a group or a loose tracker.</summary>
+    internal readonly record struct RootEntry(TrackerGroupRuntime? Group, TrackerRuntime? Tracker);
 
-    /// <summary>The top level of the list in the order the user chose, with groups and loose auras mixed.</summary>
+    /// <summary>The top level of the list in the order the user chose, with groups and loose trackers mixed.</summary>
     internal List<RootEntry> RootEntries()
     {
         var result = new List<RootEntry>();
@@ -429,61 +650,61 @@ internal sealed class AuraEngine
                 if (group is not null)
                     result.Add(new RootEntry(group, null));
             }
-            else if (key.StartsWith("aura:", StringComparison.Ordinal))
+            else if (key.StartsWith("tracker:", StringComparison.Ordinal))
             {
-                var id = key["aura:".Length..];
-                var aura = runtimes.FirstOrDefault(r => r.Definition.Id == id);
+                var id = key["tracker:".Length..];
+                var tracker = runtimes.FirstOrDefault(r => r.Definition.Id == id);
 
-                if (aura is not null && aura.Definition.GroupId is null)
-                    result.Add(new RootEntry(null, aura));
+                if (tracker is not null && tracker.Definition.GroupId is null)
+                    result.Add(new RootEntry(null, tracker));
             }
         }
 
         return result;
     }
 
-    /// <summary>The auras of a group, in display order.</summary>
-    internal List<AuraRuntime> MembersOf(AuraGroupRuntime group)
+    /// <summary>The trackers of a group, in display order.</summary>
+    internal List<TrackerRuntime> MembersOf(TrackerGroupRuntime group)
     {
         return runtimes.Where(r => r.Definition.GroupId == group.Definition.Id).ToList();
     }
 
     /// <summary>Moves a group to the top level, before or after another top-level entry.</summary>
-    public void MoveGroup(AuraGroupRuntime group, string targetKey, bool after)
+    public void MoveGroup(TrackerGroupRuntime group, string targetKey, bool after)
     {
         PlaceAtRoot(GroupKey(group.Definition), targetKey, after);
         plugin.RequestSave();
     }
 
     /// <summary>
-    /// Takes an aura out of its group (if it was in one) and puts it at the top level,
+    /// Takes a tracker out of its group (if it was in one) and puts it at the top level,
     /// before or after another top-level entry.
     /// </summary>
-    public void MoveAuraToRoot(AuraRuntime aura, string targetKey, bool after)
+    public void MoveTrackerToRoot(TrackerRuntime tracker, string targetKey, bool after)
     {
-        aura.Definition.GroupId = null;
-        PlaceAtRoot(AuraKey(aura.Definition), targetKey, after);
+        tracker.Definition.GroupId = null;
+        PlaceAtRoot(TrackerKey(tracker.Definition), targetKey, after);
         plugin.RequestSave();
     }
 
     /// <summary>
-    /// Puts an aura inside a group, before or after one of the group's auras
-    /// (at the end of the group when no neighbour is given). An aura that joins a group takes the group's icon size.
+    /// Puts a tracker inside a group, before or after one of the group's trackers
+    /// (at the end of the group when no neighbour is given). A tracker that joins a group takes the group's icon size.
     /// </summary>
-    public void MoveAuraIntoGroup(AuraRuntime aura, AuraGroupRuntime group, AuraRuntime? neighbour, bool after)
+    public void MoveTrackerIntoGroup(TrackerRuntime tracker, TrackerGroupRuntime group, TrackerRuntime? neighbour, bool after)
     {
-        if (neighbour == aura)
+        if (neighbour == tracker)
             return;
 
-        var joining = aura.Definition.GroupId != group.Definition.Id;
+        var joining = tracker.Definition.GroupId != group.Definition.Id;
 
-        plugin.Configuration.RootOrder.Remove(AuraKey(aura.Definition));
-        aura.Definition.GroupId = group.Definition.Id;
+        plugin.Configuration.RootOrder.Remove(TrackerKey(tracker.Definition));
+        tracker.Definition.GroupId = group.Definition.Id;
 
-        // The order inside a group is the order of the aura list: take the aura out and put it back in the right place.
-        var configList = plugin.Configuration.Auras;
-        runtimes.Remove(aura);
-        configList.Remove(aura.Definition);
+        // The order inside a group is the order of the tracker list: take the tracker out and put it back in the right place.
+        var configList = plugin.Configuration.Trackers;
+        runtimes.Remove(tracker);
+        configList.Remove(tracker.Definition);
 
         int index;
         if (neighbour is null)
@@ -496,20 +717,20 @@ internal sealed class AuraEngine
             index = runtimes.IndexOf(neighbour) + (after ? 1 : 0);
         }
 
-        runtimes.Insert(index, aura);
-        configList.Insert(index, aura.Definition);
+        runtimes.Insert(index, tracker);
+        configList.Insert(index, tracker.Definition);
 
         if (joining)
-            ApplyGroupStyleTo(group, aura);
+            ApplyGroupStyleTo(group, tracker);
 
         plugin.RequestSave();
     }
 
     /// <summary>
-    /// Gives every aura of the group the group's display settings, load conditions and icon size.
-    /// A group works like a template: what is set on the group overwrites the same setting in each of its auras.
+    /// Gives every tracker of the group the group's display settings, load conditions and icon size.
+    /// A group works like a template: what is set on the group overwrites the same setting in each of its trackers.
     /// </summary>
-    public void ApplyGroupStyle(AuraGroupRuntime group)
+    public void ApplyGroupStyle(TrackerGroupRuntime group)
     {
         foreach (var member in MembersOf(group))
             ApplyGroupStyleTo(group, member);
@@ -517,13 +738,13 @@ internal sealed class AuraEngine
         plugin.RequestSave();
     }
 
-    private static void ApplyGroupStyleTo(AuraGroupRuntime group, AuraRuntime aura)
+    private static void ApplyGroupStyleTo(TrackerGroupRuntime group, TrackerRuntime tracker)
     {
         if (group.Definition.Template is { } template)
-            aura.Definition.CopyStyleFrom(template);
+            tracker.Definition.CopyStyleFrom(template);
 
-        aura.Element.Layout.Width = Math.Max(1, group.Definition.IconWidth);
-        aura.Element.Layout.Height = Math.Max(1, group.Definition.IconHeight);
+        tracker.Element.Layout.Width = Math.Max(1, group.Definition.IconWidth);
+        tracker.Element.Layout.Height = Math.Max(1, group.Definition.IconHeight);
     }
 
     private void PlaceAtRoot(string key, string targetKey, bool after)
@@ -541,7 +762,7 @@ internal sealed class AuraEngine
     }
 
     // Makes the top-level order match what exists: forgets what was deleted and adds what is missing.
-    // Older configurations (which had no top-level order) get their groups first, then their loose auras.
+    // Older configurations (which had no top-level order) get their groups first, then their loose trackers.
     private void ReconcileRootOrder()
     {
         var order = plugin.Configuration.RootOrder;
@@ -550,10 +771,10 @@ internal sealed class AuraEngine
         foreach (var group in groups)
             valid.Add(GroupKey(group.Definition));
 
-        foreach (var aura in runtimes)
+        foreach (var tracker in runtimes)
         {
-            if (aura.Definition.GroupId is null)
-                valid.Add(AuraKey(aura.Definition));
+            if (tracker.Definition.GroupId is null)
+                valid.Add(TrackerKey(tracker.Definition));
         }
 
         order.RemoveAll(key => !valid.Contains(key));
@@ -567,20 +788,20 @@ internal sealed class AuraEngine
                 order.Add(key);
         }
 
-        foreach (var aura in runtimes)
+        foreach (var tracker in runtimes)
         {
-            if (aura.Definition.GroupId is not null)
+            if (tracker.Definition.GroupId is not null)
                 continue;
 
-            var key = AuraKey(aura.Definition);
+            var key = TrackerKey(tracker.Definition);
             if (present.Add(key))
                 order.Add(key);
         }
     }
 
-    private AuraRuntime Register(AuraDefinition definition)
+    private TrackerRuntime Register(TrackerDefinition definition)
     {
-        // New auras start in the centre of the screen, so they can never end up off screen.
+        // New trackers start in the centre of the screen, so they can never end up off screen.
         var defaults = new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
@@ -591,13 +812,13 @@ internal sealed class AuraEngine
             Height = 44
         };
 
-        var element = plugin.Layout.Register($"aura.{definition.Id}", definition.Name, defaults);
-        var runtime = new AuraRuntime(definition, element);
+        var element = plugin.Layout.Register($"tracker.{definition.Id}", definition.Name, defaults);
+        var runtime = new TrackerRuntime(definition, element);
         runtimes.Add(runtime);
         return runtime;
     }
 
-    private AuraGroupRuntime RegisterGroup(AuraGroupDefinition definition)
+    private TrackerGroupRuntime RegisterGroup(TrackerGroupDefinition definition)
     {
         var defaults = new ElementLayout
         {
@@ -609,8 +830,8 @@ internal sealed class AuraEngine
             Height = 44
         };
 
-        var element = plugin.Layout.Register($"aura-group.{definition.Id}", $"Group: {definition.Name}", defaults);
-        var runtime = new AuraGroupRuntime(definition, element);
+        var element = plugin.Layout.Register($"tracker-group.{definition.Id}", $"Group: {definition.Name}", defaults);
+        var runtime = new TrackerGroupRuntime(definition, element);
         groups.Add(runtime);
         return runtime;
     }
@@ -633,7 +854,7 @@ internal sealed class AuraEngine
         foreach (var runtime in runtimes)
         {
             var definition = runtime.Definition;
-            if (!definition.Enabled)
+            if (!definition.Enabled || FindGroup(definition.GroupId) is { Definition.Enabled: false })
                 continue;
 
             foreach (var rule in definition.Rules)
@@ -649,12 +870,15 @@ internal sealed class AuraEngine
                     watchedActions.Add(root);
             }
 
-            foreach (var text in definition.Texts)
+            foreach (var rule in definition.Rules)
             {
-                foreach (var source in text.Sources)
+                foreach (var text in rule.Texts)
                 {
-                    if (source.Source is TextSource.AbilityCooldown or TextSource.AbilityCharges && source.ActionId != 0)
-                        watchedActions.Add(source.ActionId);
+                    foreach (var source in text.Sources)
+                    {
+                        if (source.Source is TextSource.AbilityCooldown or TextSource.AbilityCharges && source.ActionId != 0)
+                            watchedActions.Add(source.ActionId);
+                    }
                 }
             }
         }
@@ -667,34 +891,35 @@ internal sealed class AuraEngine
             group.Element.Name = $"Group: {(string.IsNullOrWhiteSpace(group.Definition.Name) ? "unnamed" : group.Definition.Name)}";
         }
 
-        // The job of the player, to leave the auras of other jobs out of unlock mode (null while unknown: show all).
+        // The job of the player, to leave the trackers of other jobs out of unlock mode (null while unknown: show all).
         uint? currentJob = snapshot.IsLoggedIn ? snapshot.Player?.JobId : null;
 
-        // 1. Evaluate every aura and sort the enabled ones into their groups.
+        // 1. Evaluate every tracker and sort the enabled ones into their groups.
         foreach (var runtime in runtimes)
         {
             var definition = runtime.Definition;
 
             // Keep the name shown in unlock mode and in the Layout page up to date.
-            runtime.Element.Name = string.IsNullOrWhiteSpace(definition.Name) ? "Unnamed aura" : definition.Name;
+            runtime.Element.Name = string.IsNullOrWhiteSpace(definition.Name) ? "Unnamed tracker" : definition.Name;
 
             var group = FindGroup(definition.GroupId);
 
-            // An aura inside a group has no position of its own: the group places it.
+            // A tracker inside a group has no position of its own: the group places it.
             runtime.Element.IsManaged = group is not null;
-            runtime.Element.IsHidden = group is null && !AppliesToJob(definition, currentJob);
+            runtime.Element.IsHidden = group is null && !AppliesToJob(definition, currentJob, snapshot.Context.InPvP);
 
-            if (!definition.Enabled || runtime.ConsecutiveErrors >= MaxConsecutiveErrors)
+            if (!definition.Enabled || group is { Definition.Enabled: false } || runtime.ConsecutiveErrors >= MaxConsecutiveErrors)
             {
-                runtime.State = AuraState.Hidden;
+                runtime.State = TrackerState.Hidden;
                 continue;
             }
 
             group?.Members.Add(runtime);
 
-            // One broken aura must never break the others.
+            // One broken tracker must never break the others.
             try
             {
+                CurrentFilters = plugin.Configuration.Filters;
                 runtime.State = Evaluate(definition, snapshot);
             }
             catch (Exception ex)
@@ -703,7 +928,7 @@ internal sealed class AuraEngine
             }
         }
 
-        // 2. Draw the auras that have their own position.
+        // 2. Draw the trackers that have their own position.
         foreach (var runtime in runtimes)
         {
             if (runtime.Element.IsManaged || !runtime.State.Visible)
@@ -716,22 +941,22 @@ internal sealed class AuraEngine
         // 3. Line up and draw the groups.
         foreach (var group in groups)
         {
-            // A group whose auras all belong to other jobs is not offered for positioning.
+            // A group whose trackers all belong to other jobs is not offered for positioning.
             var anyApplies = group.Members.Count == 0;
             foreach (var member in group.Members)
             {
-                if (AppliesToJob(member.Definition, currentJob))
+                if (AppliesToJob(member.Definition, currentJob, snapshot.Context.InPvP))
                     anyApplies = true;
             }
 
             group.Element.IsHidden = !anyApplies;
 
             // In unlock mode every enabled member is drawn as a ghost, so the group can be placed
-            // even when nothing is active. Otherwise only the visible auras take a slot.
+            // even when nothing is active. Otherwise only the visible trackers take a slot.
             shown.Clear();
             foreach (var member in group.Members)
             {
-                if ((unlock && AppliesToJob(member.Definition, currentJob)) || member.State.Visible)
+                if ((unlock && AppliesToJob(member.Definition, currentJob, snapshot.Context.InPvP)) || member.State.Visible)
                     shown.Add(member);
             }
 
@@ -740,6 +965,10 @@ internal sealed class AuraEngine
                 group.Element.DisplayRect = null;
                 continue;
             }
+
+            // The box of the group is the size of one of its icons (set in the Trackers page), so the group sits exactly where the Layout says.
+            group.Element.Layout.Width = Math.Max(1, group.Definition.IconWidth);
+            group.Element.Layout.Height = Math.Max(1, group.Definition.IconHeight);
 
             var (anchorPos, anchorSize) = LayoutManager.GetRect(group.Element.Layout);
 
@@ -765,11 +994,11 @@ internal sealed class AuraEngine
         }
     }
 
-    private void SafeDraw(AuraRuntime runtime, Vector2 pos, Vector2 size, bool ghost)
+    private void SafeDraw(TrackerRuntime runtime, Vector2 pos, Vector2 size, bool ghost)
     {
         try
         {
-            DrawAura(runtime, pos, size, ghost);
+            plugin.GameCover.Draw(pos, size, 80f * ImGuiHelpers.GlobalScale, () => DrawTracker(runtime, pos, size, ghost));
             runtime.ConsecutiveErrors = 0;
         }
         catch (Exception ex)
@@ -778,18 +1007,18 @@ internal sealed class AuraEngine
         }
     }
 
-    private static void Fail(AuraRuntime runtime, Exception ex)
+    private static void Fail(TrackerRuntime runtime, Exception ex)
     {
-        runtime.State = AuraState.Hidden;
+        runtime.State = TrackerState.Hidden;
         runtime.ConsecutiveErrors++;
 
         var name = runtime.Definition.Name;
 
         if (runtime.ConsecutiveErrors == 1)
-            Plugin.Log.Error(ex, "NahjaUI: aura {Name} failed.", name);
+            Plugin.Log.Error(ex, "NahjaUI: tracker {Name} failed.", name);
 
         if (runtime.ConsecutiveErrors == MaxConsecutiveErrors)
-            Plugin.Log.Warning("NahjaUI: aura {Name} was switched off after repeated errors.", name);
+            Plugin.Log.Warning("NahjaUI: tracker {Name} was switched off after repeated errors.", name);
     }
 
     // ---------------------------------------------------------------- group layout
@@ -799,7 +1028,7 @@ internal sealed class AuraEngine
     /// The group's box is the reference: the row starts at its left or right edge, or is centred on it.
     /// Icons are centred on the box across the other direction.
     /// </summary>
-    private static Vector2[] Arrange(AuraGroupDefinition group, Vector2 anchorPos, Vector2 anchorSize, IReadOnlyList<Vector2> sizes)
+    private static Vector2[] Arrange(TrackerGroupDefinition group, Vector2 anchorPos, Vector2 anchorSize, IReadOnlyList<Vector2> sizes)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var gap = MathF.Round(Math.Max(0, group.Spacing) * scale);
@@ -830,7 +1059,7 @@ internal sealed class AuraEngine
             _ => center.Y - total / 2f
         };
 
-        // Icons going left or up start from the far end, so the first aura stays next to the box.
+        // Icons going left or up start from the far end, so the first tracker stays next to the box.
         var cursor = reversed ? start + total : start;
 
         for (var i = 0; i < count; i++)
@@ -862,17 +1091,17 @@ internal sealed class AuraEngine
 
     // ---------------------------------------------------------------- evaluation
 
-    private static AuraState Evaluate(AuraDefinition aura, GameSnapshot snapshot)
+    private static TrackerState Evaluate(TrackerDefinition tracker, GameSnapshot snapshot)
     {
         var player = snapshot.Player;
         if (!snapshot.IsLoggedIn || player is null)
-            return AuraState.Hidden;
+            return TrackerState.Hidden;
 
-        if (!IsLoaded(aura.Load, player, snapshot.Context))
-            return AuraState.Hidden;
+        if (!IsLoaded(tracker.Load, player, snapshot.Context))
+            return TrackerState.Hidden;
 
-        // The triggers are tried in order; the first one that matches decides. None matching hides the aura.
-        foreach (var rule in aura.Rules)
+        // The triggers are tried in order; the first one that matches decides. None matching hides the tracker.
+        foreach (var rule in tracker.Rules)
         {
             // An ability not learned yet (level too low, or the level is synced down in a dungeon or FATE) never matches.
             // The player's level is the one the game uses, so it already includes the sync.
@@ -884,21 +1113,21 @@ internal sealed class AuraEngine
                 return state;
         }
 
-        return AuraState.Hidden;
+        return TrackerState.Hidden;
     }
 
-    private static AuraState Match(AuraRule rule, GameSnapshot snapshot, UnitSnapshot player) => rule.Kind switch
+    private static TrackerState Match(TrackerRule rule, GameSnapshot snapshot, UnitSnapshot player) => rule.Kind switch
     {
-        ConditionKind.StatusPresent or ConditionKind.StatusMissing => MatchStatus(rule, snapshot, player),
+        ConditionKind.StatusPresent or ConditionKind.StatusMissing or ConditionKind.StatusAlways => MatchStatus(rule, snapshot, player),
         ConditionKind.AbilityActivated => MatchActivated(rule, snapshot),
         _ => MatchCooldown(rule, snapshot)
     };
 
     // An ability the game turns on right now: it glows, or the button of the first action of its chain has changed into it.
-    private static AuraState MatchActivated(AuraRule rule, GameSnapshot snapshot)
+    private static TrackerState MatchActivated(TrackerRule rule, GameSnapshot snapshot)
     {
         if (rule.ActionId == 0 || !snapshot.Cooldowns.TryGetValue(rule.ActionId, out var cooldown))
-            return AuraState.Hidden;
+            return TrackerState.Hidden;
 
         var root = GameNames.ComboRoot(rule.ActionId);
         bool offered;
@@ -920,38 +1149,38 @@ internal sealed class AuraEngine
         }
 
         if (!offered)
-            return AuraState.Hidden;
+            return TrackerState.Hidden;
 
         // Standard number: the cooldown of the ability (the global cooldown does not count).
         var remaining = cooldown.IsOnCooldown && !(cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds) ? cooldown.Remaining : 0f;
 
-        return new AuraState(true, true, remaining, 0, AuraPhase.Active, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
+        return new TrackerState(true, true, remaining, 0, TrackerPhase.Active, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
             cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
     }
 
-    private static AuraState MatchStatus(AuraRule rule, GameSnapshot snapshot, UnitSnapshot player)
+    private static TrackerState MatchStatus(TrackerRule rule, GameSnapshot snapshot, UnitSnapshot player)
     {
-        if (rule.StatusId == 0)
-            return AuraState.Hidden;
+        if (rule.StatusId == 0 && !rule.UsesFilter)
+            return TrackerState.Hidden;
 
         // Nobody to look at (for example no target): nothing matches, not even a "missing" reminder.
         if (!TryFindStatus(rule, snapshot, player, out var found))
-            return AuraState.Hidden;
+            return TrackerState.Hidden;
 
         var present = found is not null;
         var wantPresent = rule.Kind == ConditionKind.StatusPresent;
 
-        if (present != wantPresent)
-            return AuraState.Hidden;
+        if (rule.Kind != ConditionKind.StatusAlways && present != wantPresent)
+            return TrackerState.Hidden;
 
-        return new AuraState(true, present, found?.RemainingTime ?? 0f, found?.Param ?? 0, Rule: rule);
+        return new TrackerState(true, present, found?.RemainingTime ?? 0f, found?.Param ?? 0, Rule: rule, FoundStatusId: found?.Id ?? 0);
     }
 
-    private static AuraState MatchCooldown(AuraRule rule, GameSnapshot snapshot)
+    private static TrackerState MatchCooldown(TrackerRule rule, GameSnapshot snapshot)
     {
-        // No ability chosen, or the data has not arrived yet (it comes one frame after the aura asks for it).
+        // No ability chosen, or the data has not arrived yet (it comes one frame after the tracker asks for it).
         if (rule.ActionId == 0 || !snapshot.Cooldowns.TryGetValue(rule.ActionId, out var cooldown))
-            return AuraState.Hidden;
+            return TrackerState.Hidden;
 
         var onCooldown = cooldown.IsOnCooldown;
         var remaining = cooldown.Remaining;
@@ -963,34 +1192,44 @@ internal sealed class AuraEngine
             remaining = 0f;
         }
 
-        var phase = onCooldown ? AuraPhase.Cooling : AuraPhase.Ready;
+        var phase = onCooldown ? TrackerPhase.Cooling : TrackerPhase.Ready;
 
         var matches = rule.Kind switch
         {
-            ConditionKind.AbilityOnCooldown => phase == AuraPhase.Cooling,
-            ConditionKind.AbilityReady => phase == AuraPhase.Ready,
+            ConditionKind.AbilityOnCooldown => phase == TrackerPhase.Cooling,
+            ConditionKind.AbilityReady => phase == TrackerPhase.Ready,
             _ => true
         };
 
         if (!matches)
-            return AuraState.Hidden;
+            return TrackerState.Hidden;
 
-        return new AuraState(true, false, remaining, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
+        return new TrackerState(true, false, remaining, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
             cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
     }
 
     // Looks for the status of the trigger on the unit it watches.
     // Returns false when there is nobody to look at; "found" is null when the unit does not have the status.
-    private static bool TryFindStatus(AuraRule rule, GameSnapshot snapshot, UnitSnapshot player, out StatusSnapshot? found)
+    /// <summary>The filters of the Filters page, set before the trackers are evaluated each frame.</summary>
+    private static NahjaUI.Modules.Filters.FiltersSettings? CurrentFilters;
+
+    // A status with time left ends before a permanent one; between two with time, the one with less.
+    private static bool Earlier(StatusSnapshot candidate, StatusSnapshot current)
+    {
+        static float TimeLeft(StatusSnapshot status) => status.RemainingTime > 0f ? status.RemainingTime : float.MaxValue;
+        return TimeLeft(candidate) < TimeLeft(current);
+    }
+
+    private static bool TryFindStatus(TrackerRule rule, GameSnapshot snapshot, UnitSnapshot player, out StatusSnapshot? found)
     {
         found = null;
 
         var unit = rule.Unit switch
         {
-            AuraUnit.Player => player,
-            AuraUnit.Target => snapshot.Target,
-            AuraUnit.Focus => snapshot.Focus,
-            AuraUnit.TargetOfTarget => snapshot.TargetOfTarget,
+            TrackerUnit.Player => player,
+            TrackerUnit.Target => snapshot.Target,
+            TrackerUnit.Focus => snapshot.Focus,
+            TrackerUnit.TargetOfTarget => snapshot.TargetOfTarget,
             _ => null
         };
 
@@ -999,32 +1238,54 @@ internal sealed class AuraEngine
 
         foreach (var status in unit.Statuses)
         {
-            if (status.Id != rule.StatusId)
+            var matches = rule.UsesFilter
+                ? CurrentFilters?.Find(rule.FilterId)?.StatusIds.Contains(status.Id) == true
+                : status.Id == rule.StatusId;
+
+            if (!matches)
                 continue;
 
             if (rule.OnlyMine && status.SourceId != player.EntityId)
                 continue;
 
-            found = status;
-            break;
+            // With a filter, the status with the least time left is the one that shows (the one that will end first).
+            if (found is null || (rule.UsesFilter && Earlier(status, found)))
+                found = status;
+
+            if (!rule.UsesFilter)
+                break;
         }
 
         return true;
     }
 
-    // Does the aura load on this job? (Only the job part of the load conditions; combat does not matter for placing.)
-    private static bool AppliesToJob(AuraDefinition aura, uint? job) =>
-        job is null || aura.Load.JobIds.Count == 0 || aura.Load.JobIds.Contains(job.Value);
+    // Does the tracker load on this job and in this kind of content (PvE or PvP)? (Only those parts of the load conditions; combat does not matter for placing.)
+    private static bool AppliesToJob(TrackerDefinition tracker, uint? job, bool inPvp)
+    {
+        if (tracker.Load.Where == TrackerPvpMode.PveOnly && inPvp)
+            return false;
 
-    private static bool IsLoaded(AuraLoadConditions load, UnitSnapshot player, ContextSnapshot context)
+        if (tracker.Load.Where == TrackerPvpMode.PvpOnly && !inPvp)
+            return false;
+
+        return job is null || tracker.Load.JobIds.Count == 0 || tracker.Load.JobIds.Contains(job.Value);
+    }
+
+    private static bool IsLoaded(TrackerLoadConditions load, UnitSnapshot player, ContextSnapshot context)
     {
         if (load.JobIds.Count > 0 && !load.JobIds.Contains(player.JobId))
             return false;
 
+        if (load.Where == TrackerPvpMode.PveOnly && context.InPvP)
+            return false;
+
+        if (load.Where == TrackerPvpMode.PvpOnly && !context.InPvP)
+            return false;
+
         return load.Combat switch
         {
-            AuraCombatMode.InCombat => context.InCombat,
-            AuraCombatMode.OutOfCombat => !context.InCombat,
+            TrackerCombatMode.InCombat => context.InCombat,
+            TrackerCombatMode.OutOfCombat => !context.InCombat,
             _ => true
         };
     }
@@ -1036,10 +1297,10 @@ internal sealed class AuraEngine
     internal const float StatusIconAspect = 24f / 32f;
 
     /// <summary>
-    /// Draws one aura icon. A ghost is a faded preview (no text) used in unlock mode to show
+    /// Draws one tracker icon. A ghost is a faded preview (no text) used in unlock mode to show
     /// where the members of a group will be.
     /// </summary>
-    private void DrawAura(AuraRuntime runtime, Vector2 pos, Vector2 size, bool ghost)
+    private void DrawTracker(TrackerRuntime runtime, Vector2 pos, Vector2 size, bool ghost)
     {
         var definition = runtime.Definition;
         var state = runtime.State;
@@ -1051,41 +1312,41 @@ internal sealed class AuraEngine
         // Rounded corners, like the unit frames. They can never be more than half of the shorter side.
         var rounding = MathF.Min(MathF.Round(Math.Clamp(definition.CornerRadiusPx, 0, 24) * scale), MathF.Min(size.X, size.Y) / 2f);
 
-        var cooling = !ghost && isCooldown && state.Phase == AuraPhase.Cooling;
-        var missing = !ghost && !isCooldown && !state.StatusPresent;
-        var redBorder = missing || (cooling && definition.CooldownLook == CooldownLook.Red);
+        var cooling = !ghost && isCooldown && state.Phase == TrackerPhase.Cooling;
+        var activeRule = state.Rule;
+        var red = !ghost && activeRule is not null && EffectActive(activeRule.RedWhen, state);
+        var dim = !ghost && activeRule is not null && EffectActive(activeRule.DimWhen, state);
 
-        // Cooldown auras show the ability's own icon, status auras the icon of the status.
-        var iconId = ResolveIcon(state.Rule ?? definition.Rules.FirstOrDefault(), state.IconActionId, out var iconIsStatus);
+        // Cooldown trackers show the ability's own icon, status trackers the icon of the status.
+        var iconId = ResolveIcon(state.Rule ?? definition.Rules.FirstOrDefault(), state.IconActionId, out var iconIsStatus, state.FoundStatusId);
 
         if (iconId != 0)
         {
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
 
             // The icon is cropped (never stretched) to the shape of the box.
-            var crop = Math.Clamp(definition.IconCropPercent, 0, 30) / 100f;
-            var (marginLeft, marginRight) = definition.FillWidth ? IconMargins.Get(iconId) : (0f, 0f);
-            var (uv0, uv1) = IconUv(size, iconIsStatus ? StatusIconAspect : 1f, crop, marginLeft, marginRight);
+            var trim = definition.Trim ?? IconTrim.AllAround;
+            var margins = trim == IconTrim.None ? (0f, 0f, 0f, 0f) : IconMargins.Get(iconId);
+            var cutSides = trim is IconTrim.Sides or IconTrim.AllAround;
+            var cutVertical = trim is IconTrim.TopAndBottom or IconTrim.AllAround;
+            var (uv0, uv1) = IconUv(size, iconIsStatus ? StatusIconAspect : 1f,
+                cutSides ? margins.Item1 : 0f, cutVertical ? margins.Item2 : 0f,
+                cutSides ? margins.Item3 : 0f, cutVertical ? margins.Item4 : 0f);
 
-            // A ghost is transparent. A missing status is reddish. A recharging ability is dimmed or red.
+            // A ghost is transparent. The effects of the trigger that decides: a red mask and/or darkened.
             var tint = Vector4.One;
 
             if (ghost)
             {
                 tint = new Vector4(1f, 1f, 1f, 0.55f);
             }
-            else if (missing)
+            else
             {
-                tint = new Vector4(1f, 0.55f, 0.55f, 1f);
-            }
-            else if (cooling)
-            {
-                tint = definition.CooldownLook switch
-                {
-                    CooldownLook.Dimmed => new Vector4(0.45f, 0.45f, 0.45f, 1f),
-                    CooldownLook.Red => new Vector4(1f, 0.45f, 0.45f, 1f),
-                    _ => Vector4.One
-                };
+                if (red)
+                    tint *= new Vector4(1f, 0.45f, 0.45f, 1f);
+
+                if (dim)
+                    tint *= new Vector4(0.45f, 0.45f, 0.45f, 1f);
             }
 
             drawList.AddImageRounded(texture.Handle, pos, pos + size, uv0, uv1, ImGui.GetColorU32(tint), rounding, ImDrawFlags.RoundCornersAll);
@@ -1100,27 +1361,24 @@ internal sealed class AuraEngine
             DrawSweep(drawList, pos, size, state.Remaining / state.Total, rounding);
 
         // 1 px border (it grows with the UI scale so it always looks 1 px thick):
-        // black, red when the status is missing or the ability is recharging in red, accent colour for a ghost.
+        // black, accent colour for a ghost.
         var thickness = MathF.Max(1f, MathF.Round(scale));
-        var border = ghost ? Theme.Accent : redBorder ? Theme.Error : new Vector4(0f, 0f, 0f, 1f);
-        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(border), rounding, ImDrawFlags.None, redBorder ? thickness * 2f : thickness);
+        var border = ghost ? Theme.Accent : new Vector4(0f, 0f, 0f, 1f);
+        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(border), rounding, ImDrawFlags.None, thickness);
 
         if (ghost)
             return;
 
         // Glow around the icon, as the trigger that decides asks for.
         var rule = state.Rule;
-        if (rule is not null
-            && (rule.Glow
-                || (rule.GlowWhenReady && state.Phase == AuraPhase.Ready)
-                || (rule.GlowWhenHighlighted && state.Highlighted)))
+        if (rule is not null && EffectActive(rule.GlowWhen, state))
         {
             DrawGlow(drawList, pos, size, rounding);
         }
 
-        // The texts over the icon. Every text has its own source, size (height of the letters, in logical pixels: the fonts are
+        // The texts over the icon: the ones of the trigger that decides. Every text has its own source, size (height of the letters, in logical pixels: the fonts are
         // already built scaled by the user's UI scale, so it is not multiplied again), position and colour.
-        foreach (var text in definition.Texts)
+        foreach (var text in rule?.Texts ?? new List<TrackerTextDefinition>())
         {
             // The first source with a value wins.
             string? value = null;
@@ -1139,8 +1397,26 @@ internal sealed class AuraEngine
         }
     }
 
+    // An ability that cannot be used: recharging with no charge left (an ability with several charges can be used while one is left).
+    private static bool IsUnavailable(TrackerState state) =>
+        state.AbilityBased && state.Phase == TrackerPhase.Cooling && (state.MaxCharges <= 1 || state.Charges <= 0);
+
+    // Is an effect of the trigger that decides applied right now?
+    private static bool EffectActive(EffectWhen when, TrackerState state) => when switch
+    {
+        EffectWhen.Always => true,
+        EffectWhen.StatusOn => state.StatusPresent,
+        EffectWhen.StatusMissing => !state.StatusPresent,
+        EffectWhen.Ready => state.Phase == TrackerPhase.Ready,
+        EffectWhen.Recharging => state.Phase == TrackerPhase.Cooling,
+        EffectWhen.Highlighted => state.Highlighted,
+        EffectWhen.Unavailable => IsUnavailable(state),
+        EffectWhen.Usable => state.AbilityBased && !IsUnavailable(state),
+        _ => false
+    };
+
     // What one source of a text gives right now, or null when it has nothing to show (no time left, no stacks...).
-    private string? SourceValue(AuraTextSource text, AuraState state)
+    private string? SourceValue(TrackerTextSource text, TrackerState state)
     {
         var snapshot = frameSnapshot;
         var player = snapshot?.Player;
@@ -1156,7 +1432,7 @@ internal sealed class AuraEngine
 
                 // Only statuses that really stack show a number. (For other statuses the game stores something else
                 // there, for example the +30 % of Sprint.)
-                return state.StatusPresent ? StackText(state.Rule?.StatusId ?? 0, state.Stacks) : null;
+                return state.StatusPresent ? StackText(state.Rule is { UsesFilter: true } ? state.FoundStatusId : state.Rule?.StatusId ?? 0, state.Stacks) : null;
 
             case TextSource.ComboTime:
                 return snapshot?.Combo is { Timer: > 0f } combo ? FormatTime(combo.Timer) : null;
@@ -1204,10 +1480,10 @@ internal sealed class AuraEngine
     }
 
     /// <summary>
-    /// The game icon of an aura: the one chosen by the user, or the one of what it tracks. "isStatusIcon" tells the shape
+    /// The game icon of a tracker: the one chosen by the user, or the one of what it tracks. "isStatusIcon" tells the shape
     /// (status icons are taller than ability icons). <paramref name="currentForm"/> is the form the game shows for an ability now (0 = the chosen one).
     /// </summary>
-    internal static uint ResolveIcon(AuraRule? rule, uint currentForm, out bool isStatusIcon)
+    internal static uint ResolveIcon(TrackerRule? rule, uint currentForm, out bool isStatusIcon, uint foundStatusId = 0)
     {
         isStatusIcon = false;
 
@@ -1226,7 +1502,7 @@ internal sealed class AuraEngine
         isStatusIcon = !rule.IsAbility;
         return rule.IsAbility
             ? GameNames.ActionIconId(currentForm != 0 ? currentForm : rule.ActionId)
-            : GameNames.StatusIconId(rule.StatusId);
+            : GameNames.StatusIconId(rule.UsesFilter ? foundStatusId : rule.StatusId);
     }
 
     // A dark wedge over the part of the icon that is still recharging, like the game's own hotbar:
@@ -1291,7 +1567,7 @@ internal sealed class AuraEngine
     private static readonly List<float> GlowLengths = new();
     private static readonly List<Vector2> GlowDash = new();
 
-    // The "proc" glow of the game's hotbar: short golden dashes with gaps that run around the edge of the icon.
+    // The glow of the game's hotbar: short golden dashes with gaps that run around the edge of the icon.
     // The dashes follow the rounded corners. Their size is in logical pixels, so it looks the same at any UI scale.
     private static void DrawGlow(ImDrawListPtr drawList, Vector2 pos, Vector2 size, float rounding)
     {
@@ -1421,14 +1697,18 @@ internal sealed class AuraEngine
         return GlowPath[^1];
     }
 
+    // The same inset on every side (the progress bar and the status rows, which keep a plain crop).
+    internal static (Vector2 Uv0, Vector2 Uv1) IconUv(Vector2 boxSize, float iconAspect, float inset) =>
+        IconUv(boxSize, iconAspect, inset, inset, inset, inset);
+
     // The part of the icon texture to show so that it fills a box of the given shape without distortion.
-    internal static (Vector2 Uv0, Vector2 Uv1) IconUv(Vector2 boxSize, float iconAspect, float inset, float marginLeft = 0f, float marginRight = 0f)
+    internal static (Vector2 Uv0, Vector2 Uv1) IconUv(Vector2 boxSize, float iconAspect, float left, float top, float right, float bottom)
     {
-        // The empty margin of the icon (when asked) is cut at the sides, on top of the crop.
-        var u0 = Math.Max(inset, marginLeft);
-        var u1 = 1f - Math.Max(inset, marginRight);
-        var v0 = inset;
-        var v1 = 1f - inset;
+        // The margins that are cut away (fractions of the width / height of the icon).
+        var u0 = left;
+        var u1 = 1f - right;
+        var v0 = top;
+        var v1 = 1f - bottom;
 
         var boxAspect = boxSize.X / Math.Max(1f, boxSize.Y);
 

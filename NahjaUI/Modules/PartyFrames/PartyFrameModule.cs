@@ -10,7 +10,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
-using NahjaUI.Modules.Auras;
+using NahjaUI.Modules.Trackers;
 using NahjaUI.Modules.UnitFrames;
 
 namespace NahjaUI.Modules.PartyFrames;
@@ -33,7 +33,6 @@ internal sealed class PartyFrameModule : IDisposable
     private static readonly uint[] HealerJobs = { 6, 24, 26, 28, 33, 40 };
     private static readonly uint[] RaiserJobs = { 27, 35 };
 
-    private static readonly Vector4 ChocoboColor = new(0.88f, 0.75f, 0.30f, 1f);
 
     // What is shown in the preview when there is no real party: a full party of eight, with a shield, MP and a dead member.
     private static readonly UnitSnapshot[] SampleParty =
@@ -51,6 +50,9 @@ internal sealed class PartyFrameModule : IDisposable
     // In the preview the third member is shown as the one you have targeted, so the ring and the arrow can be seen.
     private const int PreviewSelectedIndex = 2;
 
+    // The box that unlock mode shows: a full party of 8 and the chocobo.
+    private const int BoxSlots = 9;
+
     private readonly Plugin plugin;
     private readonly NativeWindowHider hider = new();
 
@@ -58,7 +60,7 @@ internal sealed class PartyFrameModule : IDisposable
     {
         this.plugin = plugin;
 
-        // The box of the first bar. The others follow it downwards.
+        // The box of the list: its size is one row; the rows are placed one after another inside a box of 9 rows, from the top or (option) from the bottom.
         PartyElement = plugin.Layout.Register("unitframe.party", "Party frames", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.TopLeft,
@@ -68,6 +70,18 @@ internal sealed class PartyFrameModule : IDisposable
             Width = 216,
             Height = 34
         });
+
+        // Shown in the panel of unlock mode, under X and Y.
+        PartyElement.DrawOptions = () =>
+        {
+            var settings = plugin.Configuration.UnitFrames.Party;
+            var fromBottom = settings.StartFromBottom;
+            if (ImGui.Checkbox("Start drawing from the bottom", ref fromBottom))
+            {
+                settings.StartFromBottom = fromBottom;
+                plugin.RequestSave();
+            }
+        };
 
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeLists, OnNativePreDraw);
     }
@@ -99,40 +113,22 @@ internal sealed class PartyFrameModule : IDisposable
         var party = snapshot.Party;
         var result = new List<UnitSnapshot>(party.Count + 1);
 
-        var playerId = snapshot.Player?.EntityId;
-
         // Alone, and the game is set to show its list alone: you are the only member.
         if (party.Count == 0 && snapshot.Context.PartyListWhenSolo && snapshot.Player is not null)
         {
             result.Add(snapshot.Player);
 
-            if (settings.ShowChocobo && snapshot.Chocobo is not null)
+            if (snapshot.Chocobo is not null)
                 result.Add(snapshot.Chocobo);
 
             return result;
         }
 
-        if (settings.Order == PartyOrder.MeFirst && playerId is not null)
-        {
-            foreach (var member in party)
-            {
-                if (member.EntityId == playerId)
-                    result.Add(member);
-            }
-
-            foreach (var member in party)
-            {
-                if (member.EntityId != playerId)
-                    result.Add(member);
-            }
-        }
-        else
-        {
-            result.AddRange(party);
-        }
+        // The order is the game's own party list (so the macros <2>, <3>... keep pointing at the same members).
+        result.AddRange(party);
 
         // Like the game, the chocobo only shows while you are in a party.
-        if (result.Count > 0 && settings.ShowChocobo && snapshot.Chocobo is not null)
+        if (result.Count > 0 && snapshot.Chocobo is not null)
             result.Add(snapshot.Chocobo);
 
         return result;
@@ -146,7 +142,7 @@ internal sealed class PartyFrameModule : IDisposable
     private unsafe void OnNativePreDraw(AddonEvent type, AddonArgs args)
     {
         var look = plugin.Configuration.UnitFrames.Party.Look;
-        if (!look.Enabled || !look.HideNative)
+        if (!look.Enabled)
             return;
 
         hider.Hide(args);
@@ -157,9 +153,9 @@ internal sealed class PartyFrameModule : IDisposable
     public void Draw()
     {
         var hideLook = plugin.Configuration.UnitFrames.Party.Look;
-        hider.ShowAgain(_ => hideLook.Enabled && hideLook.HideNative);
+        hider.ShowAgain(_ => hideLook.Enabled);
         var snapshot = plugin.GameData.Current;
-        var preview = PreviewRequested || plugin.Layout.UnlockMode;
+        var preview = PreviewRequested || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(PartyElement.Id);
         PreviewRequested = false;
 
         var settings = plugin.Configuration.UnitFrames.Party;
@@ -177,21 +173,53 @@ internal sealed class PartyFrameModule : IDisposable
                 return;
             }
 
-            members = settings.ShowChocobo ? SamplePartyWithChocobo : SampleParty;
+            members = SamplePartyWithChocobo;
             isSample = true;
         }
 
         var scale = ImGuiHelpers.GlobalScale;
         var (pos, size) = LayoutManager.GetRect(PartyElement.Layout);
-        var step = size.Y + MathF.Round(settings.RowSpacingPx * scale);
+
+        // The MP bar is a bar of its own that can sit anywhere around the member's bar. A member that shows it takes the area of the bar and
+        // the MP bar together, one that does not takes the bar alone: so the visible space between two members is always the same.
+        var gap = MathF.Round(settings.RowSpacingPx * scale);
+        var mpTop = 0f;
+        var mpBottom = size.Y;
+        if (settings.MpMode != PartyMpMode.Off)
+        {
+            var (mpPos, mpSize) = MpRect(settings, Vector2.Zero, size, scale);
+            mpTop = MathF.Min(0f, mpPos.Y);
+            mpBottom = MathF.Max(size.Y, mpPos.Y + mpSize.Y);
+        }
+
+        // The box of the list holds the 9 slots with the biggest extent, so it never changes size.
+        var biggest = mpBottom - mpTop;
+        var boxHeight = (BoxSlots - 1) * (biggest + gap) + biggest;
+
+        // Top and height of the slot of each member.
+        var tops = new float[members.Count];
+        var heights = new float[members.Count];
+        var total = 0f;
+        for (var i = 0; i < members.Count; i++)
+        {
+            var withMp = settings.MpMode != PartyMpMode.Off && ShowsMp(settings.MpMode, members[i]);
+            tops[i] = withMp ? mpTop : 0f;
+            heights[i] = withMp ? mpBottom - mpTop : size.Y;
+            total += heights[i] + (i > 0 ? gap : 0f);
+        }
 
         var targetId = snapshot.Target?.EntityId;
         var drawList = ImGui.GetBackgroundDrawList();
 
+        // The rows go one under the other from the top of the box; with "Start from the bottom" the whole stack sits at the bottom of it
+        // (the empty space is on top). The order of the members does not change (macros <2>, <3>).
+        var cursor = settings.StartFromBottom ? pos.Y + MathF.Max(0f, boxHeight - total) : pos.Y;
+
         for (var i = 0; i < members.Count; i++)
         {
             var member = members[i];
-            var rowPos = new Vector2(pos.X, pos.Y + i * step);
+            var rowPos = new Vector2(pos.X, cursor - tops[i]);
+            cursor += heights[i] + gap;
 
             var selected = isSample ? i == PreviewSelectedIndex : targetId is not null && member.EntityId == targetId;
 
@@ -213,17 +241,16 @@ internal sealed class PartyFrameModule : IDisposable
                     ? new ArraySegment<StatusSnapshot>(StatusRowRenderer.PreviewEnfeeblements, 0, index % 3 + 1)
                     : member.Statuses;
 
-                plugin.StatusRows.DrawRow(drawList, settings.Enhancements, true, enhancements, isSample, playerId, rowPos, size, "party");
-                plugin.StatusRows.DrawRow(drawList, settings.Enfeeblements, false, enfeeblements, isSample, playerId, rowPos, size, "party");
+                plugin.StatusRows.DrawRows(drawList, settings.Enhancements, settings.Enfeeblements, enhancements, enfeeblements, isSample, playerId, rowPos, size, "party");
             });
 
             // Clicks only for real members, and not while the boxes are being moved.
-            if (!isSample && settings.Look.Clickable && !plugin.Layout.UnlockMode)
+            if (!isSample && !plugin.Layout.UnlockMode)
                 plugin.UnitFrameSystem.HandleClicks($"party.{member.EntityId}", rowPos, size, member);
         }
 
         // In unlock mode the box is the whole stack of bars.
-        PartyElement.DisplayRect = (pos, new Vector2(size.X, (members.Count - 1) * step + size.Y));
+        PartyElement.DisplayRect = (pos, new Vector2(size.X, boxHeight));
     }
 
     // The game's own job icons: 62000 + job id (plain) or 62100 + job id (light). Crafters and gatherers (jobs 8-18) have them too.
@@ -232,6 +259,7 @@ internal sealed class PartyFrameModule : IDisposable
 
     private void DrawMember(ImDrawListPtr drawList, PartyFrameSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size, bool selected)
     {
+        var fadeMark = DrawListFade.Mark(drawList);
         var look = settings.Look;
         var scale = ImGuiHelpers.GlobalScale;
         var max = pos + size;
@@ -252,77 +280,65 @@ internal sealed class PartyFrameModule : IDisposable
         if (look.ShowShield && member.ShieldPercent > 0)
             UnitFrameModule.DrawShield(drawList, look, pos, size, fraction, rounding, member.ShieldPercent);
 
-        // The job icon of the member (the game's own icon, so every job has one). It takes the place of the role stripe.
-        var textPos = pos;
-        var textSize = size;
+        // The job icon of the member (the game's own icon, so every job has one). The name does not care about it: its place is only
+        // the anchor and the offsets chosen for it, as on the enmity list with its dot.
         var hasJobIcon = settings.ShowJobIcon && !member.IsCompanion && member.JobId != 0;
 
         if (hasJobIcon)
         {
-            var inset = MathF.Max(1f, MathF.Round(2f * scale));
             // The icon is the size chosen, even if it is taller than the bar.
             var iconSide = MathF.Max(MathF.Round(settings.JobIconSizePx * scale), 4f);
-            var iconMin = new Vector2(pos.X + inset + 1f, MathF.Round(pos.Y + (size.Y - iconSide) / 2f));
+            var iconAttach = pos + size * settings.JobIconBarAnchor.Fraction() + new Vector2(settings.JobIconOffsetX, settings.JobIconOffsetY) * scale;
+            var iconMin = iconAttach - new Vector2(iconSide, iconSide) * settings.JobIconSelfAnchor.Fraction();
+            iconMin = new Vector2(MathF.Round(iconMin.X), MathF.Round(iconMin.Y));
             var iconId = JobIconId(member.JobId, settings.JobIconStyle);
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
 
             drawList.AddImage(texture.Handle, iconMin, iconMin + new Vector2(iconSide, iconSide), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
 
-            // The name moves right so it does not sit over the icon.
-            var shift = iconMin.X + iconSide + inset - pos.X;
-            textPos = new Vector2(pos.X + shift, pos.Y);
-            textSize = new Vector2(size.X - shift, size.Y);
         }
-
-        if (settings.RoleStripe && !hasJobIcon)
-        {
-            // The stripe is the left part of the bar's own rounded shape, so its corners follow the bar exactly.
-            var stripeRight = pos.X + MathF.Max(2f, MathF.Round(4f * scale));
-            FillRounded(drawList, pos, max, stripeRight, ImGui.GetColorU32(RoleColor(member)), rounding, ImDrawFlags.RoundCornersAll);
-        }
-
-        if (!member.IsCompanion && ShowsMp(settings.MpMode, member) && member.MaxMp > 0)
-        {
-            var height = MathF.Max(2f, MathF.Round(look.MpHeightPx * scale));
-            var top = max.Y - height;
-            var mpFraction = Math.Clamp(member.Mp / (float)member.MaxMp, 0f, 1f);
-
-            // The strip sits inside the bar, along its bottom edge.
-            drawList.AddRectFilled(new Vector2(pos.X, top), max, ImGui.GetColorU32(new Vector4(0.02f, 0.02f, 0.05f, 0.9f)), rounding, ImDrawFlags.RoundCornersBottom);
-
-            var mpRight = MathF.Round(pos.X + size.X * mpFraction);
-            if (mpRight > pos.X)
-                FillRounded(drawList, new Vector2(pos.X, top), max, mpRight, ImGui.GetColorU32(look.MpColor), rounding, ImDrawFlags.RoundCornersBottom);
-
-            // A thin dark line between the HP and the MP.
-            drawList.AddLine(new Vector2(pos.X, top), new Vector2(max.X, top), ImGui.GetColorU32(look.BorderColor), thickness);
-        }
-
-        // A dead member is darkened.
-        if (member.IsDead || member.Hp == 0)
-            drawList.AddRectFilled(pos, max, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.45f)), rounding);
 
         drawList.AddRect(pos, max, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, thickness);
 
-        // The texts last, over everything.
-        var name = UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
-        plugin.UnitFrameSystem.DrawText(drawList, name, look.Name, textPos, textSize);
+        if (!member.IsCompanion && ShowsMp(settings.MpMode, member) && member.MaxMp > 0)
+            DrawMpBar(drawList, settings, member, pos, size);
 
-        var health = UnitTextFormatter.FormatHealth(look, member.Hp, member.MaxHp);
-        plugin.UnitFrameSystem.DrawText(drawList, health, look.Health, pos, size);
+        // The ring of the member you have targeted. It is always on and its color is the one of the whole interface
+        // (Appearance > Target ring color). A line is centered on its rectangle: pushing the rectangle out by half the line makes
+        // the ring start exactly where the bar ends (no gap of screen between them).
+        if (selected)
+        {
+            var ringWidth = thickness * 2f;
+            var grow = new Vector2(ringWidth / 2f, ringWidth / 2f);
+            drawList.AddRect(pos - grow, max + grow, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
+        }
 
-        if (!selected)
-            return;
+        // The texts last, over everything (the ring too: a name at the very top of the bar must not be cut by it).
+        // A member who is away (offline, in another area, too far) or dead is faded; his name can be replaced by what is happening.
+        var away = AwayTag(member);
+        var name = settings.ShowAwayTag && away is not null
+            ? away
+            : UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
+        plugin.UnitFrameSystem.DrawText(drawList, name, look.Name, pos, size);
 
-        // The ring is always on and its color is the one of the whole interface (Appearance > Target ring color).
-        // A line is centered on its rectangle: pushing the rectangle out by half the line makes the ring start exactly where the
-        // bar ends (no gap of screen between them).
-        var ringWidth = thickness * 2f;
-        var grow = new Vector2(ringWidth / 2f, ringWidth / 2f);
-        drawList.AddRect(pos - grow, max + grow, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
+        var hpText = UnitTextFormatter.FormatValue(look, member.Hp, member.MaxHp);
+        plugin.UnitFrameSystem.DrawText(drawList, hpText, look.Hp, pos, size);
+
+        if (away is not null)
+            DrawListFade.FadeSince(drawList, fadeMark, settings.AwayOpacityPercent / 100f);
     }
 
     // ---------------------------------------------------------------- helpers
+
+    // What keeps a member from being "here": offline, another area, too far, or dead. Null when he is fine.
+    private static string? AwayTag(UnitSnapshot member) => member.Presence switch
+    {
+        Presence.Offline => "Offline",
+        Presence.OtherArea => "Other area",
+        Presence.OutOfRange => "Out of range",
+        Presence.ViewingCutscene => "Viewing cutscene",
+        _ => member.IsDead || member.Hp == 0 ? "Dead" : null
+    };
 
     // Fills a rounded box only up to <clipRight>. The box keeps its full rounded shape and is cut by a clip rectangle, so a
     // narrow fill (the stripe, a low HP) still follows the corners of the bar instead of sticking out of them.
@@ -341,14 +357,34 @@ internal sealed class PartyFrameModule : IDisposable
         _ => true
     };
 
-    private Vector4 RoleColor(UnitSnapshot member)
+    // Where the MP bar goes: a point of the MP bar on a point of the member's bar, moved by the offsets (plus Y is up in the page, saved downwards).
+    private static (Vector2 Pos, Vector2 Size) MpRect(PartyFrameSettings settings, Vector2 pos, Vector2 size, float scale)
     {
-        // The chocobo has no role: a neutral gold stripe.
-        if (member.IsCompanion)
-            return ChocoboColor;
+        var width = settings.MpWidthPx > 0 ? MathF.Round(settings.MpWidthPx * scale) : size.X;
+        var height = MathF.Max(2f, MathF.Round(settings.Look.MpHeightPx * scale));
+        var mpSize = new Vector2(width, height);
 
-        // The three colours are the ones of Appearance > Role colors.
-        var frames = plugin.Configuration.UnitFrames;
-        return JobRoles.Color(frames, member.JobId, frames.DamageColor);
+        var attach = pos + size * settings.MpBarAnchor.Fraction() + new Vector2(settings.MpOffsetX, settings.MpOffsetY) * scale;
+        var mpPos = attach - mpSize * settings.MpSelfAnchor.Fraction();
+        return (new Vector2(MathF.Round(mpPos.X), MathF.Round(mpPos.Y)), mpSize);
+    }
+
+    private static void DrawMpBar(ImDrawListPtr drawList, PartyFrameSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size)
+    {
+        var look = settings.Look;
+        var scale = ImGuiHelpers.GlobalScale;
+        var (mpPos, mpSize) = MpRect(settings, pos, size, scale);
+        var mpMax = mpPos + mpSize;
+
+        var rounding = MathF.Min(MathF.Round(look.MpRoundingPx * scale), MathF.Min(mpSize.X, mpSize.Y) / 2f);
+        var fraction = Math.Clamp(member.Mp / (float)member.MaxMp, 0f, 1f);
+
+        drawList.AddRectFilled(mpPos, mpMax, ImGui.GetColorU32(look.MpBackgroundColor), rounding);
+
+        var fillRight = MathF.Round(mpPos.X + mpSize.X * fraction);
+        if (fillRight > mpPos.X)
+            FillRounded(drawList, mpPos, mpMax, fillRight, ImGui.GetColorU32(look.MpColor), rounding, ImDrawFlags.RoundCornersAll);
+
+        drawList.AddRect(mpPos, mpMax, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, MathF.Max(1f, MathF.Round(scale)));
     }
 }

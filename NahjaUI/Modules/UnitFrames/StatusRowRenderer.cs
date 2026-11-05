@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
@@ -7,7 +8,7 @@ using Dalamud.Interface.Utility;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
-using NahjaUI.Modules.Auras;
+using NahjaUI.Modules.Trackers;
 using NahjaUI.Modules.PartyFrames;
 
 namespace NahjaUI.Modules.UnitFrames;
@@ -37,48 +38,179 @@ internal sealed class StatusRowRenderer
         this.plugin = plugin;
     }
 
-    // One row of icons next to a bar. The first icon is attached to a point of the bar (plus the offset) by one of its own
-    // points, and the next ones follow in the direction of the growth.
-    public void DrawRow(ImDrawListPtr drawList, PartyAuraSettings row, bool isEnhancement, IReadOnlyList<StatusSnapshot> statuses, bool isSample, uint playerId, Vector2 barPos, Vector2 barSize, string place = "")
+    /// <summary>The area covered by the icons of a row (a point when the row shows nothing). Another row can be attached to it.</summary>
+    internal readonly record struct RowRect(Vector2 Min, Vector2 Max)
     {
-        if (!row.Enabled || row.MaxIcons <= 0 || statuses.Count == 0)
-            return;
+        public Vector2 Size => Max - Min;
+    }
 
+    // The statuses a row shows, in the order of the row and without more than it can hold.
+    private List<StatusSnapshot> Shown(StatusRowSettings row, bool isEnhancement, IReadOnlyList<StatusSnapshot> statuses, bool isSample, uint playerId)
+    {
+        var result = new List<StatusSnapshot>();
+        if (!row.Enabled || row.MaxIcons <= 0)
+            return result;
+
+        var accepted = new List<StatusSnapshot>();
+        foreach (var status in statuses)
+        {
+            if (Accepts(row, isEnhancement, status, isSample, playerId))
+                accepted.Add(status);
+        }
+
+        foreach (var status in SortedForRow(row, accepted, playerId))
+        {
+            if (result.Count >= row.MaxIcons)
+                break;
+
+            result.Add(status);
+        }
+
+        return result;
+    }
+
+    /// <summary>Where the icons of a row go: every icon has its own place (lines, centering), and the row covers the area of all of them.</summary>
+    private readonly record struct RowPlace(StatusRowSettings Row, int Count, Vector2 Attach, Vector2 First, Vector2 Step, Vector2 Line, int PerLine, Vector2 IconSize, float Spacing, RowRect Rect)
+    {
+        public Vector2 PositionOf(int index)
+        {
+            var line = index / PerLine;
+            var inLine = Math.Min(PerLine, Count - line * PerLine);
+            var position = First + Step * (index % PerLine) + Line * line;
+
+            // A centered line is centered on the point of the row, whatever the number of icons in it.
+            if (Row.Growth == StatusRowGrowth.CenteredHorizontally)
+                position.X = Attach.X - (inLine * IconSize.X + (inLine - 1) * Spacing) / 2f + (index % PerLine) * (IconSize.X + Spacing);
+            else if (Row.Growth == StatusRowGrowth.CenteredVertically)
+                position.Y = Attach.Y - (inLine * IconSize.Y + (inLine - 1) * Spacing) / 2f + (index % PerLine) * (IconSize.Y + Spacing);
+
+            return new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
+        }
+    }
+
+    // Where the icons of a row go: the first icon is attached to a point of the target (the bar, or the other row) plus the offset, by one of
+    // its own points, and the next ones follow in the direction of the growth. When a line is full ("icons per line") the next icon
+    // starts the next line, on the side the row says.
+    private RowPlace Place(StatusRowSettings row, int count, Vector2 targetPos, Vector2 targetSize)
+    {
         var scale = ImGuiHelpers.GlobalScale;
 
         var iconSize = new Vector2(MathF.Round(Math.Max(4, row.IconWidth) * scale), MathF.Round(Math.Max(4, row.IconHeight) * scale));
         var spacing = MathF.Round(row.SpacingPx * scale);
 
-        var attach = barPos + barSize * row.BarAnchor.Fraction() + new Vector2(row.OffsetX, row.OffsetY) * scale;
+        var attach = targetPos + targetSize * row.BarAnchor.Fraction() + new Vector2(row.OffsetX, row.OffsetY) * scale;
         var first = attach - iconSize * row.IconAnchor.Fraction();
-        first = new Vector2(MathF.Round(first.X), MathF.Round(first.Y));
+
+        var stepX = iconSize.X + spacing;
+        var stepY = iconSize.Y + spacing;
 
         var step = row.Growth switch
         {
-            PartyAuraGrowth.Left => new Vector2(-(iconSize.X + spacing), 0f),
-            PartyAuraGrowth.Right => new Vector2(iconSize.X + spacing, 0f),
-            PartyAuraGrowth.Up => new Vector2(0f, -(iconSize.Y + spacing)),
-            _ => new Vector2(0f, iconSize.Y + spacing)
+            StatusRowGrowth.Left => new Vector2(-stepX, 0f),
+            StatusRowGrowth.Right or StatusRowGrowth.CenteredHorizontally => new Vector2(stepX, 0f),
+            StatusRowGrowth.Up => new Vector2(0f, -stepY),
+            _ => new Vector2(0f, stepY)
         };
 
-        var shown = 0;
-        foreach (var status in statuses)
+        var line = row.NextLineNow switch
         {
-            if (shown >= row.MaxIcons)
-                break;
+            StatusRowGrowth.Up => new Vector2(0f, -stepY),
+            StatusRowGrowth.Left => new Vector2(-stepX, 0f),
+            StatusRowGrowth.Right => new Vector2(stepX, 0f),
+            _ => new Vector2(0f, stepY)
+        };
 
-            if (!Accepts(row, isEnhancement, status, isSample, playerId))
-                continue;
+        var place = new RowPlace(row, count, attach, first, step, line, Math.Clamp(row.IconsPerLine, 1, 30), iconSize, spacing, default);
+        if (count == 0)
+            return place with { Rect = new RowRect(attach, attach) };
 
-            var iconPos = first + step * shown;
-            DrawIcon(drawList, row, status, iconPos, iconSize);
+        var min = new Vector2(float.MaxValue, float.MaxValue);
+        var max = new Vector2(float.MinValue, float.MinValue);
+        for (var i = 0; i < count; i++)
+        {
+            var position = place.PositionOf(i);
+            min = Vector2.Min(min, position);
+            max = Vector2.Max(max, position + iconSize);
+        }
+
+        return place with { Rect = new RowRect(min, max) };
+    }
+
+    // One row of icons next to a bar (or next to the other row of the frame).
+    public RowRect DrawRow(ImDrawListPtr drawList, StatusRowSettings row, bool isEnhancement, IReadOnlyList<StatusSnapshot> statuses, bool isSample, uint playerId, Vector2 barPos, Vector2 barSize, string place = "", bool friendly = true)
+    {
+        var shown = Shown(row, isEnhancement, statuses, isSample, playerId);
+        var where = Place(row, shown.Count, barPos, barSize);
+        Paint(drawList, row, shown, isEnhancement, where, place, friendly);
+        return where.Rect;
+    }
+
+    /// <summary>
+    /// The enhancements row and the enfeeblements row of a frame. Each one is attached to the bar or to the other row; when one is attached
+    /// to the other, the other one is placed first. If both choose each other, the enhancements row stays on the bar.
+    /// </summary>
+    public void DrawRows(ImDrawListPtr drawList, StatusRowSettings enhancements, StatusRowSettings enfeeblements, IReadOnlyList<StatusSnapshot> enhancementStatuses,
+        IReadOnlyList<StatusSnapshot> enfeeblementStatuses, bool isSample, uint playerId, Vector2 barPos, Vector2 barSize, string place = "", bool friendly = true)
+    {
+        var enhancementList = Shown(enhancements, true, enhancementStatuses, isSample, playerId);
+        var enfeeblementList = Shown(enfeeblements, false, enfeeblementStatuses, isSample, playerId);
+
+        var enhancementsFollow = enhancements.AttachTo == StatusRowAttach.OtherRow && enfeeblements.AttachTo == StatusRowAttach.Frame;
+        var enfeeblementsFollow = enfeeblements.AttachTo == StatusRowAttach.OtherRow && !enhancementsFollow;
+
+        if (enhancementsFollow)
+        {
+            var other = Place(enfeeblements, enfeeblementList.Count, barPos, barSize);
+            var mine = Place(enhancements, enhancementList.Count, other.Rect.Min, other.Rect.Size);
+            Paint(drawList, enfeeblements, enfeeblementList, false, other, place, friendly);
+            Paint(drawList, enhancements, enhancementList, true, mine, place, friendly);
+        }
+        else
+        {
+            var mine = Place(enhancements, enhancementList.Count, barPos, barSize);
+            var other = enfeeblementsFollow
+                ? Place(enfeeblements, enfeeblementList.Count, mine.Rect.Min, mine.Rect.Size)
+                : Place(enfeeblements, enfeeblementList.Count, barPos, barSize);
+            Paint(drawList, enhancements, enhancementList, true, mine, place, friendly);
+            Paint(drawList, enfeeblements, enfeeblementList, false, other, place, friendly);
+        }
+    }
+
+    private void Paint(ImDrawListPtr drawList, StatusRowSettings row, List<StatusSnapshot> shown, bool isEnhancement, RowPlace where, string place, bool friendly)
+    {
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var iconPos = where.PositionOf(i);
+            DrawIcon(drawList, row, shown[i], iconPos, where.IconSize, friendly);
 
             // The mouse is over this icon: show its description (no window is needed to know this, only the rectangle).
-            if (ImGui.IsMouseHoveringRect(iconPos, iconPos + iconSize, false))
-                ShowTooltip(status, isEnhancement, place);
-
-            shown++;
+            if (ImGui.IsMouseHoveringRect(iconPos, iconPos + where.IconSize, false))
+                ShowTooltip(shown[i], isEnhancement, place);
         }
+    }
+
+    // With "priority by filter" the filters decide first (the first ticked filter first) and the time orders the statuses inside each filter.
+    private List<StatusSnapshot> SortedForRow(StatusRowSettings row, List<StatusSnapshot> accepted, uint playerId)
+    {
+        if (!row.PriorityByFilter || row.FilterIds.Count == 0)
+            return Sorted(accepted, row.Order);
+
+        var groups = accepted.GroupBy(status => plugin.Configuration.Filters.RankOf(row.FilterIds, status.Id, row.OnlyMineFilterIds, status.SourceId == playerId)).OrderBy(group => group.Key);
+        var result = new List<StatusSnapshot>();
+        foreach (var group in groups)
+            result.AddRange(Sorted(group, row.Order));
+
+        return result;
+    }
+
+    /// <summary>The statuses ordered by the time they have left. A permanent status (no end) counts as the longest possible time. The sort is stable.</summary>
+    internal static List<StatusSnapshot> Sorted(IEnumerable<StatusSnapshot> statuses, StatusOrder order)
+    {
+        static float TimeLeft(StatusSnapshot status) => status.RemainingTime > 0f ? status.RemainingTime : float.MaxValue;
+
+        return (order == StatusOrder.Ascending
+            ? statuses.OrderBy(TimeLeft)
+            : statuses.OrderByDescending(TimeLeft)).ToList();
     }
 
     // ---------------------------------------------------------------- tooltip
@@ -137,7 +269,7 @@ internal sealed class StatusRowRenderer
             if (source is not null)
             {
                 ImGui.Spacing();
-                ImGui.TextColored(look.DetailColor, $"Applied by {source.Name}");
+                ImGui.TextColored(look.DetailColor, $"Applied by {StreamerMode.Name(source.Name.ToString(), source.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)}");
             }
         }
 
@@ -148,7 +280,7 @@ internal sealed class StatusRowRenderer
     }
 
     // Does this row show this status?
-    private static bool Accepts(PartyAuraSettings row, bool isEnhancement, StatusSnapshot status, bool isSample, uint playerId)
+    private bool Accepts(StatusRowSettings row, bool isEnhancement, StatusSnapshot status, bool isSample, uint playerId)
     {
         if (isSample)
             return true;
@@ -168,18 +300,19 @@ internal sealed class StatusRowRenderer
         if (row.OnlyMine && status.SourceId != playerId)
             return false;
 
-        var listed = row.StatusIds.Contains(status.Id);
+        var listed = row.StatusIds.Contains(status.Id)
+            || plugin.Configuration.Filters.Contains(row.FilterIds, status.Id, row.OnlyMineFilterIds, status.SourceId == playerId);
 
         return row.Filter switch
         {
-            PartyAuraFilter.OnlyListed => listed,
-            PartyAuraFilter.AllExceptListed => !listed,
+            StatusRowFilter.OnlyListed => listed,
+            StatusRowFilter.AllExceptListed => !listed,
             _ => true
         };
     }
 
     // One icon: cropped (never stretched) to the shape of the box, with a 1 px black border, the time and the stacks.
-    internal void DrawIcon(ImDrawListPtr drawList, PartyAuraSettings row, StatusSnapshot status, Vector2 pos, Vector2 size)
+    internal void DrawIcon(ImDrawListPtr drawList, StatusRowSettings row, StatusSnapshot status, Vector2 pos, Vector2 size, bool friendly = true)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var iconId = GameNames.StatusIconId(status.Id);
@@ -190,8 +323,13 @@ internal sealed class StatusRowRenderer
         if (iconId != 0)
         {
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
-            var crop = Math.Clamp(row.CropPercent, 0, 30) / 100f;
-            var (uv0, uv1) = AuraEngine.IconUv(size, AuraEngine.StatusIconAspect, crop);
+            // The same trim as the trackers: the empty margins of the game's icon, measured for each icon.
+            var margins = row.Trim == IconTrim.None ? (0f, 0f, 0f, 0f) : IconMargins.Get(iconId);
+            var cutSides = row.Trim is IconTrim.Sides or IconTrim.AllAround;
+            var cutVertical = row.Trim is IconTrim.TopAndBottom or IconTrim.AllAround;
+            var (uv0, uv1) = TrackerEngine.IconUv(size, TrackerEngine.StatusIconAspect,
+                cutSides ? margins.Item1 : 0f, cutVertical ? margins.Item2 : 0f,
+                cutSides ? margins.Item3 : 0f, cutVertical ? margins.Item4 : 0f);
 
             drawList.AddImageRounded(texture.Handle, pos, pos + size, uv0, uv1, ImGui.GetColorU32(Vector4.One), rounding, ImDrawFlags.RoundCornersAll);
         }
@@ -203,18 +341,23 @@ internal sealed class StatusRowRenderer
         var thickness = MathF.Max(1f, MathF.Round(scale));
         drawList.AddRect(pos, pos + size, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f)), rounding, ImDrawFlags.None, thickness);
 
+        // An enfeeblement that a cleanse can remove gets a coloured border. Only on friendly units: Esuna cannot be used on an enemy.
+        if (friendly && row.DispelBorder && GameNames.StatusCategory(status.Id) == 2 && GameNames.StatusCanDispel(status.Id))
+            drawList.AddRect(pos, pos + size, ImGui.GetColorU32(row.DispelColor), rounding, ImDrawFlags.None, thickness * 2f);
+
         // The text size is in logical pixels (the fonts are already built scaled).
+        row.EnsureTexts();
         var timerPx = Math.Clamp(row.TimerSize, 4, 64);
         var stackPx = Math.Clamp(row.StackTextSize > 0 ? row.StackTextSize : 8, 4, 64);
 
         if (row.ShowTimer && status.RemainingTime > 0f)
-            plugin.AuraSystem.DrawOverlayText(drawList, AuraEngine.FormatTime(status.RemainingTime), timerPx, row.Font,
-                pos, size, row.TimerAnchor, new Vector2(row.TimerOffsetX, row.TimerOffsetY));
+            plugin.TrackerSystem.DrawOverlayText(drawList, TrackerEngine.FormatTime(status.RemainingTime), timerPx, row.Font,
+                pos, size, row.TimerAnchor, new Vector2(row.TimerOffsetX, row.TimerOffsetY), row.TimerColor);
 
         // Only statuses that really stack show a number.
         var maxStacks = GameNames.MaxStacks(status.Id);
         if (row.ShowStacks && maxStacks > 1 && status.Param > 1 && status.Param <= maxStacks)
-            plugin.AuraSystem.DrawOverlayText(drawList, status.Param.ToString(), stackPx, row.Font,
-                pos, size, row.StacksAnchor, new Vector2(row.StacksOffsetX, row.StacksOffsetY));
+            plugin.TrackerSystem.DrawOverlayText(drawList, status.Param.ToString(), stackPx, row.StacksFont,
+                pos, size, row.StacksAnchor, new Vector2(row.StacksOffsetX, row.StacksOffsetY), row.StacksColor);
     }
 }

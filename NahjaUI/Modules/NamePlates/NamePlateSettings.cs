@@ -1,7 +1,9 @@
 using System;
-using System.Numerics;
-using NahjaUI.Core.Layout;
-using NahjaUI.Core.Ui;
+using System.Collections.Generic;
+using System.Runtime.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using NahjaUI.Game;
 
 namespace NahjaUI.Modules.NamePlates;
 
@@ -19,7 +21,8 @@ public enum NamePlateLevelMode
 }
 
 /// <summary>
-/// Settings of the nameplates. Enemies only for now. Turned off until it is switched on in the Nameplates page.
+/// Settings of the nameplates. Turned off until it is switched on in the Nameplates page. Each kind of plate (enemies, party...)
+/// has its own style.
 /// </summary>
 [Serializable]
 public class NamePlateSettings
@@ -29,44 +32,109 @@ public class NamePlateSettings
     /// <summary>The plate of the target always shows its HP bar, even when the game's options would show only the name (or nothing).</summary>
     public bool ShowBarOnTarget { get; set; } = true;
 
-    // Test aid: write the flags the game gave each plate next to its name.
-    public bool ShowGameFlags { get; set; } = false;
+    public NamePlateStyle Self { get; set; } = NamePlateStyle.Create(NamePlateRelation.Self);
+    public NamePlateStyle Party { get; set; } = NamePlateStyle.Create(NamePlateRelation.Party);
+    public NamePlateStyle OtherPlayers { get; set; } = NamePlateStyle.Create(NamePlateRelation.OtherPlayer);
+    public NamePlateStyle FriendlyNpcs { get; set; } = NamePlateStyle.Create(NamePlateRelation.Friendly);
+    public NamePlateStyle EnemyNpcs { get; set; } = NamePlateStyle.Create(NamePlateRelation.Enemy);
+    public NamePlateStyle EnemyPlayers { get; set; } = NamePlateStyle.Create(NamePlateRelation.EnemyPlayer);
+    public NamePlateStyle OtherPlates { get; set; } = NamePlateStyle.Create(NamePlateRelation.Other);
 
-    // Size of the HP bar, in logical pixels.
-    public int WidthPx { get; set; } = 140;
-    public int HeightPx { get; set; } = 14;
-    public int RoundingPx { get; set; } = 4;
+    /// <summary>The starting enfeeblements row of the enemies was put in place (once, so a later change of the user is never undone).</summary>
+    public bool EnemyRowSeeded { get; set; }
 
-    // The name sits on the top left of the bar and touches its top edge, like in the unit frames.
-    public AnchorPoint NameAnchor { get; set; } = AnchorPoint.TopLeft;
-    public int NameSize { get; set; } = 10;
-    public OverlayFont NameFont { get; set; } = OverlayFont.NahjaDisplay;
-    public int NameOffsetX { get; set; } = 4;
-    public int NameOffsetY { get; set; } = -9;
-    // The small icon the game puts at the left of the name (hostile, neutral, hunt rank...). The game decides which plates have one.
-    public bool ShowNameIcon { get; set; } = true;
-    public int NameIconSizePx { get; set; } = 16;
-    public int NameIconGapPx { get; set; } = 3;
+    /// <summary>
+    /// Once: the enemies' plates start showing stuns, mitigation and the rotation's enfeeblements. Only where the row was never set up
+    /// (off and with nothing chosen), so nobody's own choice is changed.
+    /// </summary>
+    internal void SeedEnemyRows()
+    {
+        if (EnemyRowSeeded)
+            return;
 
-    // The big icon the game floats above the plate (quest marks and similar). Saved Y counts downward like the rest.
-    public bool ShowMarkerIcon { get; set; } = true;
-    public int MarkerIconSizePx { get; set; } = 32;
-    public int MarkerOffsetX { get; set; } = 0;
-    public int MarkerOffsetY { get; set; } = 6; // saved counts downward: the editor shows -6 (Sandro's tested value)
+        EnemyRowSeeded = true;
+        foreach (var style in new[] { EnemyNpcs, EnemyPlayers })
+        {
+            var row = style.Enfeeblements;
+            if (!row.Enabled && row.FilterIds.Count == 0 && row.StatusIds.Count == 0)
+                NamePlateStyle.ApplyEnemyEnfeeblements(row);
+        }
+    }
 
-    // The color of the name and the title (the game's color option only colors the bar, so this one is ours).
-    public Vector4 NameColor { get; set; } = new(1f, 1f, 1f, 1f);
-    public Vector4 LevelColor { get; set; } = new(1f, 0.82f, 0.25f, 1f);
-    public NamePlateLevelMode LevelMode { get; set; } = NamePlateLevelMode.NumberOnly;
+    internal NamePlateStyle StyleOf(NamePlateRelation kind) => kind switch
+    {
+        NamePlateRelation.Self => Self,
+        NamePlateRelation.Party => Party,
+        NamePlateRelation.OtherPlayer => OtherPlayers,
+        NamePlateRelation.Friendly => FriendlyNpcs,
+        NamePlateRelation.Enemy => EnemyNpcs,
+        NamePlateRelation.EnemyPlayer => EnemyPlayers,
+        _ => OtherPlates
+    };
 
-    // Do not write the level of the enemies that have the same level as you.
-    public bool HideSameLevel { get; set; } = false;
+    internal void SetStyle(NamePlateRelation kind, NamePlateStyle style)
+    {
+        switch (kind)
+        {
+            case NamePlateRelation.Self: Self = style; break;
+            case NamePlateRelation.Party: Party = style; break;
+            case NamePlateRelation.OtherPlayer: OtherPlayers = style; break;
+            case NamePlateRelation.Friendly: FriendlyNpcs = style; break;
+            case NamePlateRelation.Enemy: EnemyNpcs = style; break;
+            case NamePlateRelation.EnemyPlayer: EnemyPlayers = style; break;
+            default: OtherPlates = style; break;
+        }
+    }
 
-    // The cast frame under the HP bar: same width, the spell icon inside at its left.
-    public bool ShowCast { get; set; } = true;
-    public int CastHeightPx { get; set; } = 15;
-    public int CastGapPx { get; set; } = 3;
-    public int CastTextSize { get; set; } = 8;
-    public OverlayFont CastFont { get; set; } = OverlayFont.NahjaDisplay;
+    // ---- Settings saved before the plates had one style per kind: one single style for everything. ----
+    // They arrive here as unknown fields and are turned into the new styles once, the first time the file is read.
 
+    [JsonExtensionData]
+    public IDictionary<string, JToken>? Legacy { get => legacy; set => legacy = value; }
+
+    private IDictionary<string, JToken>? legacy;
+
+    [OnDeserialized]
+    private void OnDeserializedMigrate(StreamingContext context)
+    {
+        if (legacy is null || !legacy.ContainsKey("WidthPx"))
+        {
+            legacy = null;
+            return;
+        }
+
+        var old = new JObject();
+        foreach (var pair in legacy)
+            old[pair.Key] = pair.Value;
+
+        legacy = null;
+
+        bool Flag(string name, bool fallback) => old.TryGetValue(name, out var token) ? token.Value<bool>() : fallback;
+
+        // Every kind starts like the old single style, so nothing changes on screen.
+        NamePlateStyle Copy(bool statusIcons, bool enemy)
+        {
+            var style = old.ToObject<NamePlateStyle>() ?? new NamePlateStyle();
+            style.Active = true;
+            style.Enhancements.Enabled = style.Enhancements.Enabled && statusIcons;
+            style.Enfeeblements.Enabled = style.Enfeeblements.Enabled && statusIcons;
+
+            // The level and the progress bar used to be only for the enemies.
+            if (!enemy)
+            {
+                style.LevelMode = NamePlateLevelMode.Hidden;
+                style.ShowProgressBar = false;
+            }
+
+            return style;
+        }
+
+        EnemyNpcs = Copy(Flag("StatusOnEnemies", true), true);
+        EnemyPlayers = Copy(Flag("StatusOnEnemies", true), true);
+        Self = Copy(Flag("StatusOnSelf", false), false);
+        Party = Copy(Flag("StatusOnParty", false), false);
+        OtherPlayers = Copy(Flag("StatusOnOtherPlayers", false), false);
+        FriendlyNpcs = Copy(Flag("StatusOnFriendly", false), false);
+        OtherPlates = Copy(false, false);
+    }
 }

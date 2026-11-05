@@ -4,92 +4,53 @@ using NahjaUI.Modules.PartyFrames;
 namespace NahjaUI.Modules.StatusEffects;
 
 /// <summary>
-/// The groups the game's own status element can be split into (HUD Layout > Status Effects). With one element the game shows
-/// everything together; with three groups it shows enhancements, enfeeblements and others; with four it adds the conditional
-/// enhancements (a small group of eight places).
+/// The two groups NahjaUI draws, whatever the game's own layout option says (one element, three groups or four groups):
+/// every enhancement of the player together and every enfeeblement of the player together.
 /// </summary>
 public enum StatusGroupKind
 {
-    Single,
     Enhancements,
-    Conditional,
-    Enfeeblements,
-    Others
-}
-
-/// <summary>How the game's layout option is set right now: one element, three groups or four groups.</summary>
-public enum StatusLayoutMode
-{
-    OneElement,
-    ThreeGroups,
-    FourGroups
-}
-
-/// <summary>Where a row of icons sits inside its box when it is not full.</summary>
-public enum StatusJustify
-{
-    Left,
-    Right,
-    Center
+    Enfeeblements
 }
 
 /// <summary>
-/// One group of status icons: its own box (moved in unlock mode), how many icons go in a row and how a row is justified, and the
-/// look of the icons (the same look settings as every row of status icons, without their filters: a group shows what the game puts in it).
+/// One group of status icons: its own box (moved in unlock mode), how many icons go in a line and where they grow, and the
+/// look of the icons (the same look settings as every row of status icons, without their filters: a group shows every status of its kind).
 /// </summary>
 [Serializable]
 public class StatusGroupSettings
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Icons in one row. More icons than this go to the next row.</summary>
-    public int Columns { get; set; } = 10;
-
-    public StatusJustify Justify { get; set; } = StatusJustify.Right;
-
-    /// <summary>The next rows go above the first one instead of under it.</summary>
-    public bool RowsGrowUp { get; set; }
-
     /// <summary>The look of the icons, the time and the stack count. Its filters, anchors and growth are not used here.</summary>
-    public PartyAuraSettings Look { get; set; } = new();
+    public StatusRowSettings Look { get; set; } = new();
 
-    public static StatusGroupSettings Create(int columns, int mostIcons, StatusJustify justify) => new()
+    public static StatusGroupSettings Create(int perLine, int mostIcons) => new()
     {
-        Columns = columns,
-        Justify = justify,
-        Look = new PartyAuraSettings
+        Look = new StatusRowSettings
         {
             IconWidth = 32,
             IconHeight = 24,
             SpacingPx = 3,
-            MaxIcons = mostIcons
+            MaxIcons = mostIcons,
+            IconsPerLine = perLine,
+
+            // Left: the icons are added from the right edge of the box.
+            Growth = NahjaUI.Modules.PartyFrames.StatusRowGrowth.Left
         }
     };
 }
 
-/// <summary>The enhancements and enfeeblements of the player: NahjaUI draws them in the groups the game's layout option asks for.</summary>
+/// <summary>The enhancements and enfeeblements of the player: NahjaUI draws them in two groups, each in its own box.</summary>
 [Serializable]
 public class StatusEffectsSettings
 {
     /// <summary>NahjaUI draws the player's statuses and hides the game's own windows for them.</summary>
     public bool Enabled { get; set; }
 
-    public StatusGroupSettings Single { get; set; } = StatusGroupSettings.Create(10, 30, StatusJustify.Right);
+    public StatusGroupSettings Enhancements { get; set; } = StatusGroupSettings.Create(10, 20);
 
-    public StatusGroupSettings Enhancements { get; set; } = StatusGroupSettings.Create(10, 20, StatusJustify.Right);
+    public StatusGroupSettings Enfeeblements { get; set; } = StatusGroupSettings.Create(10, 20);
 
-    public StatusGroupSettings Conditional { get; set; } = StatusGroupSettings.Create(8, 8, StatusJustify.Left);
-
-    public StatusGroupSettings Enfeeblements { get; set; } = StatusGroupSettings.Create(10, 20, StatusJustify.Right);
-
-    public StatusGroupSettings Others { get; set; } = StatusGroupSettings.Create(10, 20, StatusJustify.Right);
-
-    public StatusGroupSettings For(StatusGroupKind kind) => kind switch
-    {
-        StatusGroupKind.Enhancements => Enhancements,
-        StatusGroupKind.Conditional => Conditional,
-        StatusGroupKind.Enfeeblements => Enfeeblements,
-        StatusGroupKind.Others => Others,
-        _ => Single
-    };
+    public StatusGroupSettings For(StatusGroupKind kind) => kind == StatusGroupKind.Enhancements ? Enhancements : Enfeeblements;
 }

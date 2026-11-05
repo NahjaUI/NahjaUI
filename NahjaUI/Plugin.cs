@@ -4,13 +4,15 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using NahjaUI.Core;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
-using NahjaUI.Modules.Auras;
-using NahjaUI.Modules.CastBars;
+using NahjaUI.Modules.Trackers;
+using NahjaUI.Modules.ProgressBars;
 using NahjaUI.Modules.JobGauges;
 using NahjaUI.Modules.EnmityList;
+using NahjaUI.Modules.Filters;
 using NahjaUI.Modules.NamePlates;
 using NahjaUI.Modules.StatusEffects;
 using NahjaUI.Modules.Tooltip;
@@ -36,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
     [PluginService] internal static IJobGauges JobGauges { get; private set; } = null!;
+    [PluginService] internal static Dalamud.Plugin.Services.IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static INamePlateGui NamePlateGui { get; private set; } = null!;
     [PluginService] internal static IGameConfig GameConfig { get; private set; } = null!;
@@ -56,18 +59,19 @@ public sealed class Plugin : IDalamudPlugin
     private MiniBarWindow MiniBar { get; init; }
     private UnlockOverlay UnlockOverlay { get; init; }
     internal OverlayFonts Fonts { get; init; }
-    internal AuraEngine AuraSystem { get; init; }
+    internal TrackerEngine TrackerSystem { get; init; }
     internal StatusRowRenderer StatusRows { get; init; }
     internal GameWindowCover GameCover { get; } = new();
-    internal AuraEditor AuraEditorPage { get; init; }
-    internal CastBarModule CastBarSystem { get; init; }
-    internal CastBarEditor CastBarEditorPage { get; init; }
+    internal TrackerEditor TrackerEditorPage { get; init; }
+    internal ProgressBarModule ProgressBarSystem { get; init; }
+    internal ProgressBarEditor ProgressBarEditorPage { get; init; }
     internal JobGaugeModule JobGaugeSystem { get; init; }
     internal JobGaugeEditor JobGaugeEditorPage { get; init; }
     internal UnitFrameModule UnitFrameSystem { get; init; }
     internal UnitFrameEditor UnitFrameEditorPage { get; init; }
     internal StatusEffectsModule StatusEffectsSystem { get; init; }
     internal StatusEffectsEditor StatusEffectsEditorPage { get; init; }
+    internal FiltersEditor FiltersEditorPage { get; init; }
     internal PartyFrameModule PartyFrameSystem { get; init; }
     internal NamePlateModule NamePlateSystem { get; init; }
     internal NamePlateEditor NamePlateEditorPage { get; init; }
@@ -85,7 +89,13 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
+        NahjaUI.Core.Profiles.ConfigRename.ConvertConfigFile();
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+        // A plain copy of the saved file when the plugin was updated (or the format must be converted), then the conversion itself.
+        NahjaUI.Core.Profiles.ConfigSafety.BeforeUpdate(Configuration);
+        NahjaUI.Core.Profiles.ConfigMigrations.Run(Configuration);
+        RequestSave();
 
         // The cards the user folded last time stay folded.
         Widgets.Collapsed = new System.Collections.Generic.HashSet<string>(Configuration.CollapsedCards ?? new System.Collections.Generic.List<string>());
@@ -102,17 +112,38 @@ public sealed class Plugin : IDalamudPlugin
 
         Layout = new LayoutManager(Configuration);
         Fonts = new OverlayFonts();
-        AuraSystem = new AuraEngine(this);
+        TrackerSystem = new TrackerEngine(this);
+        try
+        {
+            Configuration.Filters.EnsureStarters();
+        }
+        catch (System.Exception ex)
+        {
+            Log.Warning(ex, "NahjaUI: the starter filters could not be created.");
+        }
+
+        try
+        {
+            NahjaUI.Modules.Filters.DefensiveFilters.EnsureCreated(Configuration);
+            Configuration.NamePlates.SeedEnemyRows();
+            RequestSave();
+        }
+        catch (System.Exception ex)
+        {
+            Log.Warning(ex, "NahjaUI: the defensive filters could not be created.");
+        }
+
         StatusRows = new StatusRowRenderer(this);
-        AuraEditorPage = new AuraEditor(this);
-        CastBarSystem = new CastBarModule(this);
-        CastBarEditorPage = new CastBarEditor(this);
+        TrackerEditorPage = new TrackerEditor(this);
+        ProgressBarSystem = new ProgressBarModule(this);
+        ProgressBarEditorPage = new ProgressBarEditor(this);
         JobGaugeSystem = new JobGaugeModule(this);
         JobGaugeEditorPage = new JobGaugeEditor(this);
         UnitFrameSystem = new UnitFrameModule(this);
         UnitFrameEditorPage = new UnitFrameEditor(this);
         StatusEffectsSystem = new StatusEffectsModule(this);
         StatusEffectsEditorPage = new StatusEffectsEditor(this);
+        FiltersEditorPage = new FiltersEditor(this);
         PartyFrameSystem = new PartyFrameModule(this);
         NamePlateSystem = new NamePlateModule(this);
         NamePlateEditorPage = new NamePlateEditor(this);
@@ -134,6 +165,8 @@ public sealed class Plugin : IDalamudPlugin
 
         PluginInterface.UiBuilder.Draw += Draw;
 
+        ServerInfoBar = new ServerInfoBarEntry(this);
+
         // The buttons in /xlplugins ("Open" and "Settings") both open the main window for now.
         PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
@@ -147,10 +180,11 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
 
+        ServerInfoBar.Dispose();
         WindowSystem.RemoveAllWindows();
         MainWindow.Dispose();
         MiniBar.Dispose();
-        CastBarSystem.Dispose();
+        ProgressBarSystem.Dispose();
         JobGaugeSystem.Dispose();
         UnitFrameSystem.Dispose();
         StatusEffectsSystem.Dispose();
@@ -172,22 +206,26 @@ public sealed class Plugin : IDalamudPlugin
         Theme.Accent = Configuration.AccentColor;
 
         FollowUnlockMode();
+        ContextMenuCapture.Update();
 
         // The elements that have a position for each job show the one of the job being played.
         var currentSnapshot = GameData.Current;
         Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u);
 
         // Which game windows cover the screen right now (the frames are not drawn over them).
-        GameCover.Update();
+        GameCover.Update(Configuration);
+        StreamerMode.Enabled = Configuration.StreamerMode;
 
         WindowSystem.Draw();
+
+        // Drawn first, so the nameplates stay under every frame (the player's, the target's, the enemies', the party's).
+        NamePlateSystem.Draw();
         UnitFrameSystem.Draw();
         StatusEffectsSystem.Draw();
         PartyFrameSystem.Draw();
-        NamePlateSystem.Draw();
         EnmityListSystem.Draw();
-        AuraSystem.Draw();
-        CastBarSystem.Draw();
+        TrackerSystem.Draw();
+        ProgressBarSystem.Draw();
         JobGaugeSystem.Draw();
         UnlockOverlay.Draw();
 
@@ -234,10 +272,24 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        if (args.Trim().ToLowerInvariant() == "debug")
+        {
+            MainWindow.ShowDebug();
+            if (MiniBar.IsOpen)
+                ExpandMainWindow();
+            else
+                MainWindow.IsOpen = true;
+
+            return;
+        }
+
         ToggleMainUi();
     }
 
     /// <summary>Opens or closes the main window. If it is minimized to the small bar, it opens it instead.</summary>
+    // The entry in the game's server info bar (left click: window, right click: unlock mode).
+    internal ServerInfoBarEntry ServerInfoBar { get; private set; } = null!;
+
     public void ToggleMainUi()
     {
         if (MiniBar.IsOpen)
@@ -268,23 +320,27 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Call after changing any setting. The file is written later, not on every frame.</summary>
     public void RequestSave() => saveRequested = true;
 
-    /// <summary>Sets the font of every aura, aura group template and cast bar to the NahjaUI font (Saira).</summary>
+    /// <summary>Sets the font of every tracker, tracker group template and progress bar to the NahjaUI font (Saira).</summary>
     public void UseNahjaFontEverywhere()
     {
-        foreach (var aura in Configuration.Auras)
-            aura.Font = OverlayFont.NahjaDisplayBold;
+        foreach (var tracker in Configuration.Trackers)
+            tracker.Font = OverlayFont.NahjaDisplayBold;
 
-        foreach (var group in Configuration.AuraGroups)
+        foreach (var group in Configuration.TrackerGroups)
         {
             if (group.Template is not null)
                 group.Template.Font = OverlayFont.NahjaDisplayBold;
         }
 
-        Configuration.CastBars.Player.Font = OverlayFont.NahjaDisplay;
-        Configuration.CastBars.Target.Font = OverlayFont.NahjaDisplay;
+        Configuration.ProgressBars.Player.Font = OverlayFont.NahjaDisplay;
+        Configuration.ProgressBars.Target.Font = OverlayFont.NahjaDisplay;
         Configuration.JobGauges.WhiteMage.Font = OverlayFont.NahjaDisplayBold;
         Configuration.JobGauges.Warrior.Font = OverlayFont.NahjaDisplayBold;
         Configuration.JobGauges.Paladin.Font = OverlayFont.NahjaDisplayBold;
+        Configuration.JobGauges.DarkKnight.Font = OverlayFont.NahjaDisplayBold;
+        Configuration.JobGauges.RedMage.Font = OverlayFont.NahjaDisplayBold;
+        Configuration.JobGauges.LimitBreak.Font = OverlayFont.NahjaDisplayBold;
+        Configuration.JobGauges.Frontline.Font = OverlayFont.NahjaDisplayBold;
         foreach (var frame in new[]
                  {
                      Configuration.UnitFrames.Player,
@@ -295,7 +351,7 @@ public sealed class Plugin : IDalamudPlugin
                  })
         {
             frame.Name.Font = OverlayFont.NahjaDisplay;
-            frame.Health.Font = OverlayFont.NahjaDisplay;
+            frame.Hp.Font = OverlayFont.NahjaDisplay;
         }
 
         RequestSave();

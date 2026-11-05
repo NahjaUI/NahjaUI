@@ -37,6 +37,7 @@ internal static unsafe class StatusDebugCard
         DrawTargetAndFocus();
         DrawParty();
         DrawOptions();
+        DrawOptionChanges();
         DrawWindows();
     }
 
@@ -268,7 +269,7 @@ internal static unsafe class StatusDebugCard
 
     private static void DrawOptions()
     {
-        Widgets.Card("##card_dbg_status_options", KnownOptions.Length + 6, () =>
+        Widgets.Card("##card_dbg_status_options", KnownOptions.Length + 16, () =>
         {
             Widgets.SectionLabel("Statuses: game options");
             ImGui.TextColored(Theme.TextMuted, "Live values. \"-\" means the game has no option with that name in that section.");
@@ -280,7 +281,95 @@ internal static unsafe class StatusDebugCard
             ImGui.InputText("Any option name", ref optionName, 48);
             if (optionName.Length > 0)
                 ImGui.Text($"{optionName}:   {Read(optionName)}");
+
+            ImGui.Spacing();
+            ImGui.InputText("Search all game options", ref searchText, 48);
+            if (searchText.Length >= 3)
+            {
+                var shown = 0;
+                foreach (var name in AllOptionNames())
+                {
+                    if (!name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    ImGui.Text($"{name}:   {Read(name)}");
+                    if (++shown >= 30)
+                    {
+                        ImGui.TextColored(Theme.TextMuted, "More than 30 matches: type more letters.");
+                        break;
+                    }
+                }
+
+                if (shown == 0)
+                    ImGui.TextColored(Theme.TextMuted, "No option matches.");
+            }
         });
+    }
+
+    private static Dictionary<string, string>? remembered;
+
+    // Finds the game option behind a setting: remember every option, change the setting in the game, and see which ones changed.
+    private static void DrawOptionChanges()
+    {
+        Widgets.Card("##card_dbg_option_changes", 14, () =>
+        {
+            Widgets.SectionLabel("Options that changed");
+            ImGui.TextColored(Theme.TextMuted, "Press Remember, change a setting in the game (Character Configuration), then look here: the options whose value changed are listed.");
+
+            if (ImGui.Button("Remember all options now"))
+            {
+                remembered = new Dictionary<string, string>();
+                foreach (var name in AllOptionNames())
+                    remembered[name] = Read(name);
+            }
+
+            if (remembered is null)
+                return;
+
+            var shown = 0;
+            foreach (var (name, before) in remembered)
+            {
+                var now = Read(name);
+                if (now == before)
+                    continue;
+
+                ImGui.Text($"{name}:   {before}  ->  {now}");
+                if (++shown >= 20)
+                {
+                    ImGui.TextColored(Theme.TextMuted, "More than 20 changes: remember again and change only one setting.");
+                    break;
+                }
+            }
+
+            if (shown == 0)
+                ImGui.TextColored(Theme.TextMuted, "Nothing has changed since you pressed Remember.");
+        });
+    }
+
+    private static string searchText = string.Empty;
+    private static List<string>? allOptionNames;
+
+    // Every option name the game knows (names of Dalamud's UiConfigOption and UiControlOption lists), found by reflection.
+    private static List<string> AllOptionNames()
+    {
+        if (allOptionNames is not null)
+            return allOptionNames;
+
+        var names = new HashSet<string>();
+        var assembly = typeof(Dalamud.Plugin.Services.IGameConfig).Assembly;
+        foreach (var typeName in new[] { "Dalamud.Game.Config.UiConfigOption", "Dalamud.Game.Config.UiControlOption" })
+        {
+            var type = assembly.GetType(typeName);
+            if (type is null || !type.IsEnum)
+                continue;
+
+            foreach (var name in Enum.GetNames(type))
+                names.Add(name);
+        }
+
+        allOptionNames = new List<string>(names);
+        allOptionNames.Sort(StringComparer.OrdinalIgnoreCase);
+        return allOptionNames;
     }
 
     private static string Read(string name)

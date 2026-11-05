@@ -30,7 +30,7 @@ public enum NameFormat
 }
 
 /// <summary>What the HP text says. Custom uses the template written by the user.</summary>
-public enum HealthTextPreset
+public enum HpTextPreset
 {
     /// <summary>738K | 100%</summary>
     CurrentAndPercent,
@@ -108,7 +108,7 @@ public class FrameTextSettings
 /// <summary>What the number texts of a bar (HP, MP) need to know to turn a value into text.</summary>
 internal interface IValueTextFormat
 {
-    HealthTextPreset HealthPreset { get; }
+    HpTextPreset HpPreset { get; }
     string CustomTemplate { get; }
     string Separator { get; }
     int PercentDecimals { get; }
@@ -121,7 +121,7 @@ internal interface IValueTextFormat
 public class MpTextSettings : IValueTextFormat
 {
     public FrameTextSettings Text { get; set; } = new() { Enabled = false, Anchor = AnchorPoint.Center };
-    public HealthTextPreset HealthPreset { get; set; } = HealthTextPreset.Current;
+    public HpTextPreset HpPreset { get; set; } = HpTextPreset.Current;
     public string CustomTemplate { get; set; } = "{curk} | {pct}";
     public string Separator { get; set; } = " | ";
     public int PercentDecimals { get; set; } = 0;
@@ -150,6 +150,14 @@ public class UnitFramesSettings
     public Vector4 HealerColor { get; set; } = new(0.31f, 0.75f, 0.45f, 1f);
 
     public Vector4 DamageColor { get; set; } = new(0.85f, 0.33f, 0.31f, 1f);
+
+    /// <summary>Disciples of the Hand (crafters) and of the Land (gatherers): the game's purple and gold, brightened like the role colors.</summary>
+    public Vector4 CrafterColor { get; set; } = new(0.48f, 0.31f, 0.88f, 1f);
+
+    public Vector4 GathererColor { get; set; } = new(0.88f, 0.74f, 0.31f, 1f);
+
+    /// <summary>The colour of any other job without a role: grey, so it is never taken for a healer.</summary>
+    public Vector4 NoRoleColor { get; set; } = new(0.55f, 0.57f, 0.62f, 1f);
 }
 
 /// <summary>
@@ -161,46 +169,35 @@ public class UnitFrameSettings : IValueTextFormat
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Hide the game's own bar, which this one replaces. The target of target has none of its own: it is part of the target's bar.</summary>
-    public bool HideNative { get; set; } = true;
-
     /// <summary>The target: the player's look, mirrored (name at the top left, HP text at the bottom right), and no MP.</summary>
     public static UnitFrameSettings CreateTarget() => new()
     {
-        HideNative = true,
         ShowMp = false,
         Name = new FrameTextSettings { Anchor = AnchorPoint.TopLeft, OffsetX = 4, OffsetY = -9 },
-        Health = new FrameTextSettings { Anchor = AnchorPoint.BottomRight, OffsetX = -4, OffsetY = -2 }
+        Hp = new FrameTextSettings { Anchor = AnchorPoint.BottomRight, OffsetX = -4, OffsetY = -2 }
     };
 
     /// <summary>The target of the target and the focus: a thin bar with the name inside at the left and the percentage at the right.</summary>
     public static UnitFrameSettings CreateSmall() => new()
     {
-        HideNative = true,
         ShowMp = false,
         ShowShield = false,
-        HealthPreset = HealthTextPreset.Percent,
+        HpPreset = HpTextPreset.Percent,
         Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 4, OffsetY = 0, TextSize = 14 },
-        Health = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -4, OffsetY = 0, TextSize = 14 }
+        Hp = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -4, OffsetY = 0, TextSize = 14 }
     };
 
     /// <summary>The enhancements of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
-    public PartyAuraSettings Enhancements { get; set; } = PartyAuraSettings.CreateFrameEnhancements();
+    public StatusRowSettings Enhancements { get; set; } = StatusRowSettings.CreateFrameEnhancements();
 
     /// <summary>The enfeeblements of the unit, in a row attached to the bar (player, target and focus frames). Off until switched on.</summary>
-    public PartyAuraSettings Enfeeblements { get; set; } = PartyAuraSettings.CreateFrameEnfeeblements();
-
-    /// <summary>Target frame: hide the game's own enhancements and enfeeblements of the target while one of our two rows is on.</summary>
-    public bool HideNativeStatuses { get; set; } = true;
-
-    /// <summary>Left click on the frame targets the unit, right click opens a small menu. When off, clicks go through to the game.</summary>
-    public bool Clickable { get; set; } = true;
+    public StatusRowSettings Enfeeblements { get; set; } = StatusRowSettings.CreateFrameEnfeeblements();
 
     /// <summary>Only used by the target of target: show its bar (background, HP, border) or just its name.</summary>
     public bool ShowFrame { get; set; } = true;
 
     /// <summary>Corner rounding of the bar, in pixels.</summary>
-    public int RoundingPx { get; set; } = 3;
+    public int RoundingPx { get; set; } = 6;
 
     public Vector4 FriendlyColor { get; set; } = new(0.31f, 0.70f, 0.43f, 1f);
 
@@ -215,9 +212,9 @@ public class UnitFrameSettings : IValueTextFormat
 
     public Vector4 HostileColor { get; set; } = new(0.79f, 0.29f, 0.27f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = new(0.04f, 0.05f, 0.09f, 0.92f);
+    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
 
-    public Vector4 BorderColor { get; set; } = new(0f, 0f, 0f, 1f);
+    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
 
     // ---- shield
     public bool ShowShield { get; set; } = true;
@@ -241,14 +238,14 @@ public class UnitFrameSettings : IValueTextFormat
     public bool NameFormatOnlyPlayers { get; set; } = true;
 
     // ---- HP text
-    public FrameTextSettings Health { get; set; } = new()
+    public FrameTextSettings Hp { get; set; } = new()
     {
         Anchor = AnchorPoint.BottomLeft,
         OffsetX = 4,
         OffsetY = -2
     };
 
-    public HealthTextPreset HealthPreset { get; set; } = HealthTextPreset.CurrentAndPercent;
+    public HpTextPreset HpPreset { get; set; } = HpTextPreset.CurrentAndPercent;
 
     /// <summary>Used when the preset is Custom. Parts: {cur} {curk} {max} {maxk} {def} {defk} {pct}. The ones ending in k are abbreviated.</summary>
     public string CustomTemplate { get; set; } = "{curk} | {pct}";
@@ -337,12 +334,12 @@ public class UnitFrameSettings : IValueTextFormat
     }
 
     // How the MP bar looks (its size is in the Layout, like its position).
-    public int MpRoundingPx { get; set; } = 3;
+    public int MpRoundingPx { get; set; } = 6;
 
     /// <summary>The number on the MP bar (off by default).</summary>
     public MpTextSettings MpText { get; set; } = new();
-    public Vector4 MpBackgroundColor { get; set; } = new(0.04f, 0.05f, 0.09f, 0.92f);
-    public Vector4 MpBorderColor { get; set; } = new(0f, 0f, 0f, 1f);
+    public Vector4 MpBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    public Vector4 MpBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
 
     public int MpHeightPx { get; set; } = 6;
 

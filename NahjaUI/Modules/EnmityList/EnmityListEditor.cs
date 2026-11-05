@@ -27,8 +27,7 @@ internal sealed class EnmityListEditor
             Widgets.SectionLabel("Enmity list");
 
             Check("Enabled", settings.Enabled, v => settings.Enabled = v);
-            Check("Show the game's values next to each bar (test)", settings.ShowGameValues, v => settings.ShowGameValues = v);
-            Check("Keep the game's list visible too (test)", settings.ShowGameList, v => settings.ShowGameList = v);
+            Widgets.EnabledHint();
         });
 
         Widgets.Card("##card_el_bar", 8, () =>
@@ -40,14 +39,14 @@ internal sealed class EnmityListEditor
             var width = layout.Width;
             if (ImGui.InputInt("Width (px)", ref width, 2, 10))
             {
-                layout.Width = Math.Clamp(width, 40, 1000);
+                layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
             if (ImGui.InputInt("Height (px)", ref height, 2, 10))
             {
-                layout.Height = Math.Clamp(height, 6, 100);
+                layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
             }
 
@@ -55,6 +54,7 @@ internal sealed class EnmityListEditor
             Slider("Space between bars (px)", settings.SpacingPx, 0, 30, v => settings.SpacingPx = v);
             Color("HP color", settings.HpColor, v => settings.HpColor = v);
             Color("Background color", settings.BackgroundColor, v => settings.BackgroundColor = v);
+            Color("Border color", settings.BorderColor, v => settings.BorderColor = new Vector4(v.X, v.Y, v.Z, 1f));
         });
 
         Widgets.Card("##card_el_name", 12, () =>
@@ -72,9 +72,9 @@ internal sealed class EnmityListEditor
         {
             Widgets.SectionLabel("HP percentage");
 
-            Check("Show the HP percentage", settings.Health.Enabled, v => settings.Health.Enabled = v);
+            Check("Show the HP percentage", settings.Hp.Enabled, v => settings.Hp.Enabled = v);
 
-            if (UnitFrameEditor.TextControls(settings.Health))
+            if (UnitFrameEditor.TextControls(settings.Hp))
                 plugin.RequestSave();
         });
 
@@ -91,29 +91,29 @@ internal sealed class EnmityListEditor
                 plugin.RequestSave();
             }
 
-            Slider("Dot offset X (px)", settings.EnmityDotOffsetX, -300, 300, v => settings.EnmityDotOffsetX = v);
-            Slider("Dot offset Y (px)", -settings.EnmityDotOffsetY, -300, 300, v => settings.EnmityDotOffsetY = -v);
+            Offset("Dot offset X (px)", settings.EnmityDotOffsetX, v => settings.EnmityDotOffsetX = v);
+            Offset("Dot offset Y (px)", -settings.EnmityDotOffsetY, v => settings.EnmityDotOffsetY = -v);
             Color("Enemy is attacking me", settings.OnMeColor, v => settings.OnMeColor = v);
-            Color("Enemy is attacking someone else", settings.OnOthersColor, v => settings.OnOthersColor = v);
+            Color("Enemy is not attacking me", settings.OnOthersColor, v => settings.OnOthersColor = v);
         });
 
-        Widgets.Card("##card_el_cast", 10, () =>
+        Widgets.Card("##card_el_progress_bar", 14, () =>
         {
-            Widgets.SectionLabel("Casts");
+            Widgets.SectionLabel("Progress bar");
 
-            ImGui.TextColored(Theme.TextMuted, "Whether the casts and the list itself show follow the game's own enmity list options.");
+            ImGui.TextColored(Theme.TextMuted, "Whether the progress bars and the list itself show follow the game's own enmity list options.");
             ImGui.Spacing();
 
-            var side = settings.CastSide;
-            var sideLabel = side switch { EnemyCastSide.Right => "Right of the bar", EnemyCastSide.Left => "Left of the bar", _ => "Under the bar" };
-            if (ImGui.BeginCombo("Cast position", sideLabel))
+            var side = settings.ProgressBarPosition;
+            var sideLabel = side switch { ProgressBarSide.Right => "Right of the bar", ProgressBarSide.Left => "Left of the bar", _ => "Under the bar" };
+            if (ImGui.BeginCombo("Progress bar position", sideLabel))
             {
-                foreach (var option in new[] { EnemyCastSide.Below, EnemyCastSide.Right, EnemyCastSide.Left })
+                foreach (var option in new[] { ProgressBarSide.Below, ProgressBarSide.Right, ProgressBarSide.Left })
                 {
-                    var label = option switch { EnemyCastSide.Right => "Right of the bar", EnemyCastSide.Left => "Left of the bar", _ => "Under the bar" };
+                    var label = option switch { ProgressBarSide.Right => "Right of the bar", ProgressBarSide.Left => "Left of the bar", _ => "Under the bar" };
                     if (ImGui.Selectable(label, option == side))
                     {
-                        settings.CastSide = option;
+                        settings.ProgressBarPosition = option;
                         plugin.RequestSave();
                     }
                 }
@@ -121,34 +121,47 @@ internal sealed class EnmityListEditor
                 ImGui.EndCombo();
             }
 
-            Slider("Cast width (px, 0 = same as the bar)", settings.CastWidthPx, 0, 600, v => settings.CastWidthPx = v);
-            Slider("Cast height (px)", settings.CastHeightPx, 6, 30, v => settings.CastHeightPx = v);
-            Slider("Space between bar and cast (px)", settings.CastGapPx, 0, 40, v => settings.CastGapPx = v);
-            Slider("Cast offset X (px)", settings.CastOffsetX, -300, 300, v => settings.CastOffsetX = v);
+            Slider("Progress bar width (px, 0 = same as the HP bar)", settings.ProgressBarWidthPx, 0, 600, v => settings.ProgressBarWidthPx = v);
+            Slider("Progress bar height (px)", settings.ProgressBarHeightPx, 6, 30, v => settings.ProgressBarHeightPx = v);
+            Slider("Space between HP bar and progress bar (px)", settings.ProgressBarGapPx, 0, 40, v => settings.ProgressBarGapPx = v);
+            Offset("Progress bar offset X (px)", settings.ProgressBarOffsetX, v => settings.ProgressBarOffsetX = v);
             // Up is plus: the saved value counts downwards, so the sign is turned here.
-            Slider("Cast offset Y (px)", -settings.CastOffsetY, -300, 300, v => settings.CastOffsetY = -v);
-            ImGui.TextColored(Theme.TextMuted, "Colors: the target cast bar (Cast bars page). A different color means it cannot be interrupted.");
+            Offset("Progress bar offset Y (px)", -settings.ProgressBarOffsetY, v => settings.ProgressBarOffsetY = -v);
+            Color("Color when it can be interrupted", settings.ProgressBarColor, v => settings.ProgressBarColor = new Vector4(v.X, v.Y, v.Z, 1f));
+            Color("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, v => settings.ProgressBarUninterruptibleColor = new Vector4(v.X, v.Y, v.Z, 1f));
+            Color("Progress bar background color", settings.ProgressBarBackgroundColor, v => settings.ProgressBarBackgroundColor = v);
+            Color("Progress bar border color", settings.ProgressBarBorderColor, v => settings.ProgressBarBorderColor = new Vector4(v.X, v.Y, v.Z, 1f));
         });
 
-        Widgets.Card("##card_el_cast_name", 12, () =>
+        Widgets.Card("##card_el_progress_bar_name", 12, () =>
         {
-            Widgets.SectionLabel("Cast: spell name");
+            Widgets.SectionLabel("Progress bar: action name");
 
-            Check("Show the spell name", settings.CastName.Enabled, v => settings.CastName.Enabled = v);
+            Check("Show the action name", settings.ProgressBarName.Enabled, v => settings.ProgressBarName.Enabled = v);
 
-            if (UnitFrameEditor.TextControls(settings.CastName))
+            if (UnitFrameEditor.TextControls(settings.ProgressBarName))
                 plugin.RequestSave();
         });
 
-        Widgets.Card("##card_el_cast_time", 12, () =>
+        Widgets.Card("##card_el_progress_bar_time", 12, () =>
         {
-            Widgets.SectionLabel("Cast: time left");
+            Widgets.SectionLabel("Progress bar: time left");
 
-            Check("Show the time left", settings.CastTime.Enabled, v => settings.CastTime.Enabled = v);
+            Check("Show the time left", settings.ProgressBarTime.Enabled, v => settings.ProgressBarTime.Enabled = v);
 
-            if (UnitFrameEditor.TextControls(settings.CastTime))
+            var timeMode = settings.ProgressBarTimeMode;
+            if (UnitFrameEditor.EnumCombo("Time format", ref timeMode, NahjaUI.Modules.ProgressBars.ProgressBarEditor.TimeModeLabel))
+            {
+                settings.ProgressBarTimeMode = timeMode;
+                plugin.RequestSave();
+            }
+
+            if (UnitFrameEditor.TextControls(settings.ProgressBarTime))
                 plugin.RequestSave();
         });
+
+        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_el_enhancements", "Enhancements", settings.Enhancements, true);
+        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_el_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: false);
     }
 
     private void Check(string label, bool current, Action<bool> apply)
@@ -157,6 +170,17 @@ internal sealed class EnmityListEditor
         if (ImGui.Checkbox(label, ref value))
         {
             apply(value);
+            plugin.RequestSave();
+        }
+    }
+
+    // An offset: a numeric field with the small +/- buttons (1 px, 5 with Ctrl), like every other offset of the interface.
+    private void Offset(string label, int current, Action<int> apply)
+    {
+        var value = current;
+        if (ImGui.InputInt(label, ref value, 1, 5))
+        {
+            apply(Math.Clamp(value, -300, 300));
             plugin.RequestSave();
         }
     }

@@ -21,6 +21,8 @@ public class TooltipSettings
     public bool FocusEnfeeblements { get; set; } = true;
     public bool PartyEnhancements { get; set; } = true;
     public bool PartyEnfeeblements { get; set; } = true;
+    public bool NameplateEnhancements { get; set; }
+    public bool NameplateEnfeeblements { get; set; }
 
     // What it says.
     public bool ShowId { get; set; } = true;
@@ -39,7 +41,7 @@ public class TooltipSettings
     public Vector4 BackgroundColor { get; set; } = new(0.063f, 0.071f, 0.118f, 0.96f);
     public Vector4 BorderColor { get; set; } = Theme.Border;
 
-    /// <summary>Does the tooltip show for this row? place: "player", "target", "focus" or "party".</summary>
+    /// <summary>Does the tooltip show for this row? place: "player", "target", "focus", "party" or "nameplate".</summary>
     public bool Allows(string place, bool isEnhancement) => Enabled && (place, isEnhancement) switch
     {
         ("player", true) => PlayerEnhancements,
@@ -50,6 +52,8 @@ public class TooltipSettings
         ("focus", false) => FocusEnfeeblements,
         ("party", true) => PartyEnhancements,
         ("party", false) => PartyEnfeeblements,
+        ("nameplate", true) => NameplateEnhancements,
+        ("nameplate", false) => NameplateEnfeeblements,
         _ => false
     };
 }

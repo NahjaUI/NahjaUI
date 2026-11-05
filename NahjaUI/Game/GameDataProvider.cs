@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.JobGauge.Enums;
+using GaugeCardType = Dalamud.Game.ClientState.JobGauge.Enums.CardType;
 using Dalamud.Game.ClientState.JobGauge.Types;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -130,7 +132,9 @@ internal sealed class GameDataProvider : IDisposable
             Plugin.Condition[ConditionFlag.BoundByDuty],
             Plugin.PartyList.Length,
             soloShown,
-            soloRaw);
+            soloRaw,
+            Plugin.ClientState.IsPvP,
+            Plugin.ClientState.IsPvPExcludingDen);
 
         var player = ToUnit(localPlayer);
 
@@ -150,11 +154,56 @@ internal sealed class GameDataProvider : IDisposable
             BuildNamePlates(),
             BuildPaladinGauge(player),
             BuildCombo(),
-            BuildEnmityList(localPlayer));
+            BuildEnmityList(localPlayer),
+            BuildRedMageGauge(player),
+            BuildLimitBreak(context),
+            BuildFrontlineGauge(context),
+            BuildDarkKnightGauge(player),
+            BuildGunbreakerGauge(player),
+            BuildScholarGauge(player),
+            BuildAstrologianGauge(player),
+            BuildSageGauge(player),
+            BuildExtraGauge(player),
+            BuildGcd());
 
         // The statuses seen this frame are the ones to remember for the next one.
         (statusClock, nextStatusClock) = (nextStatusClock, statusClock);
         return snapshot;
+    }
+
+    // The colour of your chocobo as the game has it now (its dye, "Current Color" in the Companion window), or null when unknown.
+    // It is read from the game's own data: the dye id of the companion and the colour of that dye in the Stain sheet.
+    public Vector4? ChocoboColor { get; private set; }
+
+    private byte lastChocoboStain = byte.MaxValue;
+
+    private unsafe void ReadChocoboColor()
+    {
+        byte stain;
+        try
+        {
+            var state = FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.Instance();
+            if (state == null)
+                return;
+
+            stain = state->Buddy.CompanionInfo.CurrentColorStainId;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (stain == lastChocoboStain)
+            return;
+
+        lastChocoboStain = stain;
+        ChocoboColor = null;
+
+        if (stain != 0 && Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Stain>().TryGetRow(stain, out var row) && row.Color != 0)
+        {
+            var rgb = row.Color;
+            ChocoboColor = new Vector4(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);
+        }
     }
 
     // Your chocobo companion (the one the game shows at the end of its party list), or null when it is not out.
@@ -163,6 +212,8 @@ internal sealed class GameDataProvider : IDisposable
         // Only while in a party, like the game's list (or alone, when the game is set to show the list alone).
         if (Plugin.PartyList.Length == 0 && !soloShown)
             return null;
+
+        ReadChocoboColor();
 
         IBattleNpc? chocobo = null;
 
@@ -236,7 +287,7 @@ internal sealed class GameDataProvider : IDisposable
             if (gameObject is null)
                 continue;
 
-            var name = gameObject.Name.ToString();
+            var name = StreamerMode.Name(CleanName(gameObject.Name.ToString()), isPlayer);
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
@@ -258,7 +309,7 @@ internal sealed class GameDataProvider : IDisposable
                 // Players: you, the people of your party, or anyone else (a hostile player, as in PvP, counts as an enemy).
                 // Other fighting characters (pets, chocobo, friendly battle NPCs) are Friendly.
                 var relation = isEnemy ? NamePlateRelation.Enemy : isPlayer ? PlayerRelation(chara) : NamePlateRelation.Friendly;
-                result.Add(new NamePlateSnapshot(chara.EntityId, name, chara.Level, chara.CurrentHp, chara.MaxHp, ndc, scale, isEnemy ? ToCast(chara) : null, relation, chara.GameObjectId, isTarget));
+                result.Add(new NamePlateSnapshot(chara.EntityId, name, chara.Level, chara.CurrentHp, chara.MaxHp, ndc, scale, ToCast(chara), relation, chara.GameObjectId, isTarget, ToStatuses(chara.EntityId, chara.StatusList)));
             }
             else
             {
@@ -274,7 +325,7 @@ internal sealed class GameDataProvider : IDisposable
     internal static NamePlateRelation PlayerRelation(IGameObject gameObject)
     {
         if (gameObject is IBattleChara chara && chara.StatusFlags.HasFlag(StatusFlags.Hostile))
-            return NamePlateRelation.Enemy;
+            return NamePlateRelation.EnemyPlayer;
 
         if (Plugin.ObjectTable.LocalPlayer is { } me && me.EntityId == gameObject.EntityId)
             return NamePlateRelation.Self;
@@ -331,6 +382,26 @@ internal sealed class GameDataProvider : IDisposable
         return result;
     }
 
+    // The game puts its own symbols into some names (in PvP, the marks beside enemy players): they are characters of the game's
+    // private area, which our fonts do not have and draw as "?". They are taken out.
+    private static string CleanName(string name)
+    {
+        var hasPrivate = false;
+        foreach (var c in name)
+        {
+            if (c >= '\uE000' && c <= '\uF8FF')
+            {
+                hasPrivate = true;
+                break;
+            }
+        }
+
+        if (!hasPrivate)
+            return name;
+
+        return string.Concat(name.Where(c => c < '\uE000' || c > '\uF8FF')).Trim();
+    }
+
     // The White Mage gauge (class job 24). Nobody else has one, and the game only fills it for White Mages.
     private const uint WhiteMageJobId = 24;
 
@@ -357,7 +428,7 @@ internal sealed class GameDataProvider : IDisposable
 
     // The combo of the game: the last action of the chain you used and the time left to continue it.
     /// <summary>
-    /// Debug: what the game flags right now among the actions of a job. Highlighted = the game makes it glow (procs, follow-ups);
+    /// Debug: what the game flags right now among the actions of a job. Highlighted = the game makes it glow (glowing actions, follow-ups);
     /// Form = the action turns into another one (Confiteor into Blade of Faith). Only meant for the Debug page.
     /// </summary>
     public static unsafe List<string> ReadActionFlags(uint jobId)
@@ -412,6 +483,468 @@ internal sealed class GameDataProvider : IDisposable
         return combo.Timer > 0f ? new ComboSnapshot(combo.Action, combo.Timer) : ComboSnapshot.None;
     }
 
+    // The gauge of the game's Frontline window (PvP). Read from the values the game gives that window (checked with the Debug card
+    // "What a game window holds": value 3 is the number on the gauge, value 4 its maximum). The window's visibility is NOT used: when ours
+    // is drawn the game's window is switched off, and the values are still there.
+    private static unsafe FrontlineGaugeSnapshot? BuildFrontlineGauge(ContextSnapshot context)
+    {
+        if (!context.InPvPMatch)
+            return null;
+
+        var pointer = Plugin.GameGui.GetAddonByName("PvPFrontlineGauge");
+        if (pointer.IsNull)
+            return null;
+
+        var addon = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)pointer.Address;
+        if (addon->AtkValuesCount < 5)
+            return null;
+
+        var value = addon->AtkValues[3].UInt;
+        var max = addon->AtkValues[4].UInt;
+        return new FrontlineGaugeSnapshot(value, max == 0 ? 100u : max);
+    }
+
+    /// <summary>For the Debug page: what the game says about the limit break, the raw memory of its controller and the state of its own gauge window (to find out how many bars the content really has).</summary>
+    public static unsafe string LimitBreakDebug()
+    {
+        var controller = FFXIVClientStructs.FFXIV.Client.Game.UI.LimitBreakController.Instance();
+        var text = controller == null
+            ? "controller: none"
+            : $"BarCount={controller->BarCount} CurrentUnits={controller->CurrentUnits} BarUnits={controller->BarUnits} IsPvP={controller->IsPvP}";
+
+        var pointer = Plugin.GameGui.GetAddonByName("_LimitBreak");
+        if (pointer.IsNull)
+            return text + "\n_LimitBreak window: not loaded";
+
+        var addon = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)pointer.Address;
+        text += $"\n_LimitBreak window: visible={addon->IsVisible} visibilityFlags={addon->VisibilityFlags} alpha={addon->Alpha}";
+
+        var values = string.Empty;
+        for (var i = 0; i < addon->AtkValuesCount; i++)
+            values += $"[{i}] {addon->AtkValues[i].Type}={addon->AtkValues[i].UInt}  ";
+
+        text += $"\nvalues ({addon->AtkValuesCount}): {values}";
+
+        return text + "\nnodes (id type visible WxH, inside each component):\n" + DumpNodes(&addon->UldManager, 0);
+    }
+
+    // Every node of a window (and, inside the component nodes, their own nodes): id, type, visible or not, size.
+    private static unsafe string DumpNodes(FFXIVClientStructs.FFXIV.Component.GUI.AtkUldManager* manager, int depth)
+    {
+        var text = string.Empty;
+        for (var i = 0; i < manager->NodeListCount; i++)
+        {
+            var node = manager->NodeList[i];
+            if (node == null)
+                continue;
+
+            var on = (node->NodeFlags & FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible) != 0;
+            text += $"{new string(' ', depth * 2)}{node->NodeId} t{(int)node->Type} {(on ? "on" : "off")} {node->Width}x{node->Height}\n";
+
+            if ((int)node->Type >= 1000 && depth < 2)
+            {
+                var component = ((FFXIVClientStructs.FFXIV.Component.GUI.AtkComponentNode*)node)->Component;
+                if (component != null)
+                    text += DumpNodes(&component->UldManager, depth + 1);
+            }
+        }
+
+        return text;
+    }
+
+    // How many bars the game's own Limit Break window shows (0 when it cannot be read). The window may be hidden: its nodes are still kept up to date.
+    private static unsafe int NativeLimitBreakBars()
+    {
+        var pointer = Plugin.GameGui.GetAddonByName("_LimitBreak");
+        if (pointer.IsNull)
+            return 0;
+
+        var addon = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)pointer.Address;
+        var bars = 0;
+        for (var i = 0; i < addon->UldManager.NodeListCount; i++)
+        {
+            var node = addon->UldManager.NodeList[i];
+            if (node != null && (int)node->Type >= 1000 && (node->NodeFlags & FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible) != 0)
+                bars++;
+        }
+
+        return bars;
+    }
+
+    // The Limit Break gauge of the party (units gathered, units per bar). Only read in PvE; null when the game has none.
+    private static unsafe LimitBreakSnapshot? BuildLimitBreak(ContextSnapshot context)
+    {
+        if (context.InPvP)
+            return null;
+
+        var controller = FFXIVClientStructs.FFXIV.Client.Game.UI.LimitBreakController.Instance();
+        // BarCount is how many bars the game gives the party right now (0 when there is no limit break to gather: alone, for example).
+        if (controller == null || controller->BarUnits == 0 || controller->BarCount == 0)
+            return null;
+
+        // The bars the content has (2 in Occult Crescent, 3 in an alliance raid): the game keeps one component node per bar visible in its own
+        // window (_LimitBreak). The controller's BarCount is only how many bars the units reach, so it is the fallback.
+        var bars = NativeLimitBreakBars();
+        if (bars == 0)
+            bars = (int)controller->BarCount;
+
+        return new LimitBreakSnapshot(controller->CurrentUnits, controller->BarUnits, bars);
+    }
+
+    // The Dark Knight gauge. Dark Knight is class job 32 (it has no earlier class).
+    private const uint DarkKnightJobId = 32;
+
+    private static DarkKnightGaugeSnapshot? BuildDarkKnightGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != DarkKnightJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<DRKGauge>();
+        return new DarkKnightGaugeSnapshot(gauge.Blood, gauge.DarksideTimeRemaining, gauge.HasDarkArts, gauge.ShadowTimeRemaining);
+    }
+
+    // The Gunbreaker gauge. Gunbreaker is class job 37.
+    private const uint GunbreakerJobId = 37;
+
+    private static GunbreakerGaugeSnapshot? BuildGunbreakerGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != GunbreakerJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<GNBGauge>();
+        return new GunbreakerGaugeSnapshot(gauge.Ammo);
+    }
+
+    // The Scholar gauge. Scholar is class job 28.
+    private const uint ScholarJobId = 28;
+
+    private static ScholarGaugeSnapshot? BuildScholarGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != ScholarJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<SCHGauge>();
+        return new ScholarGaugeSnapshot(gauge.Aetherflow, gauge.FairyGauge, (ushort)Math.Max((short)0, gauge.SeraphTimer));
+    }
+
+    // The Astrologian gauge. Astrologian is class job 33.
+    private const uint AstrologianJobId = 33;
+
+    private static AstrologianGaugeSnapshot? BuildAstrologianGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != AstrologianJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<ASTGauge>();
+        var crown = gauge.DrawnCrownCard;
+        var crownValue = crown == GaugeCardType.Lord ? (byte)1 : crown == GaugeCardType.Lady ? (byte)2 : (byte)0;
+        return new AstrologianGaugeSnapshot(
+            gauge.Card1 != GaugeCardType.None,
+            gauge.Card2 != GaugeCardType.None,
+            gauge.Card3 != GaugeCardType.None,
+            gauge.ActiveDraw == DrawType.Umbral,
+            crownValue);
+    }
+
+    // The Sage gauge. Sage is class job 40.
+    private const uint SageJobId = 40;
+
+    private static SageGaugeSnapshot? BuildSageGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != SageJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<SGEGauge>();
+        return new SageGaugeSnapshot(gauge.Addersgall, gauge.AddersgallTimer, gauge.Addersting);
+    }
+
+    // ---------------------------------------------------------------- the generic gauges (melee, physical ranged and casters)
+
+    // The longest value seen of a timer while it ran: the game gives the time left, not the total, and the bar needs the total.
+    private readonly Dictionary<string, float> timerMax = new();
+
+    private float RememberMax(string key, float value, float floor)
+    {
+        if (value <= 0f)
+        {
+            timerMax.Remove(key);
+            return floor;
+        }
+
+        var max = MathF.Max(floor, MathF.Max(value, timerMax.GetValueOrDefault(key)));
+        timerMax[key] = max;
+        return max;
+    }
+
+    private static string Secs(float milliseconds) => ((int)MathF.Ceiling(milliseconds / 1000f)).ToString();
+
+    private static GaugePartSnapshot Bar(string id, float value, float max, string? text = null, int variant = 0)
+        => new(id, GaugePartKind.Bar, value, max, 0f, text, variant);
+
+    private static GaugePartSnapshot Pips(string id, float count, int max, float partial = 0f, string? text = null, int variant = 0)
+        => new(id, GaugePartKind.Pips, count, max, partial, text, variant);
+
+    private static GaugePartSnapshot Slots(string id, params int[] colors)
+        => new(id, GaugePartKind.Slots, 0f, colors.Length, 0f, null, 0, colors);
+
+    private ExtraGaugeSnapshot? BuildExtraGauge(UnitSnapshot? player)
+    {
+        if (player is null)
+            return null;
+
+        GaugePartSnapshot[]? parts = player.JobId switch
+        {
+            20 => BuildMonk(),
+            22 => BuildDragoon(),
+            30 => BuildNinja(),
+            34 => BuildSamurai(),
+            39 => BuildReaper(),
+            41 => BuildViper(),
+            23 => BuildBard(),
+            31 => BuildMachinist(),
+            38 => BuildDancer(),
+            25 => BuildBlackMage(player),
+            27 => BuildSummoner(),
+            42 => BuildPictomancer(),
+            _ => null
+        };
+
+        return parts is null ? null : new ExtraGaugeSnapshot(player.JobId, parts);
+    }
+
+    private static GaugePartSnapshot[] BuildMonk()
+    {
+        var gauge = Plugin.JobGauges.Get<MNKGauge>();
+
+        // The index of the colour of the row for each chakra: 0 Opo-opo, 1 Raptor, 2 Coeurl. The names of the enum are used because
+        // the numbers have changed between versions of Dalamud.
+        static int Chakra(string name) => name.Contains("opo", StringComparison.OrdinalIgnoreCase) ? 0
+            : name.Contains("raptor", StringComparison.OrdinalIgnoreCase) ? 1
+            : name.Contains("coeurl", StringComparison.OrdinalIgnoreCase) ? 2
+            : -1;
+
+        // The two Nadi: a flags value written with names ("Lunar, Solar").
+        var nadi = gauge.Nadi.ToString();
+        var lunar = nadi.Contains("lunar", StringComparison.OrdinalIgnoreCase);
+        var solar = nadi.Contains("solar", StringComparison.OrdinalIgnoreCase);
+        if (!lunar && !solar && int.TryParse(nadi, out var raw) && raw != 0)
+        {
+            // A number without a name: both bits of the flags (lunar and solar), whichever pair of numbers this version uses.
+            lunar = raw is 1 or 3 or 6 or 2;
+            solar = raw is 2 or 3 or 6 or 4;
+        }
+
+        return new[]
+        {
+            Pips("chakra", gauge.Chakra, 5),
+            Slots("blitz", Chakra(gauge.BeastChakra1.ToString()), Chakra(gauge.BeastChakra2.ToString()), Chakra(gauge.BeastChakra3.ToString())),
+            Slots("nadi", lunar ? 0 : -1, solar ? 1 : -1)
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildDragoon()
+    {
+        var gauge = Plugin.JobGauges.Get<DRGGauge>();
+        float life = gauge.IsLOTDActive ? Math.Max((short)0, gauge.LOTDTimer) : 0f;
+
+        return new[]
+        {
+            Bar("lotd", life, 20000f, life > 0f ? Secs(life) : null),
+            Pips("focus", gauge.FirstmindsFocusCount, 2)
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildNinja()
+    {
+        var gauge = Plugin.JobGauges.Get<NINGauge>();
+        return new[]
+        {
+            Bar("ninki", gauge.Ninki, 100f, gauge.Ninki.ToString()),
+            Pips("kazematoi", gauge.Kazematoi, 5)
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildSamurai()
+    {
+        var gauge = Plugin.JobGauges.Get<SAMGauge>();
+        return new[]
+        {
+            Bar("kenki", gauge.Kenki, 100f, gauge.Kenki.ToString()),
+            Slots("sen", gauge.HasSetsu ? 0 : -1, gauge.HasGetsu ? 1 : -1, gauge.HasKa ? 2 : -1),
+            Pips("meditation", gauge.MeditationStacks, 3)
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildReaper()
+    {
+        var gauge = Plugin.JobGauges.Get<RPRGauge>();
+
+        // While enshrouded the Shroud row shows the Lemure Shroud and the time left; otherwise the Shroud gauge itself.
+        var enshrouded = gauge.EnshroudedTimeRemaining > 0;
+        return new[]
+        {
+            Bar("soul", gauge.Soul, 100f, gauge.Soul.ToString()),
+            enshrouded
+                ? Pips("shroud", gauge.LemureShroud, 5, 0f, Secs(gauge.EnshroudedTimeRemaining), 1)
+                : Bar("shroud", gauge.Shroud, 100f, gauge.Shroud.ToString())
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildViper()
+    {
+        var gauge = Plugin.JobGauges.Get<VPRGauge>();
+
+        // While Reawakened the second row shows the Anguine Tribute (the generations left); otherwise the Serpent Offering.
+        var reawakened = gauge.AnguineTribute > 0;
+        return new[]
+        {
+            Pips("coil", gauge.RattlingCoilStacks, 3),
+            reawakened
+                ? Pips("offering", gauge.AnguineTribute, 5, 0f, null, 1)
+                : Bar("offering", gauge.SerpentOffering, 100f, gauge.SerpentOffering.ToString())
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildBard()
+    {
+        var gauge = Plugin.JobGauges.Get<BRDGauge>();
+
+        // The names of the enum are the ones of the songs, whatever their numbers are.
+        var name = gauge.Song.ToString();
+        var variant = name.Contains("Minuet", StringComparison.Ordinal) ? 0
+            : name.Contains("Ballad", StringComparison.Ordinal) ? 1
+            : name.Contains("Paeon", StringComparison.Ordinal) ? 2
+            : 3;
+
+        float time = variant == 3 ? 0f : gauge.SongTimer;
+        var stacks = variant switch { 0 => 3, 1 => 1, 2 => 4, _ => 3 };
+
+        return new[]
+        {
+            Bar("song", time, 45000f, time > 0f ? Secs(time) : null, variant),
+            Pips("repertoire", gauge.Repertoire, stacks, 0f, null, Math.Min(variant, 2)),
+            Bar("soulvoice", gauge.SoulVoice, 100f, gauge.SoulVoice.ToString())
+        };
+    }
+
+    private GaugePartSnapshot[] BuildMachinist()
+    {
+        var gauge = Plugin.JobGauges.Get<MCHGauge>();
+
+        float overheat = gauge.IsOverheated ? Math.Max((short)0, gauge.OverheatTimeRemaining) : 0f;
+        float queen = gauge.IsRobotActive ? Math.Max((short)0, gauge.SummonTimeRemaining) : 0f;
+        var overheatMax = RememberMax("mch.heat", overheat, 8000f);
+        var queenMax = RememberMax("mch.queen", queen, 10000f);
+
+        return new[]
+        {
+            overheat > 0f ? Bar("heat", overheat, overheatMax, Secs(overheat), 1) : Bar("heat", gauge.Heat, 100f, gauge.Heat.ToString()),
+            queen > 0f ? Bar("battery", queen, queenMax, Secs(queen), 1) : Bar("battery", gauge.Battery, 100f, gauge.Battery.ToString())
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildDancer()
+    {
+        var gauge = Plugin.JobGauges.Get<DNCGauge>();
+
+        GaugePartSnapshot first;
+        if (gauge.IsDancing)
+        {
+            // The steps still to do, each in its own colour (the colours 1 to 4 of the row: Emboite, Entrechat, Jete, Pirouette).
+            var steps = gauge.Steps;
+            var slots = new int[4];
+            for (var i = 0; i < 4; i++)
+            {
+                var step = (long)steps[i] - 15999L + 1L;
+                slots[i] = i >= gauge.CompletedSteps && step is >= 1 and <= 4 ? (int)step : -1;
+            }
+
+            first = Slots("feathers", slots);
+        }
+        else
+        {
+            first = Pips("feathers", gauge.Feathers, 4);
+        }
+
+        return new[] { first, Bar("esprit", gauge.Esprit, 100f, gauge.Esprit.ToString()) };
+    }
+
+    private static GaugePartSnapshot[] BuildBlackMage(UnitSnapshot player)
+    {
+        var gauge = Plugin.JobGauges.Get<BLMGauge>();
+
+        // Astral Fire (status 165) or Umbral Ice (status 166): the stacks are in the gauge, the seconds in the status.
+        var fire = gauge.InAstralFire;
+        var ice = gauge.InUmbralIce;
+        var stacks = fire ? gauge.AstralFireStacks : ice ? gauge.UmbralIceStacks : 0;
+        var status = player.Statuses.FirstOrDefault(s => s.Id == (fire ? 165u : 166u));
+        var text = (fire || ice) && status is { RemainingTime: > 0f } ? Secs(status.RemainingTime * 1000f) : null;
+
+        // The game counts the Polyglot timer down from 30 seconds while Enochian is on.
+        var polyglot = gauge.PolyglotStacks;
+        var partial = gauge.IsEnochianActive && polyglot < 3 ? Math.Clamp((30000f - gauge.EnochianTimer) / 30000f, 0f, 1f) : 0f;
+
+        return new[]
+        {
+            Pips("element", stacks, 3, 0f, text, fire ? 0 : ice ? 1 : 2),
+            Pips("hearts", gauge.UmbralHearts, 3),
+            Pips("polyglot", polyglot, 3, partial),
+            Pips("soul", gauge.AstralSoulStacks, 6)
+        };
+    }
+
+    private GaugePartSnapshot[] BuildSummoner()
+    {
+        var gauge = Plugin.JobGauges.Get<SMNGauge>();
+
+        // The two Aetherflow stacks are two bits of the flags.
+        var flags = (int)gauge.AetherFlags;
+        var aetherflow = (flags & 1) + ((flags >> 1) & 1);
+
+        // The Trance row: the time of the primal that is attuned (Ifrit, Titan, Garuda: 30 seconds) or of the demi-summon that is out.
+        var attunement = (int)gauge.AttunementType;
+        float demi = gauge.SummonTimerRemaining;
+        var demiMax = RememberMax("smn.demi", demi, 15000f);
+
+        GaugePartSnapshot trance;
+        if (gauge.AttunementTimerRemaining > 0 && attunement is >= 1 and <= 3)
+            trance = Bar("trance", gauge.AttunementTimerRemaining, 30000f, Secs(gauge.AttunementTimerRemaining), attunement - 1);
+        else if (demi > 0f)
+            trance = Bar("trance", demi, demiMax, Secs(demi), 3);
+        else
+            trance = Bar("trance", 0f, 1f, null, 3);
+
+        return new[]
+        {
+            Pips("aetherflow", aetherflow, 2),
+            Slots("primals", gauge.IsIfritReady ? 0 : -1, gauge.IsTitanReady ? 1 : -1, gauge.IsGarudaReady ? 2 : -1),
+            trance
+        };
+    }
+
+    private static GaugePartSnapshot[] BuildPictomancer()
+    {
+        var gauge = Plugin.JobGauges.Get<PCTGauge>();
+        return new[]
+        {
+            Bar("palette", gauge.PalleteGauge, 100f, gauge.PalleteGauge.ToString()),
+            Pips("paint", gauge.Paint, 5),
+            Slots("canvas", gauge.CreatureMotifDrawn ? 0 : -1, gauge.WeaponMotifDrawn ? 1 : -1, gauge.LandscapeMotifDrawn ? 2 : -1, gauge.MooglePortraitReady ? 3 : -1, gauge.MadeenPortraitReady ? 4 : -1)
+        };
+    }
+
+    // The Red Mage gauge. Red Mage is class job 35.
+    private const uint RedMageJobId = 35;
+
+    private static RedMageGaugeSnapshot? BuildRedMageGauge(UnitSnapshot? player)
+    {
+        if (player is null || player.JobId != RedMageJobId)
+            return null;
+
+        var gauge = Plugin.JobGauges.Get<RDMGauge>();
+        return new RedMageGaugeSnapshot(gauge.WhiteMana, gauge.BlackMana, gauge.ManaStacks);
+    }
+
     // The Paladin gauge. Paladin is class job 19 (Gladiator, its first class, is 1 and has no Oath Gauge).
     private const uint PaladinJobId = 19;
 
@@ -436,7 +969,7 @@ internal sealed class GameDataProvider : IDisposable
 
     // ---------------------------------------------------------------- conversion helpers
 
-    // Only characters that fight (players, enemies, battle NPCs) have health and statuses.
+    // Only characters that fight (players, enemies, battle NPCs) have HP and statuses.
     private UnitSnapshot? ToUnit(IGameObject? gameObject)
     {
         if (gameObject is null)
@@ -455,7 +988,7 @@ internal sealed class GameDataProvider : IDisposable
                 _ => UnitKind.Object
             };
 
-            return new UnitSnapshot(gameObject.EntityId, gameObject.Name.ToString(), 0, 0, 0, 0, 0, 0, false, null,
+            return new UnitSnapshot(gameObject.EntityId, CleanName(gameObject.Name.ToString()), 0, 0, 0, 0, 0, 0, false, null,
                 Array.Empty<StatusSnapshot>(), Kind: kind);
         }
 
@@ -464,7 +997,7 @@ internal sealed class GameDataProvider : IDisposable
 
         return new UnitSnapshot(
             chara.EntityId,
-            chara.Name.ToString(),
+            StreamerMode.Name(CleanName(chara.Name.ToString()), chara.ObjectKind == ObjectKind.Pc),
             chara.ClassJob.RowId,
             chara.Level,
             chara.CurrentHp,
@@ -495,15 +1028,38 @@ internal sealed class GameDataProvider : IDisposable
         _ => chara.MaxMp
     };
 
+    // The online status the game gives to someone who is watching a cutscene (the icon next to his name in the party list). Its number is read once
+    // from the English table, so it does not depend on the language of the game; after that only numbers are compared.
+    public static readonly uint CutsceneStatusId = FindOnlineStatus("Viewing Cutscene");
+
+    private static uint FindOnlineStatus(string name)
+    {
+        foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.OnlineStatus>(Dalamud.Game.ClientLanguage.English))
+        {
+            if (row.Name.ToString() == name)
+                return row.RowId;
+        }
+
+        return 0;
+    }
+
     private UnitSnapshot ToUnit(IPartyMember member)
     {
         // The party list has the data of every member, even those far away.
         // Cast and death state only exist when the member is also in the object table.
         var chara = member.GameObject as IBattleChara;
 
+        // Without a character next to you, the member is in another area (its territory is not yours), offline (it has no territory)
+        // or only too far away.
+        var territory = member.Territory.RowId;
+        var presence = chara is not null ? (CutsceneStatusId != 0 && chara.OnlineStatus.RowId == CutsceneStatusId ? Presence.ViewingCutscene : Presence.Here)
+            : territory == 0 ? Presence.Offline
+            : territory != Plugin.ClientState.TerritoryType ? Presence.OtherArea
+            : Presence.OutOfRange;
+
         return new UnitSnapshot(
             member.EntityId,
-            member.Name.ToString(),
+            StreamerMode.Name(CleanName(member.Name.ToString()), true),
             member.ClassJob.RowId,
             member.Level,
             member.CurrentHP,
@@ -512,8 +1068,12 @@ internal sealed class GameDataProvider : IDisposable
             member.MaxMP,
             chara?.IsDead ?? false,
             chara is null ? null : ToCast(chara),
-            ToStatuses(member.EntityId, member.Statuses),
-            ShieldPercent: chara?.ShieldPercentage ?? 0);
+            // The statuses of the party list are only refreshed when the server sends them (every few seconds), so their times jump and lag
+            // behind. A member next to you is read from its own character instead, which the game counts down every frame (the same
+            // list the status rows use). The party list is the fallback for members that are far away.
+            chara is not null ? ToStatuses(member.EntityId, chara.StatusList) : ToStatuses(member.EntityId, member.Statuses),
+            ShieldPercent: chara?.ShieldPercentage ?? 0,
+            Presence: presence);
     }
 
     private static CastSnapshot? ToCast(IBattleChara chara)
@@ -524,7 +1084,7 @@ internal sealed class GameDataProvider : IDisposable
         return new CastSnapshot(chara.CastActionId, chara.CurrentCastTime, chara.TotalCastTime, chara.IsCastInterruptible, chara.CastActionType);
     }
 
-    private IReadOnlyList<StatusSnapshot> ToStatuses(uint unitId, StatusList statusList)
+    private unsafe IReadOnlyList<StatusSnapshot> ToStatuses(uint unitId, StatusList statusList)
     {
         if (statusList.Length == 0)
             return Array.Empty<StatusSnapshot>();
@@ -537,10 +1097,40 @@ internal sealed class GameDataProvider : IDisposable
             if (status.StatusId == 0)
                 continue;
 
-            result.Add(new StatusSnapshot(status.StatusId, status.SourceId, SmoothRemaining(unitId, status.StatusId, status.SourceId, status.RemainingTime), status.Param));
+            // A status with no real duration (the 24 hour ones, for example) has no countdown in the game. Dalamud gives the time as a
+            // positive number even then (it drops the sign), which made a false countdown appear after every loading screen.
+            // The game marks it with a negative time (or its data says it is permanent): no time.
+            var remaining = status.RemainingTime;
+            if (remaining > 0f)
+            {
+                var raw = ((FFXIVClientStructs.FFXIV.Client.Game.Status*)status.Address)->RemainingTime;
+                if (raw < 0f || GameNames.StatusIsPermanent(status.StatusId))
+                    remaining = 0f;
+            }
+
+            result.Add(new StatusSnapshot(status.StatusId, status.SourceId, SmoothRemaining(unitId, status.StatusId, status.SourceId, remaining), status.Param));
         }
 
         return result;
+    }
+
+    // ---------------------------------------------------------------- global cooldown
+
+    // The recast group of the global cooldown (the game numbers the groups from 0; the GCD is the 58th).
+    private const int GcdGroup = 57;
+
+    private unsafe GcdSnapshot? BuildGcd()
+    {
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null)
+            return null;
+
+        var detail = actionManager->GetRecastGroupDetail(GcdGroup);
+        if (detail == null)
+            return null;
+
+        var total = actionManager->GetRecastTimeForGroup(GcdGroup);
+        return new GcdSnapshot(detail->IsActive && total > 0f && detail->Elapsed < total, detail->Elapsed, total);
     }
 
     // ---------------------------------------------------------------- cooldowns

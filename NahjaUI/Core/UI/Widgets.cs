@@ -120,6 +120,13 @@ internal static class Widgets
     }
 
     /// <summary>Small muted title in capitals that opens a group of settings.</summary>
+    /// <summary>Tooltip for the checkbox just drawn: what "Enabled" does for an element the game also draws.</summary>
+    public static void EnabledHint(string? extra = null)
+    {
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(extra is null ? "Draws NahjaUI's version and hides the game's." : $"Draws NahjaUI's version and hides the game's.\n{extra}");
+    }
+
     public static void SectionLabel(string text)
     {
         // The first title of a card is its header: clicking it folds or opens the card.

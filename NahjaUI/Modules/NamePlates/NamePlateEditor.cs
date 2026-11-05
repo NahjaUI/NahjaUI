@@ -4,6 +4,8 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
+using NahjaUI.Game;
+using NahjaUI.Modules.UnitFrames;
 
 namespace NahjaUI.Modules.NamePlates;
 
@@ -19,38 +21,127 @@ internal sealed class NamePlateEditor
 
     public void Draw()
     {
-        var settings = plugin.Configuration.NamePlates;
+        var master = plugin.Configuration.NamePlates;
 
         Widgets.Card("##card_np_general", 6, () =>
         {
             Widgets.SectionLabel("Nameplates");
 
-            if (Check("Enabled", settings.Enabled, out var enabled))
+            if (Check("Enabled", master.Enabled, out var enabled))
             {
-                settings.Enabled = enabled;
+                master.Enabled = enabled;
                 Plugin.NamePlateGui.RequestRedraw();
             }
+            Widgets.EnabledHint();
 
-            if (Check("Show the game's flags and colors next to the name (test)", settings.ShowGameFlags, out var flagsShown))
-                settings.ShowGameFlags = flagsShown;
-
-            if (Check("Always show the HP bar of my target", settings.ShowBarOnTarget, out var barOnTarget))
-                settings.ShowBarOnTarget = barOnTarget;
+            if (Check("Always show the HP bar of my target", master.ShowBarOnTarget, out var barOnTarget))
+                master.ShowBarOnTarget = barOnTarget;
 
         });
 
-        Widgets.Card("##card_np_hp", 6, () =>
+        if (!ImGui.BeginTabBar("##np_kinds"))
+            return;
+
+        DrawKind("Me", master.Self, NamePlateRelation.Self);
+        DrawKind("Party", master.Party, NamePlateRelation.Party);
+        DrawKind("Other players", master.OtherPlayers, NamePlateRelation.OtherPlayer);
+        DrawKind("Friendly NPCs", master.FriendlyNpcs, NamePlateRelation.Friendly);
+        DrawKind("Enemy NPCs", master.EnemyNpcs, NamePlateRelation.Enemy);
+        DrawKind("Enemy players", master.EnemyPlayers, NamePlateRelation.EnemyPlayer);
+        DrawKind("Others", master.OtherPlates, NamePlateRelation.Other);
+
+        ImGui.EndTabBar();
+    }
+
+    // One tab of a kind of plate: its own switch, a button to copy another kind's settings, and the same three tabs for each.
+    private void DrawKind(string title, NamePlateStyle style, NamePlateRelation kind)
+    {
+        if (!ImGui.BeginTabItem(title))
+            return;
+
+        ImGui.PushID($"kind{(int)kind}");
+
+        Widgets.Card("##card_np_kind", 4, () =>
+        {
+            Widgets.SectionLabel(title);
+
+            if (Check("Use NahjaUI plates for these", style.Active, out var active))
+            {
+                style.Active = active;
+                Plugin.NamePlateGui.RequestRedraw();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Off: the game's own plate is left as it is.");
+
+            DrawCopyButton(style, kind);
+        });
+
+        DrawStyle(style, kind);
+
+        ImGui.PopID();
+        ImGui.EndTabItem();
+    }
+
+    // "Copy settings from": copies everything of another kind of plate into this one (nothing stays linked).
+    private void DrawCopyButton(NamePlateStyle target, NamePlateRelation kind)
+    {
+        var master = plugin.Configuration.NamePlates;
+        var sources = new (string Label, NamePlateRelation Kind)[]
+        {
+            ("Me", NamePlateRelation.Self), ("Party", NamePlateRelation.Party), ("Other players", NamePlateRelation.OtherPlayer),
+            ("Friendly NPCs", NamePlateRelation.Friendly), ("Enemy NPCs", NamePlateRelation.Enemy), ("Enemy players", NamePlateRelation.EnemyPlayer)
+        };
+
+        if (!ImGui.BeginCombo("Copy settings from", "Choose...", ImGuiComboFlags.None))
+            return;
+
+        foreach (var source in sources)
+        {
+            if (source.Kind == kind)
+                continue;
+
+            if (!ImGui.Selectable(source.Label))
+                continue;
+
+            // A copy through the saved form, so nothing is shared between the two (rows, filters, colors...).
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(master.StyleOf(source.Kind));
+            var copy = Newtonsoft.Json.JsonConvert.DeserializeObject<NamePlateStyle>(json);
+            if (copy is null)
+                continue;
+
+            copy.Active = target.Active;
+            master.SetStyle(kind, copy);
+            plugin.RequestSave();
+        }
+
+        ImGui.EndCombo();
+    }
+
+    private void DrawStyle(NamePlateStyle settings, NamePlateRelation kind)
+    {
+        if (!ImGui.BeginTabBar("##np_sub_tabs"))
+            return;
+
+        if (ImGui.BeginTabItem("Plate"))
+        {
+        if (kind != NamePlateRelation.Other)
+        Widgets.Card("##card_np_hp", 9, () =>
         {
             Widgets.SectionLabel("HP bar");
 
-            settings.WidthPx = Number("Width (px)", settings.WidthPx, 40, 600, 2, 10);
-            settings.HeightPx = Number("Height (px)", settings.HeightPx, 4, 100, 2, 10);
+            settings.WidthPx = Number("Width (px)", settings.WidthPx, 1, 4000, 2, 10);
+            settings.HeightPx = Number("Height (px)", settings.HeightPx, 1, 1000, 2, 10);
             var rounding = settings.RoundingPx;
             if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
             {
                 settings.RoundingPx = rounding;
                 plugin.RequestSave();
             }
+
+            ColorRow("Background color", settings.BarBackgroundColor, false, v => settings.BarBackgroundColor = v);
+            ColorRow("Border color", settings.BarBorderColor, true, v => settings.BarBorderColor = v);
+            ImGui.TextColored(Theme.TextMuted, "The color of the HP is the game's own (set in the game).");
         });
 
         Widgets.Card("##card_np_name", 17, () =>
@@ -58,7 +149,7 @@ internal sealed class NamePlateEditor
             Widgets.SectionLabel("Name");
 
             var anchor = settings.NameAnchor;
-            if (EnumCombo("Name position", ref anchor, point => point.Label()))
+            if (EnumCombo("Position", ref anchor, point => point.Label()))
             {
                 settings.NameAnchor = anchor;
                 plugin.RequestSave();
@@ -102,17 +193,18 @@ internal sealed class NamePlateEditor
             settings.NameIconSizePx = Number("Icon size (px)", settings.NameIconSizePx, 8, 64, 1, 4);
             settings.NameIconGapPx = Number("Space icon - name (px)", settings.NameIconGapPx, 0, 30, 1, 2);
 
-            if (Check("Show the game's marker above the plate", settings.ShowMarkerIcon, out var showMarker))
+            if (Check("Show the game's icon above the plate", settings.ShowMarkerIcon, out var showMarker))
                 settings.ShowMarkerIcon = showMarker;
 
-            settings.MarkerIconSizePx = Number("Marker size (px)", settings.MarkerIconSizePx, 12, 128, 1, 4);
-            settings.MarkerOffsetX = Number("Marker offset X (px)", settings.MarkerOffsetX, -300, 300, 1, 5);
-            settings.MarkerOffsetY = -Number("Marker offset Y (px)", -settings.MarkerOffsetY, -300, 300, 1, 5);
+            settings.MarkerIconSizePx = Number("Top icon size (px)", settings.MarkerIconSizePx, 12, 128, 1, 4);
+            settings.MarkerOffsetX = Number("Top icon offset X (px)", settings.MarkerOffsetX, -300, 300, 1, 5);
+            settings.MarkerOffsetY = -Number("Top icon offset Y (px)", -settings.MarkerOffsetY, -300, 300, 1, 5);
 
             // Which plates show a name and how it is written (full name, surname, initials...) are the game's own options.
             ImGui.TextColored(Theme.TextMuted, "When the name shows, how it is written and whether the title shows (it joins the name): set in the game.");
         });
 
+        if (kind != NamePlateRelation.Other)
         Widgets.Card("##card_np_level", 6, () =>
         {
             Widgets.SectionLabel("Level");
@@ -134,53 +226,116 @@ internal sealed class NamePlateEditor
             if (Check("Hide the level when it is the same as mine", settings.HideSameLevel, out var hideSame))
                 settings.HideSameLevel = hideSame;
 
-            ImGui.TextColored(Theme.TextMuted, "The level is written right after the name (enemies only).");
+            ImGui.TextColored(Theme.TextMuted, "The level is written right after the name.");
         });
 
-        Widgets.Card("##card_np_cast", 8, () =>
+            ImGui.EndTabItem();
+        }
+
+        if (kind != NamePlateRelation.Other && ImGui.BeginTabItem("Progress bar"))
         {
-            Widgets.SectionLabel("Cast frame");
+        Widgets.Card("##card_np_progress_bar", 15, () =>
+        {
+            Widgets.SectionLabel("Progress bar");
 
-            if (Check("Show the cast frame", settings.ShowCast, out var showCast))
-                settings.ShowCast = showCast;
+            if (Check("Show the progress bar", settings.ShowProgressBar, out var showProgressBar))
+                settings.ShowProgressBar = showProgressBar;
 
-            var castHeight = settings.CastHeightPx;
-            if (ImGui.SliderInt("Height under the HP bar (px)", ref castHeight, 6, 30))
-            {
-                settings.CastHeightPx = castHeight;
-                plugin.RequestSave();
-            }
-
-            var castGap = settings.CastGapPx;
-            if (ImGui.SliderInt("Space under the HP bar (px)", ref castGap, 0, 12))
-            {
-                settings.CastGapPx = castGap;
-                plugin.RequestSave();
-            }
-
-            if (ImGui.BeginCombo("Text size (px) ##cast", $"{settings.CastTextSize} px", ImGuiComboFlags.None))
-            {
-                foreach (var size in OverlayFonts.AvailableSizes)
+            var side = settings.ProgressBarPosition;
+            if (EnumCombo("Progress bar position", ref side, option => option switch
                 {
-                    if (ImGui.Selectable($"{size} px", settings.CastTextSize == size))
-                    {
-                        settings.CastTextSize = size;
-                        plugin.RequestSave();
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
-            var castFont = settings.CastFont;
-            if (EnumCombo("Text font ##cast", ref castFont, FontLabel))
+                    NahjaUI.Modules.EnmityList.ProgressBarSide.Right => "Right of the bar",
+                    NahjaUI.Modules.EnmityList.ProgressBarSide.Left => "Left of the bar",
+                    _ => "Under the bar"
+                }))
             {
-                settings.CastFont = castFont;
+                settings.ProgressBarPosition = side;
                 plugin.RequestSave();
             }
 
-            ImGui.TextColored(Theme.TextMuted, "Colors: the same as the target cast bar (Cast bars page). The color shows if you can interrupt it.");
+            var progressBarWidth = settings.ProgressBarWidthPx;
+            if (ImGui.SliderInt("Progress bar width (px, 0 = same as the HP bar)", ref progressBarWidth, 0, 600))
+            {
+                settings.ProgressBarWidthPx = progressBarWidth;
+                plugin.RequestSave();
+            }
+
+            var progressBarHeight = settings.ProgressBarHeightPx;
+            if (ImGui.SliderInt("Progress bar height (px)", ref progressBarHeight, 6, 30))
+            {
+                settings.ProgressBarHeightPx = progressBarHeight;
+                plugin.RequestSave();
+            }
+
+            var progressBarGap = settings.ProgressBarGapPx;
+            if (ImGui.SliderInt("Space between HP bar and progress bar (px)", ref progressBarGap, 0, 40))
+            {
+                settings.ProgressBarGapPx = progressBarGap;
+                plugin.RequestSave();
+            }
+
+            settings.ProgressBarOffsetX = Number("Progress bar offset X (px)", settings.ProgressBarOffsetX, -300, 300, 1, 5);
+            // Up is plus: the saved value counts downwards, so the sign is turned here.
+            settings.ProgressBarOffsetY = -Number("Progress bar offset Y (px)", -settings.ProgressBarOffsetY, -300, 300, 1, 5);
+
+            ColorRow("Color when it can be interrupted", settings.ProgressBarColor, true, v => settings.ProgressBarColor = v);
+            ColorRow("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, true, v => settings.ProgressBarUninterruptibleColor = v);
+            ColorRow("Background color", settings.ProgressBarBackgroundColor, false, v => settings.ProgressBarBackgroundColor = v);
+            ColorRow("Border color", settings.ProgressBarBorderColor, true, v => settings.ProgressBarBorderColor = v);
         });
+
+        Widgets.Card("##card_np_progress_bar_name", 12, () =>
+        {
+            Widgets.SectionLabel("Progress bar: action name");
+
+            if (Check("Show the action name", settings.ProgressBarName.Enabled, out var showName))
+                settings.ProgressBarName.Enabled = showName;
+
+            if (UnitFrameEditor.TextControls(settings.ProgressBarName))
+                plugin.RequestSave();
+        });
+
+        Widgets.Card("##card_np_progress_bar_time", 12, () =>
+        {
+            Widgets.SectionLabel("Progress bar: time left");
+
+            if (Check("Show the time left", settings.ProgressBarTime.Enabled, out var showTime))
+                settings.ProgressBarTime.Enabled = showTime;
+
+            var timeMode = settings.ProgressBarTimeMode;
+            if (EnumCombo("Time format", ref timeMode, NahjaUI.Modules.ProgressBars.ProgressBarEditor.TimeModeLabel))
+            {
+                settings.ProgressBarTimeMode = timeMode;
+                plugin.RequestSave();
+            }
+
+            if (UnitFrameEditor.TextControls(settings.ProgressBarTime))
+                plugin.RequestSave();
+        });
+
+            ImGui.EndTabItem();
+        }
+
+        if (kind != NamePlateRelation.Other && ImGui.BeginTabItem("Status icons"))
+        {
+        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_np_enhancements", "Enhancements", settings.Enhancements, true, canDispel: !kind.IsEnemy());
+        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_np_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: !kind.IsEnemy());
+
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    // A color of the progress bar, with the same control as the Progress bars page (with or without the transparency slider).
+    private void ColorRow(string label, Vector4 current, bool opaque, Action<Vector4> apply)
+    {
+        var value = current;
+        if (ImGui.ColorEdit4(label, ref value, opaque ? ImGuiColorEditFlags.NoAlpha : ImGuiColorEditFlags.None))
+        {
+            apply(opaque ? new Vector4(value.X, value.Y, value.Z, 1f) : value);
+            plugin.RequestSave();
+        }
     }
 
     private static string LevelModeLabel(NamePlateLevelMode mode) => mode switch
@@ -197,9 +352,9 @@ internal sealed class NamePlateEditor
         OverlayFont.GameUi => "Game interface (Axis)",
         OverlayFont.GameUiBold => "Game interface, bold (Axis)",
         OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI display (Saira Condensed)",
-        OverlayFont.NahjaDisplayBold => "NahjaUI numbers (Saira Condensed, bold)",
-        OverlayFont.NahjaText => "NahjaUI text (Saira)",
+        OverlayFont.NahjaDisplay => "NahjaUI Display",
+        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
+        OverlayFont.NahjaText => "NahjaUI Text",
         _ => font.ToString()
     };
 

@@ -19,6 +19,13 @@ internal static class Theme
     public static readonly Vector4 Field = Rgb(40, 45, 72);
     public static readonly Vector4 Border = Rgb(58, 64, 100);
 
+    // Colors shared by every bar of the interface (unit frames, gauges, progress bars, plates, enmity list), so they all look alike.
+    public static readonly Vector4 BarBackground = new(0.05f, 0.06f, 0.10f, 0.90f);
+    public static readonly Vector4 BarBorder = new(0f, 0f, 0f, 1f);
+    public static readonly Vector4 Gold = new(1f, 0.82f, 0.30f, 1f);   // marks, glows, "ready" frames, levels, dispels
+    public static readonly Vector4 ProgressBarViolet = new(0.55f, 0.49f, 1f, 1f);   // yours, and any action that cannot be interrupted
+    public static readonly Vector4 ProgressBarRed = new(0.92f, 0.36f, 0.36f, 1f);   // what enemies and your target cast
+
     public static readonly Vector4 Text = Rgb(232, 234, 248);
     public static readonly Vector4 TextMuted = Rgb(140, 148, 180);
     public static readonly Vector4 TextOnAccent = Rgb(14, 12, 32);
@@ -93,6 +100,13 @@ internal sealed class ThemeScope : IDisposable
         PushColor(ImGuiCol.Header, Theme.WithAlpha(accent, 0.25f));
         PushColor(ImGuiCol.HeaderHovered, Theme.WithAlpha(accent, 0.35f));
         PushColor(ImGuiCol.HeaderActive, Theme.WithAlpha(accent, 0.45f));
+
+        // Tabs: the same colours as the sidebar (the selected one is the accent fill, the others are dark like the buttons).
+        PushColor(ImGuiCol.Tab, Theme.Field);
+        PushColor(ImGuiCol.TabHovered, Theme.WithAlpha(accent, 0.35f));
+        PushColor(ImGuiCol.TabActive, Theme.WithAlpha(accent, 0.28f));
+        PushColor(ImGuiCol.TabUnfocused, Theme.Field);
+        PushColor(ImGuiCol.TabUnfocusedActive, Theme.WithAlpha(accent, 0.28f));
 
         // Scrollbars and resize grip
         PushColor(ImGuiCol.ScrollbarBg, Theme.WithAlpha(Theme.Background, 0f));

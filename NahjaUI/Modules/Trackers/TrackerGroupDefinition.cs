@@ -1,6 +1,6 @@
 using System;
 
-namespace NahjaUI.Modules.Auras;
+namespace NahjaUI.Modules.Trackers;
 
 /// <summary>How the icons of a group line up, starting from the group's box.</summary>
 public enum GroupGrowth
@@ -25,11 +25,11 @@ public enum GroupGrowth
 }
 
 /// <summary>
-/// A group of auras that are lined up automatically (rotation, defensives, miscellaneous...).
+/// A group of trackers that are lined up automatically (rotation, defensives, miscellaneous...).
 /// Only the group has a position (its box in unlock mode); the icons inside it are placed by the group.
 /// </summary>
 [Serializable]
-public class AuraGroupDefinition
+public class TrackerGroupDefinition
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "New group";
@@ -39,21 +39,24 @@ public class AuraGroupDefinition
     /// <summary>Space between two icons, in pixels.</summary>
     public int Spacing { get; set; } = 4;
 
-    /// <summary>Whether the group is open in the explorer list of the Auras page.</summary>
+    /// <summary>Off: none of the trackers of the group is shown or watched (they keep their own settings).</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Whether the group is open in the explorer list of the Trackers page.</summary>
     public bool Expanded { get; set; } = true;
 
     /// <summary>
-    /// The icon size chosen for the whole group, in pixels. It is applied to every aura of the group at once,
-    /// and to auras that join the group later. 0 means "not chosen yet" (an older group): the size of its first aura is used.
+    /// The icon size chosen for the whole group, in pixels. It is applied to every tracker of the group at once,
+    /// and to trackers that join the group later. 0 means "not chosen yet" (an older group): the size of its first tracker is used.
     /// </summary>
     public int IconWidth { get; set; }
 
     public int IconHeight { get; set; }
 
     /// <summary>
-    /// The display settings and load conditions of the whole group. Only those settings of this aura are used
-    /// (not its name, trigger or status). Changing them rewrites the same settings in every aura of the group,
-    /// and auras that join the group take them. Null in groups made before this existed.
+    /// The display settings and load conditions of the whole group. Only those settings of this tracker are used
+    /// (not its name, trigger or status). Changing them rewrites the same settings in every tracker of the group,
+    /// and trackers that join the group take them. Null in groups made before this existed.
     /// </summary>
-    public AuraDefinition? Template { get; set; }
+    public TrackerDefinition? Template { get; set; }
 }

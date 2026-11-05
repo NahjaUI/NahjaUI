@@ -28,11 +28,11 @@ internal sealed class TooltipEditor
             Check("Enabled", s.Enabled, v => s.Enabled = v);
         });
 
-        Widgets.Card("##card_tt_where", 10, () =>
+        Widgets.Card("##card_tt_where", 12, () =>
         {
             Widgets.SectionLabel("Where it appears");
 
-            ImGui.TextColored(Theme.TextMuted, "Enhancements and enfeeblements of each frame. The target of target has none.");
+            ImGui.TextColored(Theme.TextMuted, "Enhancements and enfeeblements of each frame and nameplate. The target of target has none.");
             Check("Player: enhancements", s.PlayerEnhancements, v => s.PlayerEnhancements = v);
             Check("Player: enfeeblements", s.PlayerEnfeeblements, v => s.PlayerEnfeeblements = v);
             Check("Target: enhancements", s.TargetEnhancements, v => s.TargetEnhancements = v);
@@ -41,6 +41,8 @@ internal sealed class TooltipEditor
             Check("Focus: enfeeblements", s.FocusEnfeeblements, v => s.FocusEnfeeblements = v);
             Check("Party: enhancements", s.PartyEnhancements, v => s.PartyEnhancements = v);
             Check("Party: enfeeblements", s.PartyEnfeeblements, v => s.PartyEnfeeblements = v);
+            Check("Nameplates: enhancements", s.NameplateEnhancements, v => s.NameplateEnhancements = v);
+            Check("Nameplates: enfeeblements", s.NameplateEnfeeblements, v => s.NameplateEnfeeblements = v);
         });
 
         Widgets.Card("##card_tt_content", 5, () =>
@@ -69,7 +71,7 @@ internal sealed class TooltipEditor
             Color("Background color", s.BackgroundColor, true, v => s.BackgroundColor = v);
             Color("Border color", s.BorderColor, false, v => s.BorderColor = v);
 
-            if (ImGui.Button("Reset the look"))
+            if (ImGui.Button("Reset appearance"))
             {
                 var fresh = new TooltipSettings();
                 s.TextSize = fresh.TextSize;

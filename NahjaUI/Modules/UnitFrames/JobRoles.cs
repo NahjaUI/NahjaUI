@@ -39,12 +39,15 @@ internal static class JobRoles
         return JobRole.Damage;
     }
 
-    /// <summary>The colour of the role of a job, or the fallback when the job has no role.</summary>
+    /// <summary>The colour of the role of a job; crafters and gatherers have their own grey; the fallback is only for an unknown job (0).</summary>
     public static Vector4 Color(UnitFramesSettings frames, uint jobId, Vector4 fallback) => RoleOf(jobId) switch
     {
+        // Carpenter to Culinarian (8 to 15) and Miner, Botanist, Fisher (16 to 18).
+        JobRole.None when jobId >= 8 && jobId <= 15 => frames.CrafterColor,
+        JobRole.None when jobId >= 16 && jobId <= 18 => frames.GathererColor,
         JobRole.Tank => frames.TankColor,
         JobRole.Healer => frames.HealerColor,
         JobRole.Damage => frames.DamageColor,
-        _ => fallback
+        _ => jobId == 0 ? fallback : frames.NoRoleColor
     };
 }

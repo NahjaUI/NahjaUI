@@ -68,17 +68,14 @@ internal sealed class UnitFrameEditor
     private const int TargetOfTargetPage = 3;
     private const int FocusPage = 4;
     private const int PartyPage = 5;
-    // (The MP page is a tab inside the Parameter bar page, not a button of the picker.)
+    // (The MP cards come at the end of the Parameter bar page; MpPage is not a button of the picker.)
     private static readonly string[] PickerNames = { "Parameter bar", "MP bar", "Target", "Target of target", "Focus", "Party" };
-    private static readonly string[] FrameNames = { "Player HP bar", "Player MP bar", "Target frame", "Target of target frame", "Focus frame" };
+    private static readonly string[] FrameNames = { "HP bar", "Player MP bar", "Target frame", "Target of target frame", "Focus frame" };
 
     private readonly Plugin plugin;
 
     // Which frame the cards below edit (an index into FrameNames).
     private int selectedFrame;
-
-    // Inside the Parameter bar page: 0 HP bar, 1 MP bar.
-    private int parameterTab;
 
     // The name search of the list of the enhancements and the one of the enfeeblements of the party.
     private sealed class StatusSearchState
@@ -106,8 +103,29 @@ internal sealed class UnitFrameEditor
         // While this page is open, the frame shows sample values if the real unit is not there.
         plugin.UnitFrameSystem.PreviewRequested = true;
 
-        DrawFramePicker();
+        // One tab per frame, like the nameplates and the progress bars.
+        if (!ImGui.BeginTabBar("##uf_tabs"))
+            return;
 
+        for (var i = 0; i < PickerNames.Length; i++)
+        {
+            if (i == MpPage)
+                continue;
+
+            if (!ImGui.BeginTabItem(PickerNames[i]))
+                continue;
+
+            selectedFrame = i;
+            DrawPage();
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    // The cards of the selected frame.
+    private void DrawPage()
+    {
         var frames = plugin.Configuration.UnitFrames;
         var system = plugin.UnitFrameSystem;
 
@@ -120,23 +138,11 @@ internal sealed class UnitFrameEditor
             var party = frames.Party;
             DrawGeneral(party.Look, plugin.PartyFrameSystem.PartyElement, true);
             DrawPartyOptions(party);
-            DrawPartyAuras("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
-            DrawPartyAuras("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch);
+            DrawStatusRows("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
+            DrawStatusRows("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch, canOnlyMine: false);
             DrawName(party.Look);
-            DrawHealth(party.Look);
+            DrawHp(party.Look);
             return;
-        }
-
-        // The Parameter bar (the game's name for the HP and MP bars of the player): one switch for both, then a tab each.
-        if (selectedFrame == HpPage)
-        {
-            DrawParameterBarSwitch(frames.Player);
-
-            if (parameterTab == 1)
-            {
-                DrawMp(frames.Player);
-                return;
-            }
         }
 
         var (settings, element) = selectedFrame switch
@@ -155,41 +161,20 @@ internal sealed class UnitFrameEditor
         if (selectedFrame != TargetOfTargetPage && selectedFrame != HpPage)
         {
             DrawFrameStatusOptions(settings);
-            DrawPartyAuras($"##card_uf{selectedFrame}_enhancements", "Enhancements", settings.Enhancements, true, frameEnhancementSearch);
-            DrawPartyAuras($"##card_uf{selectedFrame}_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, frameEnfeeblementSearch);
+            DrawStatusRows($"##card_uf{selectedFrame}_enhancements", "Enhancements", settings.Enhancements, true, frameEnhancementSearch);
+            DrawStatusRows($"##card_uf{selectedFrame}_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, frameEnfeeblementSearch);
         }
 
         DrawName(settings);
-        DrawHealth(settings);
+        DrawHp(settings);
 
         // The jobs card is always the last one of the page.
+        // The Parameter bar page (the game's name for the HP and MP bars of the player): the HP cards, then the MP cards.
         if (isPlayer)
-            DrawHpJobs(settings);
-    }
-
-    // A row of buttons, one per frame; the selected one is lit with the accent colour.
-    private void DrawFramePicker()
-    {
-        var first = true;
-        for (var i = 0; i < PickerNames.Length; i++)
         {
-            if (i == MpPage)
-                continue;
-
-            if (!first)
-                ImGui.SameLine();
-
-            first = false;
-
-            var selected = i == selectedFrame;
-
-            ImGui.PushStyleColor(ImGuiCol.Button, selected ? Theme.Mix(Theme.Field, Theme.Accent, 0.85f) : Theme.Field);
-            if (ImGui.Button(PickerNames[i]))
-                selectedFrame = i;
-            ImGui.PopStyleColor();
+            DrawHpJobs(settings);
+            DrawMp(settings);
         }
-
-        ImGui.Spacing();
     }
 
     // ---------------------------------------------------------------- cards
@@ -198,10 +183,9 @@ internal sealed class UnitFrameEditor
     {
         Widgets.Card("##card_uf_general", selectedFrame == TargetOfTargetPage ? 26 : 25, () =>
         {
-            Widgets.SectionLabel(selectedFrame == PartyPage ? "Party frames (the first bar; the others follow it downwards)" : FrameNames[selectedFrame]);
+            Widgets.SectionLabel(selectedFrame == PartyPage ? "Party frames" : FrameNames[selectedFrame]);
 
-            // The player's Enabled is the master switch of the Parameter bar page (the card above).
-            if (!isPlayer)
+            // The player's Enabled is the master switch of the whole Parameter bar page (HP and MP).
             {
                 var enabled = settings.Enabled;
                 if (ImGui.Checkbox("Enabled", ref enabled))
@@ -209,15 +193,7 @@ internal sealed class UnitFrameEditor
                     settings.Enabled = enabled;
                     plugin.RequestSave();
                 }
-            }
-
-            // The game gives the target of target no menu: only the left click targets it.
-            var clickable = settings.Clickable;
-            var clickLabel = selectedFrame == TargetOfTargetPage ? "Clickable: left click targets" : "Clickable: left click targets, right click opens a menu";
-            if (ImGui.Checkbox(clickLabel, ref clickable))
-            {
-                settings.Clickable = clickable;
-                plugin.RequestSave();
+                Widgets.EnabledHint(selectedFrame == TargetPage ? "It only works if the game's target info is set to separate parts in its HUD layout." : null);
             }
 
             if (selectedFrame == TargetOfTargetPage)
@@ -228,33 +204,6 @@ internal sealed class UnitFrameEditor
                     settings.ShowFrame = showFrame;
                     plugin.RequestSave();
                 }
-            }
-
-            // The game shows the target of target inside its target bar, so it has no bar of its own to hide.
-            var nativeLabel = selectedFrame switch
-            {
-                HpPage => "Hide the game's HP and MP bar",
-                TargetPage => "Hide the game's target bar (and its target of target)",
-                FocusPage => "Hide the game's focus bar",
-                PartyPage => "Hide the game's party list",
-                _ => null
-            };
-
-            if (nativeLabel is not null && !isPlayer)
-            {
-                var hideNative = settings.HideNative;
-                if (ImGui.Checkbox(nativeLabel, ref hideNative))
-                {
-                    settings.HideNative = hideNative;
-                    plugin.RequestSave();
-                }
-
-                if (selectedFrame == TargetPage)
-                    ImGui.TextColored(Theme.TextMuted, "Needs the target info set to separate parts in the game's HUD layout.");
-            }
-            else if (!isPlayer)
-            {
-                ImGui.TextColored(Theme.TextMuted, "The game's target of target is part of its target bar: hide it with the Target frame.");
             }
 
             ImGui.Spacing();
@@ -285,18 +234,15 @@ internal sealed class UnitFrameEditor
 
             ImGui.Spacing();
 
-            var colorMode = settings.HpColorMode;
-            if (EnumCombo("HP color", ref colorMode, HpColorModeLabel))
+            // Players always use the color of their role (see Role colors); this one is for friendly characters that are not players.
+            if (!isPlayer)
             {
-                settings.HpColorMode = colorMode;
-                plugin.RequestSave();
-            }
-
-            var hp = settings.FriendlyColor;
-            if (ImGui.ColorEdit4("Fixed HP color", ref hp, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.FriendlyColor = new Vector4(hp.X, hp.Y, hp.Z, 1f);
-                plugin.RequestSave();
+                var hp = settings.FriendlyColor;
+                if (ImGui.ColorEdit4("Friendly NPC HP color", ref hp, ImGuiColorEditFlags.NoAlpha))
+                {
+                    settings.FriendlyColor = new Vector4(hp.X, hp.Y, hp.Z, 1f);
+                    plugin.RequestSave();
+                }
             }
 
             // Enemies always use their own colour; the player's frame never shows one.
@@ -370,25 +316,9 @@ internal sealed class UnitFrameEditor
     // What is only about the party: space between bars, MP bar, and how the targeted member is marked.
     private void DrawPartyOptions(PartyFrameSettings party)
     {
-        Widgets.Card("##card_pf_options", 20, () =>
+        Widgets.Card("##card_pf_options", 23, () =>
         {
             Widgets.SectionLabel("Party options");
-
-            var order = party.Order;
-            if (EnumCombo("Order of the bars", ref order, PartyOrderLabel))
-            {
-                party.Order = order;
-                plugin.RequestSave();
-            }
-
-            var showChocobo = party.ShowChocobo;
-            if (ImGui.Checkbox("Show my chocobo at the end", ref showChocobo))
-            {
-                party.ShowChocobo = showChocobo;
-                plugin.RequestSave();
-            }
-
-            ImGui.Spacing();
 
             var spacing = party.RowSpacingPx;
             if (ImGui.SliderInt("Space between bars (px)", ref spacing, 0, 30))
@@ -397,10 +327,17 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var roleStripe = party.RoleStripe;
-            if (ImGui.Checkbox("Color stripe for the role (tank, healer, damage)", ref roleStripe))
+            var awayOpacity = party.AwayOpacityPercent;
+            if (ImGui.SliderInt("Opacity when dead, offline, away or in a cutscene (%)", ref awayOpacity, 10, 100))
             {
-                party.RoleStripe = roleStripe;
+                party.AwayOpacityPercent = awayOpacity;
+                plugin.RequestSave();
+            }
+
+            var awayTag = party.ShowAwayTag;
+            if (ImGui.Checkbox("Write Dead, Offline, Other area, Out of range or Viewing cutscene instead of the name", ref awayTag))
+            {
+                party.ShowAwayTag = awayTag;
                 plugin.RequestSave();
             }
 
@@ -409,8 +346,9 @@ internal sealed class UnitFrameEditor
                 ? "The game's option could not be read."
                 : $"Alone, the game shows its party list: {(soloRaw == 0 ? "yes" : "no")} (raw value {soloRaw}).");
 
+
             var showJobIcon = party.ShowJobIcon;
-            if (ImGui.Checkbox("Job icon inside the bar (replaces the stripe)", ref showJobIcon))
+            if (ImGui.Checkbox("Job icon inside the bar", ref showJobIcon))
             {
                 party.ShowJobIcon = showJobIcon;
                 plugin.RequestSave();
@@ -431,26 +369,102 @@ internal sealed class UnitFrameEditor
                     party.JobIconSizePx = iconSize;
                     plugin.RequestSave();
                 }
+
+                var iconBarAnchor = party.JobIconBarAnchor;
+                if (EnumCombo("Anchor on the bar", ref iconBarAnchor, point => point.Label()))
+                {
+                    party.JobIconBarAnchor = iconBarAnchor;
+                    plugin.RequestSave();
+                }
+
+                var iconSelfAnchor = party.JobIconSelfAnchor;
+                if (EnumCombo("Anchor of the icon", ref iconSelfAnchor, point => point.Label()))
+                {
+                    party.JobIconSelfAnchor = iconSelfAnchor;
+                    plugin.RequestSave();
+                }
+
+                var iconOffsetX = party.JobIconOffsetX;
+                if (ImGui.InputInt("Offset X (px)", ref iconOffsetX, 1, 5))
+                {
+                    party.JobIconOffsetX = Math.Clamp(iconOffsetX, -500, 500);
+                    plugin.RequestSave();
+                }
+
+                // Up is plus (the saved value counts downwards).
+                var iconOffsetY = -party.JobIconOffsetY;
+                if (ImGui.InputInt("Offset Y (px)", ref iconOffsetY, 1, 5))
+                {
+                    party.JobIconOffsetY = -Math.Clamp(iconOffsetY, -500, 500);
+                    plugin.RequestSave();
+                }
             }
 
-            ImGui.Spacing();
+        });
+
+        Widgets.Card("##card_pf_mp", 16, () =>
+        {
+            Widgets.SectionLabel("MP bar");
 
             var mpMode = party.MpMode;
-            if (EnumCombo("MP bar", ref mpMode, PartyMpLabel))
+            if (EnumCombo("Show it for", ref mpMode, PartyMpLabel))
             {
                 party.MpMode = mpMode;
                 plugin.RequestSave();
             }
 
+            var mpWidth = party.MpWidthPx;
+            if (ImGui.InputInt("Width (px, 0 = same as the bar)", ref mpWidth, 1, 5))
+            {
+                party.MpWidthPx = Math.Clamp(mpWidth, 0, 500);
+                plugin.RequestSave();
+            }
+
             var mpHeight = party.Look.MpHeightPx;
-            if (ImGui.SliderInt("MP bar height (px)", ref mpHeight, 2, 12))
+            if (ImGui.SliderInt("Height (px)", ref mpHeight, 2, 30))
             {
                 party.Look.MpHeightPx = mpHeight;
                 plugin.RequestSave();
             }
 
+            var barAnchor = party.MpBarAnchor;
+            if (EnumCombo("Anchor on the bar", ref barAnchor, point => point.Label()))
+            {
+                party.MpBarAnchor = barAnchor;
+                plugin.RequestSave();
+            }
+
+            var selfAnchor = party.MpSelfAnchor;
+            if (EnumCombo("Anchor of the MP bar", ref selfAnchor, point => point.Label()))
+            {
+                party.MpSelfAnchor = selfAnchor;
+                plugin.RequestSave();
+            }
+
+            var offsetX = party.MpOffsetX;
+            if (ImGui.InputInt("Offset X (px)", ref offsetX, 1, 5))
+            {
+                party.MpOffsetX = Math.Clamp(offsetX, -500, 500);
+                plugin.RequestSave();
+            }
+
+            // Up is plus (the saved value counts downwards, so the sign is turned in the editors).
+            var offsetY = -party.MpOffsetY;
+            if (ImGui.InputInt("Offset Y (px)", ref offsetY, 1, 5))
+            {
+                party.MpOffsetY = -Math.Clamp(offsetY, -500, 500);
+                plugin.RequestSave();
+            }
+
+            var rounding = party.Look.MpRoundingPx;
+            if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
+            {
+                party.Look.MpRoundingPx = rounding;
+                plugin.RequestSave();
+            }
+
             var mpColor = party.Look.MpColor;
-            if (ImGui.ColorEdit4("MP color", ref mpColor, ImGuiColorEditFlags.NoAlpha))
+            if (ImGui.ColorEdit4("Color", ref mpColor, ImGuiColorEditFlags.NoAlpha))
             {
                 party.Look.MpColor = new Vector4(mpColor.X, mpColor.Y, mpColor.Z, 1f);
                 plugin.RequestSave();
@@ -464,21 +478,10 @@ internal sealed class UnitFrameEditor
         if (selectedFrame != TargetPage)
             return;
 
-        Widgets.Card($"##card_uf{selectedFrame}_native_status", 3, () =>
-        {
-            Widgets.SectionLabel("Enhancements and enfeeblements of the game");
-
-            var hide = settings.HideNativeStatuses;
-            if (ImGui.Checkbox("Hide the game's enhancements and enfeeblements of the target while mine are on", ref hide))
-            {
-                settings.HideNativeStatuses = hide;
-                plugin.RequestSave();
-            }
-        });
     }
 
     // One row of icons of the party (enhancements or enfeeblements): what it shows, where it goes, how big the icons are.
-    private void DrawPartyAuras(string cardId, string title, PartyAuraSettings row, bool isEnhancement, StatusSearchState search)
+    private void DrawStatusRows(string cardId, string title, StatusRowSettings row, bool isEnhancement, StatusSearchState search, bool canAttach = true, bool canOnlyMine = true, bool canDispel = true)
     {
         var kind = isEnhancement ? "enhancement" : "enfeeblement";
 
@@ -502,7 +505,7 @@ internal sealed class UnitFrameEditor
                 : Array.Empty<StatusSearchResult>();
         }
 
-        Widgets.Card(cardId, 40 + row.StatusIds.Count + search.Results.Count + row.ExtraStatusIds.Count + extra.Results.Count, () =>
+        Widgets.Card(cardId, 44 + plugin.Configuration.Filters.Filters.Count * 2 + row.StatusIds.Count + search.Results.Count + row.ExtraStatusIds.Count + extra.Results.Count, () =>
         {
             Widgets.SectionLabel(title);
 
@@ -513,11 +516,40 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var onlyMine = row.OnlyMine;
-            if (ImGui.Checkbox("Only the ones I applied", ref onlyMine))
+            // On the party frame nobody applies enfeeblements to their friends: the option would only hide them all.
+            if (canOnlyMine)
             {
-                row.OnlyMine = onlyMine;
+                var onlyMine = row.OnlyMine;
+                if (ImGui.Checkbox("Only the ones I applied", ref onlyMine))
+                {
+                    row.OnlyMine = onlyMine;
+                    plugin.RequestSave();
+                }
+            }
+            else if (row.OnlyMine)
+            {
+                row.OnlyMine = false;
                 plugin.RequestSave();
+            }
+
+            if (!isEnhancement && canDispel)
+            {
+                var dispel = row.DispelBorder;
+                if (ImGui.Checkbox("Border on the ones a cleanse (Esuna) can remove (friendly units only)", ref dispel))
+                {
+                    row.DispelBorder = dispel;
+                    plugin.RequestSave();
+                }
+
+                if (row.DispelBorder)
+                {
+                    var color = row.DispelColor;
+                    if (ImGui.ColorEdit4("Border color##dispel", ref color, ImGuiColorEditFlags.NoInputs))
+                    {
+                        row.DispelColor = color;
+                        plugin.RequestSave();
+                    }
+                }
             }
 
             ImGui.Spacing();
@@ -531,8 +563,31 @@ internal sealed class UnitFrameEditor
 
             ImGui.Spacing();
 
+            // The row can follow the other row of the frame instead of the bar (the enhancements one the enfeeblements and the other way round).
+            if (canAttach)
+            {
+                var otherName = isEnhancement ? "The enfeeblements row" : "The enhancements row";
+                if (ImGui.BeginCombo("Attach to", row.AttachTo == StatusRowAttach.Frame ? "The frame" : otherName, ImGuiComboFlags.None))
+                {
+                    if (ImGui.Selectable("The frame", row.AttachTo == StatusRowAttach.Frame))
+                    {
+                        row.AttachTo = StatusRowAttach.Frame;
+                        plugin.RequestSave();
+                    }
+
+                    if (ImGui.Selectable(otherName, row.AttachTo == StatusRowAttach.OtherRow))
+                    {
+                        row.AttachTo = StatusRowAttach.OtherRow;
+                        plugin.RequestSave();
+                    }
+
+                    ImGui.EndCombo();
+                }
+            }
+
+            var attachedToRow = canAttach && row.AttachTo == StatusRowAttach.OtherRow;
             var barAnchor = row.BarAnchor;
-            if (EnumCombo("Anchor on the bar", ref barAnchor, point => point.Label()))
+            if (EnumCombo(attachedToRow ? "Anchor on the other row" : "Anchor on the bar", ref barAnchor, point => point.Label()))
             {
                 row.BarAnchor = barAnchor;
                 plugin.RequestSave();
@@ -561,9 +616,19 @@ internal sealed class UnitFrameEditor
             }
 
             var growth = row.Growth;
-            if (EnumCombo("Grow towards", ref growth, PartyGrowthLabel))
+            if (EnumCombo("Grow towards", ref growth, GrowthLabel))
             {
                 row.Growth = growth;
+                plugin.RequestSave();
+            }
+
+            if (NextLineCombo(row))
+                plugin.RequestSave();
+
+            var perLine = row.IconsPerLine;
+            if (ImGui.SliderInt("Icons per line", ref perLine, 1, 30))
+            {
+                row.IconsPerLine = perLine;
                 plugin.RequestSave();
             }
 
@@ -583,10 +648,10 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var crop = row.CropPercent;
-            if (ImGui.SliderInt("Icon crop (%)", ref crop, 0, 30))
+            var trim = row.Trim;
+            if (EnumCombo("Trim icon margins", ref trim, NahjaUI.Modules.Trackers.TrackerEditor.TrimLabel))
             {
-                row.CropPercent = crop;
+                row.Trim = trim;
                 plugin.RequestSave();
             }
 
@@ -605,9 +670,16 @@ internal sealed class UnitFrameEditor
             }
 
             var maxIcons = row.MaxIcons;
-            if (ImGui.SliderInt("Most icons shown", ref maxIcons, 1, 12))
+            if (ImGui.SliderInt("Most icons shown", ref maxIcons, 1, 30))
             {
                 row.MaxIcons = maxIcons;
+                plugin.RequestSave();
+            }
+
+            var order = row.Order;
+            if (EnumCombo("Order", ref order, OrderLabel))
+            {
+                row.Order = order;
                 plugin.RequestSave();
             }
 
@@ -620,33 +692,8 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var timerSize = row.TimerSize;
-            if (SizeCombo("Time size (px)", ref timerSize))
-            {
-                row.TimerSize = timerSize;
+            if (StatusTextControls(row, true))
                 plugin.RequestSave();
-            }
-
-            var timerAnchor = row.TimerAnchor;
-            if (EnumCombo("Time position", ref timerAnchor, point => point.Label()))
-            {
-                row.TimerAnchor = timerAnchor;
-                plugin.RequestSave();
-            }
-
-            var timerX = row.TimerOffsetX;
-            if (ImGui.InputInt("Time offset X (px)", ref timerX, 1, 5))
-            {
-                row.TimerOffsetX = timerX;
-                plugin.RequestSave();
-            }
-
-            var timerY = -row.TimerOffsetY;
-            if (ImGui.InputInt("Time offset Y (px)", ref timerY, 1, 5))
-            {
-                row.TimerOffsetY = -timerY;
-                plugin.RequestSave();
-            }
 
             ImGui.Spacing();
 
@@ -657,44 +704,10 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var stackSize = row.StackTextSize > 0 ? row.StackTextSize : 8;
-            if (ImGui.SliderInt("Stack size (px)", ref stackSize, 4, 24))
-            {
-                row.StackTextSize = stackSize;
+            if (StatusTextControls(row, false))
                 plugin.RequestSave();
-            }
 
-            var stacksAnchor = row.StacksAnchor;
-            if (EnumCombo("Stack position", ref stacksAnchor, point => point.Label()))
-            {
-                row.StacksAnchor = stacksAnchor;
-                plugin.RequestSave();
-            }
-
-            var stacksX = row.StacksOffsetX;
-            if (ImGui.InputInt("Stack offset X (px)", ref stacksX, 1, 5))
-            {
-                row.StacksOffsetX = stacksX;
-                plugin.RequestSave();
-            }
-
-            var stacksY = -row.StacksOffsetY;
-            if (ImGui.InputInt("Stack offset Y (px)", ref stacksY, 1, 5))
-            {
-                row.StacksOffsetY = -stacksY;
-                plugin.RequestSave();
-            }
-
-            ImGui.Spacing();
-
-            var font = row.Font;
-            if (EnumCombo("Text font", ref font, FontLabel))
-            {
-                row.Font = font;
-                plugin.RequestSave();
-            }
-
-            if (row.Filter == PartyAuraFilter.All)
+            if (row.Filter == StatusRowFilter.All)
             {
                 ImGui.Spacing();
                 ImGui.TextColored(Theme.TextMuted, $"Every {kind} is shown. Pick \"Only the ones in my list\" to choose them.");
@@ -709,7 +722,7 @@ internal sealed class UnitFrameEditor
     }
 
     // Statuses that are always shown whoever applied them, even with "only the ones I applied" on.
-    private void DrawExtraStatusList(PartyAuraSettings row, string kind, string cardId, StatusSearchState search)
+    private void DrawExtraStatusList(StatusRowSettings row, string kind, string cardId, StatusSearchState search)
     {
         ImGui.Spacing();
         ImGui.TextColored(Theme.TextMuted, $"Always show these {kind}s, whoever applied them:");
@@ -750,11 +763,111 @@ internal sealed class UnitFrameEditor
         }
     }
 
-    // The list of statuses of a row: what is in it, a way to add from what the party has right now, and a name search.
-    private void DrawPartyStatusList(PartyAuraSettings row, bool isEnhancement, string kind, StatusSearchState search)
+    private readonly Dictionary<string, StatusSearchState> otherRowSearches = new();
+
+    /// <summary>One row of status icons for another page (the nameplates): the same card as the one of the unit frames.</summary>
+    internal void DrawStatusRowCard(string cardId, string title, StatusRowSettings row, bool isEnhancement, bool canAttach = true, bool canDispel = true)
     {
+        if (!otherRowSearches.TryGetValue(cardId, out var search))
+            otherRowSearches[cardId] = search = new StatusSearchState();
+
+        DrawStatusRows(cardId, title, row, isEnhancement, search, canAttach, canDispel: canDispel);
+    }
+
+    // The filters of the Filters page: the statuses of a ticked filter count as part of the list. The ticked ones come first, in the order
+    // of priority, and each one can be limited to the statuses you applied.
+    internal void DrawFilterChecks(StatusRowSettings row)
+    {
+        var filters = plugin.Configuration.Filters.Filters;
+        if (filters.Count == 0)
+            return;
+
+        // Filters that were deleted do not stay in the list.
+        row.FilterIds.RemoveAll(id => plugin.Configuration.Filters.Find(id) is null);
+        row.OnlyMineFilterIds.RemoveAll(id => !row.FilterIds.Contains(id));
+
         ImGui.Spacing();
-        ImGui.TextColored(Theme.TextMuted, row.Filter == PartyAuraFilter.OnlyListed ? $"Only these {kind}s are shown:" : $"These {kind}s are hidden:");
+        ImGui.TextColored(Theme.TextMuted, "Filters (their statuses count as part of the list):");
+
+        var priority = row.PriorityByFilter;
+        if (ImGui.Checkbox($"The first filter goes first, whatever the time left##prio_{row.GetHashCode()}", ref priority))
+        {
+            row.PriorityByFilter = priority;
+            plugin.RequestSave();
+        }
+
+        int? moveUp = null;
+        int? moveDown = null;
+        for (var i = 0; i < row.FilterIds.Count; i++)
+        {
+            var filter = plugin.Configuration.Filters.Find(row.FilterIds[i])!;
+
+            var on = true;
+            if (ImGui.Checkbox($"{filter.Name}##flt_{row.GetHashCode()}_{filter.Id}", ref on) && !on)
+            {
+                row.FilterIds.RemoveAt(i);
+                row.OnlyMineFilterIds.Remove(filter.Id);
+                plugin.RequestSave();
+                return;
+            }
+
+            ImGui.SameLine();
+            if (i > 0 && ImGui.SmallButton($"Up##up_{row.GetHashCode()}_{filter.Id}"))
+                moveUp = i;
+
+            if (i > 0)
+                ImGui.SameLine();
+
+            if (i < row.FilterIds.Count - 1 && ImGui.SmallButton($"Down##dn_{row.GetHashCode()}_{filter.Id}"))
+                moveDown = i;
+
+            if (i < row.FilterIds.Count - 1)
+                ImGui.SameLine();
+
+            var mine = row.OnlyMineFilterIds.Contains(filter.Id);
+            if (ImGui.Checkbox($"Only mine##mine_{row.GetHashCode()}_{filter.Id}", ref mine))
+            {
+                if (mine)
+                    row.OnlyMineFilterIds.Add(filter.Id);
+                else
+                    row.OnlyMineFilterIds.Remove(filter.Id);
+
+                plugin.RequestSave();
+            }
+        }
+
+        if (moveUp is { } up)
+        {
+            (row.FilterIds[up - 1], row.FilterIds[up]) = (row.FilterIds[up], row.FilterIds[up - 1]);
+            plugin.RequestSave();
+        }
+        else if (moveDown is { } down)
+        {
+            (row.FilterIds[down + 1], row.FilterIds[down]) = (row.FilterIds[down], row.FilterIds[down + 1]);
+            plugin.RequestSave();
+        }
+
+        foreach (var filter in filters)
+        {
+            if (row.FilterIds.Contains(filter.Id))
+                continue;
+
+            var on = false;
+            if (ImGui.Checkbox($"{filter.Name}##flt_{row.GetHashCode()}_{filter.Id}", ref on) && on)
+            {
+                row.FilterIds.Add(filter.Id);
+                plugin.RequestSave();
+            }
+        }
+    }
+
+    // The list of statuses of a row: what is in it, a way to add from what the party has right now, and a name search.
+    private void DrawPartyStatusList(StatusRowSettings row, bool isEnhancement, string kind, StatusSearchState search)
+    {
+        DrawFilterChecks(row);
+
+        ImGui.Spacing();
+        ImGui.TextColored(Theme.TextMuted, row.Filter == StatusRowFilter.OnlyListed ? $"Only these {kind}s are shown:" : $"These {kind}s are hidden:");
 
         if (row.StatusIds.Count == 0)
             ImGui.TextColored(Theme.TextMuted, "  Nothing in the list yet.");
@@ -852,25 +965,41 @@ internal sealed class UnitFrameEditor
         return changed;
     }
 
-    private static string PartyFilterLabel(PartyAuraFilter mode, string kind) => mode switch
+    private static string PartyFilterLabel(StatusRowFilter mode, string kind) => mode switch
     {
-        PartyAuraFilter.All => $"Every {kind}",
-        PartyAuraFilter.OnlyListed => "Only the ones in my list",
-        _ => "All except the ones in my list"
+        StatusRowFilter.All => $"Every {kind}",
+        StatusRowFilter.OnlyListed => "Only the ones in my list or filters",
+        _ => "All except my list and filters"
     };
 
-    private static string PartyGrowthLabel(PartyAuraGrowth growth) => growth switch
-    {
-        PartyAuraGrowth.Left => "Left",
-        PartyAuraGrowth.Right => "Right",
-        PartyAuraGrowth.Up => "Up",
-        _ => "Down"
-    };
+    internal static string OrderLabel(StatusOrder order) => order == StatusOrder.Ascending
+        ? "Ascending (shortest time first)"
+        : "Descending (longest time first)";
 
-    private static string PartyOrderLabel(PartyOrder order) => order switch
+    /// <summary>"Next line goes": the two sides that fit the growth of the row (above or under for a horizontal line, left or right for a vertical one).</summary>
+    internal static bool NextLineCombo(StatusRowSettings row)
     {
-        PartyOrder.GameOrder => "Same as the game's party list (follows its option)",
-        _ => "Me first, then the others"
+        var options = row.GrowsHorizontally
+            ? new[] { StatusRowGrowth.Down, StatusRowGrowth.Up }
+            : new[] { StatusRowGrowth.Right, StatusRowGrowth.Left };
+
+        var value = row.NextLineNow;
+        if (!EnumCombo("Next line goes", ref value, GrowthLabel, options))
+            return false;
+
+        row.NextLine = value;
+        return true;
+    }
+
+    /// <summary>The six words of every "Grow towards" of the interface.</summary>
+    internal static string GrowthLabel(StatusRowGrowth growth) => growth switch
+    {
+        StatusRowGrowth.Left => "Left",
+        StatusRowGrowth.Right => "Right",
+        StatusRowGrowth.Up => "Up",
+        StatusRowGrowth.Down => "Down",
+        StatusRowGrowth.CenteredHorizontally => "Centered horizontally",
+        _ => "Centered vertically"
     };
 
     private static string PartyMpLabel(PartyMpMode mode) => mode switch
@@ -887,11 +1016,11 @@ internal sealed class UnitFrameEditor
     {
         var frames = plugin.Configuration.UnitFrames;
 
-        Widgets.Card("##card_uf_rolecolors", 9, () =>
+        Widgets.Card("##card_uf_rolecolors", 8, () =>
         {
             Widgets.SectionLabel("Role colors");
-            ImGui.TextColored(Theme.TextMuted, "The same for every frame (player, target, target of target, focus and party). Used when a frame's HP color is set to the color of the role,");
-            ImGui.TextColored(Theme.TextMuted, "and for the stripe of the party. Nameplates take their colors from the game's own options.");
+            ImGui.TextColored(Theme.TextMuted, "The same for every frame (player, target, target of target, focus and party). Used when a frame's HP color is set to the color of the role.");
+            ImGui.TextColored(Theme.TextMuted, "Nameplates take their colors from the game's own options.");
             ImGui.Spacing();
 
             var tank = frames.TankColor;
@@ -915,6 +1044,20 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
+            var crafter = frames.CrafterColor;
+            if (ImGui.ColorEdit4("Disciples of the Hand", ref crafter, ImGuiColorEditFlags.NoAlpha))
+            {
+                frames.CrafterColor = new Vector4(crafter.X, crafter.Y, crafter.Z, 1f);
+                plugin.RequestSave();
+            }
+
+            var gatherer = frames.GathererColor;
+            if (ImGui.ColorEdit4("Disciples of the Land", ref gatherer, ImGuiColorEditFlags.NoAlpha))
+            {
+                frames.GathererColor = new Vector4(gatherer.X, gatherer.Y, gatherer.Z, 1f);
+                plugin.RequestSave();
+            }
+
             ImGui.Spacing();
             if (ImGui.Button("Reset role colors"))
             {
@@ -922,6 +1065,9 @@ internal sealed class UnitFrameEditor
                 frames.TankColor = defaults.TankColor;
                 frames.HealerColor = defaults.HealerColor;
                 frames.DamageColor = defaults.DamageColor;
+                frames.CrafterColor = defaults.CrafterColor;
+                frames.GathererColor = defaults.GathererColor;
+                frames.NoRoleColor = defaults.NoRoleColor;
                 plugin.RequestSave();
             }
         });
@@ -965,7 +1111,7 @@ internal sealed class UnitFrameEditor
         });
     }
 
-    private void DrawHealth(UnitFrameSettings settings)
+    private void DrawHp(UnitFrameSettings settings)
     {
         // What it looks like right now, with the real HP of this frame's unit (or a sample one).
         var snapshot = plugin.GameData.Current;
@@ -977,14 +1123,14 @@ internal sealed class UnitFrameEditor
             _ => snapshot.Player
         };
 
-        DrawValueText("##card_uf_health", "HP", settings, settings.Health, unit?.Hp ?? 104071u, unit?.MaxHp ?? 140000u);
+        DrawValueText("##card_uf_hp", "HP", settings, settings.Hp, unit?.Hp ?? 104071u, unit?.MaxHp ?? 140000u);
     }
 
     // The card of a number text (HP or MP): what it says, separator, decimals, thousands, and the look of the text.
     // Both bars use it, so they have exactly the same choices.
     private void DrawValueText(string cardId, string name, IValueTextFormat format, FrameTextSettings text, uint current, uint max)
     {
-        var custom = format.HealthPreset == HealthTextPreset.Custom;
+        var custom = format.HpPreset == HpTextPreset.Custom;
 
         Widgets.Card(cardId, custom ? 22 : 19, () =>
         {
@@ -997,8 +1143,8 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
             }
 
-            var preset = format.HealthPreset;
-            if (EnumCombo("What it says", ref preset, value => HealthPresetLabel(value, name)))
+            var preset = format.HpPreset;
+            if (EnumCombo("What it says", ref preset, value => HpPresetLabel(value, name)))
             {
                 SetPreset(format, preset);
                 plugin.RequestSave();
@@ -1060,12 +1206,12 @@ internal sealed class UnitFrameEditor
                 plugin.RequestSave();
 
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, $"Now it reads: {UnitTextFormatter.FormatHealth(format, current, max)}");
+            ImGui.TextColored(Theme.TextMuted, $"Now it reads: {UnitTextFormatter.FormatValue(format, current, max)}");
         });
     }
 
     // The two kinds of settings (a frame and the MP text) keep the same properties; the editor writes them through these.
-    private static void SetPreset(IValueTextFormat f, HealthTextPreset v) { if (f is UnitFrameSettings u) u.HealthPreset = v; else if (f is MpTextSettings m) m.HealthPreset = v; }
+    private static void SetPreset(IValueTextFormat f, HpTextPreset v) { if (f is UnitFrameSettings u) u.HpPreset = v; else if (f is MpTextSettings m) m.HpPreset = v; }
     private static void SetTemplate(IValueTextFormat f, string v) { if (f is UnitFrameSettings u) u.CustomTemplate = v; else if (f is MpTextSettings m) m.CustomTemplate = v; }
     private static void SetSeparator(IValueTextFormat f, string v) { if (f is UnitFrameSettings u) u.Separator = v; else if (f is MpTextSettings m) m.Separator = v; }
     private static void SetPercentDecimals(IValueTextFormat f, int v) { if (f is UnitFrameSettings u) u.PercentDecimals = v; else if (f is MpTextSettings m) m.PercentDecimals = v; }
@@ -1075,38 +1221,6 @@ internal sealed class UnitFrameEditor
     // ---------------------------------------------------------------- HP bar and MP bar of the player
 
     // The jobs where your HP bar is on. Everything is on by default, new jobs included.
-    // The master switch of the Parameter bar page and the two tabs (HP bar, MP bar).
-    private void DrawParameterBarSwitch(UnitFrameSettings settings)
-    {
-        Widgets.Card("##card_uf_parameter", 7, () =>
-        {
-            Widgets.SectionLabel("Parameter bar");
-
-            var enabled = settings.Enabled;
-            if (ImGui.Checkbox("Enabled", ref enabled))
-            {
-                settings.Enabled = enabled;
-                plugin.RequestSave();
-            }
-
-            ImGui.TextColored(Theme.TextMuted, "On: NahjaUI draws your HP and MP and the game's parameter bar is hidden.");
-            ImGui.TextColored(Theme.TextMuted, "Off: the game's bar is shown and nothing of this page is drawn.");
-            ImGui.Spacing();
-
-            string[] tabs = { "HP bar", "MP bar" };
-            for (var i = 0; i < tabs.Length; i++)
-            {
-                if (i > 0)
-                    ImGui.SameLine();
-
-                ImGui.PushStyleColor(ImGuiCol.Button, i == parameterTab ? Theme.Mix(Theme.Field, Theme.Accent, 0.85f) : Theme.Field);
-                if (ImGui.Button(tabs[i]))
-                    parameterTab = i;
-                ImGui.PopStyleColor();
-            }
-        });
-    }
-
     private void DrawHpJobs(UnitFrameSettings settings)
     {
         Widgets.Card("##card_uf_hp_jobs", 22, () =>
@@ -1262,6 +1376,61 @@ internal sealed class UnitFrameEditor
 
     // ---------------------------------------------------------------- helpers
 
+    // The time left or the stack count of a status icon, with the same controls and the same order as every other text:
+    // position, the two offsets, size, font and color. Returns true when something changed.
+    internal static bool StatusTextControls(NahjaUI.Modules.PartyFrames.StatusRowSettings row, bool time)
+    {
+        var changed = false;
+        var name = time ? "Time" : "Stack";
+
+        var anchor = time ? row.TimerAnchor : row.StacksAnchor;
+        if (EnumCombo($"{name} position", ref anchor, point => point.Label()))
+        {
+            if (time) row.TimerAnchor = anchor; else row.StacksAnchor = anchor;
+            changed = true;
+        }
+
+        var x = time ? row.TimerOffsetX : row.StacksOffsetX;
+        if (ImGui.InputInt($"{name} offset X (px)", ref x, 1, 5))
+        {
+            if (time) row.TimerOffsetX = x; else row.StacksOffsetX = x;
+            changed = true;
+        }
+
+        // Up is plus (the saved value counts downwards, so the sign is turned here).
+        var y = -(time ? row.TimerOffsetY : row.StacksOffsetY);
+        if (ImGui.InputInt($"{name} offset Y (px)", ref y, 1, 5))
+        {
+            if (time) row.TimerOffsetY = -y; else row.StacksOffsetY = -y;
+            changed = true;
+        }
+
+        var size = time ? row.TimerSize : (row.StackTextSize > 0 ? row.StackTextSize : 8);
+        if (SizeCombo($"{name} size (px)", ref size))
+        {
+            if (time) row.TimerSize = size; else row.StackTextSize = size;
+            changed = true;
+        }
+
+        row.EnsureTexts();
+        var font = time ? row.Font : row.StacksFont;
+        if (EnumCombo($"{name} font", ref font, FontLabel))
+        {
+            if (time) row.Font = font; else row.StacksFont = font;
+            changed = true;
+        }
+
+        var color = time ? row.TimerColor : row.StacksColor;
+        if (ImGui.ColorEdit4($"{name} color", ref color, ImGuiColorEditFlags.NoAlpha))
+        {
+            var opaque = new Vector4(color.X, color.Y, color.Z, 1f);
+            if (time) row.TimerColor = opaque; else row.StacksColor = opaque;
+            changed = true;
+        }
+
+        return changed;
+    }
+
     // The point of the bar, the two offsets, the size, the font and the colour of one text.
     internal static bool TextControls(FrameTextSettings text)
     {
@@ -1350,16 +1519,16 @@ internal sealed class UnitFrameEditor
         _ => format.ToString()
     };
 
-    private static string HealthPresetLabel(HealthTextPreset preset, string name) => preset switch
+    private static string HpPresetLabel(HpTextPreset preset, string name) => preset switch
     {
-        HealthTextPreset.CurrentAndPercent => $"{name} abbreviated and percentage (738K | 100%)",
-        HealthTextPreset.CurrentFullAndPercent => $"{name} in full and percentage (738,000 | 100%)",
-        HealthTextPreset.Current => $"{name} abbreviated (738K)",
-        HealthTextPreset.CurrentFull => $"{name} in full (738,000)",
-        HealthTextPreset.Percent => "Percentage only (100%)",
-        HealthTextPreset.CurrentAndMax => $"{name} and maximum (738K / 738K)",
-        HealthTextPreset.Deficit => $"Missing {name} (-12K)",
-        HealthTextPreset.Custom => "Custom template",
+        HpTextPreset.CurrentAndPercent => $"{name} abbreviated and percentage (738K | 100%)",
+        HpTextPreset.CurrentFullAndPercent => $"{name} in full and percentage (738,000 | 100%)",
+        HpTextPreset.Current => $"{name} abbreviated (738K)",
+        HpTextPreset.CurrentFull => $"{name} in full (738,000)",
+        HpTextPreset.Percent => "Percentage only (100%)",
+        HpTextPreset.CurrentAndMax => $"{name} and maximum (738K / 738K)",
+        HpTextPreset.Deficit => $"Missing {name} (-12K)",
+        HpTextPreset.Custom => "Custom template",
         _ => preset.ToString()
     };
 
@@ -1378,20 +1547,20 @@ internal sealed class UnitFrameEditor
         OverlayFont.GameUi => "Game interface (Axis)",
         OverlayFont.GameUiBold => "Game interface, bold (Axis)",
         OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI display (Saira Condensed)",
-        OverlayFont.NahjaDisplayBold => "NahjaUI numbers (Saira Condensed, bold)",
-        OverlayFont.NahjaText => "NahjaUI text (Saira)",
+        OverlayFont.NahjaDisplay => "NahjaUI Display",
+        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
+        OverlayFont.NahjaText => "NahjaUI Text",
         _ => font.ToString()
     };
 
     // A drop-down list for any enum. Returns true when the user picked a different value.
-    internal static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler) where T : struct, Enum
+    internal static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler, IReadOnlyList<T>? options = null) where T : struct, Enum
     {
         var changed = false;
 
         if (ImGui.BeginCombo(label, labeler(value), ImGuiComboFlags.None))
         {
-            foreach (var option in Enum.GetValues<T>())
+            foreach (var option in options ?? Enum.GetValues<T>())
             {
                 if (ImGui.Selectable(labeler(option), EqualityComparer<T>.Default.Equals(option, value)))
                 {

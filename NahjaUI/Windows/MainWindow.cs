@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
@@ -6,6 +7,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Lumina.Excel.Sheets;
+using NahjaUI.Core;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Profiles;
 using NahjaUI.Core.Ui;
@@ -15,7 +17,18 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly string[] Pages = { "General", "Auras", "Unit frames", "Status effects", "Nameplates", "Enmity list", "Tooltip", "Cast bars", "Job gauges", "Appearance", "Profiles", "Layout", "Debug" };
+    private static readonly string[] Pages = { "General", "Trackers", "Unit frames", "Progress bars", "Job gauges", "Status effects", "Nameplates", "Enmity list", "Others", "Filters", "Tooltip", "Appearance", "Layout", "Profiles" };
+
+    // The Debug page is not in the sidebar: "/nui debug" opens it (and adds its entry for the rest of the session).
+    private bool debugUnlocked;
+
+    /// <summary>Opens the Debug page (used by "/nui debug").</summary>
+    public void ShowDebug()
+    {
+        debugUnlocked = true;
+        plugin.Configuration.SelectedPage = "Debug";
+        plugin.RequestSave();
+    }
 
     private readonly Plugin plugin;
     private readonly ProfilesPage profilesPage;
@@ -23,9 +36,14 @@ public class MainWindow : Window, IDisposable
 
     // Set by the Appearance page: put the window back in the centre of the screen on the next frame.
     private bool centerRequested;
+    private bool sizeResetPending;
+    // Wide enough for the two columns of the Trackers page (list and editor): the page needs 720 px (times the UI scale) for its
+    // content plus the sidebar and margins. Dalamud multiplies the size of a window by the UI scale itself, so it is NOT scaled here.
+    private static readonly Vector2 DefaultSize = new(1040f, 680f);
 
     // The tool that lists the game's own windows (Debug page).
     private string windowFilter = "Target";
+    private string dumpWindow = "_PartyList";
     private bool windowOnlyVisible = true;
 
     // Where the window must appear when it is opened from the small bar (its top right corner), and the corner as of the last frame.
@@ -45,7 +63,7 @@ public class MainWindow : Window, IDisposable
         AllowPinning = false;
         AllowClickthrough = false;
 
-        Size = new Vector2(860, 560);
+        Size = DefaultSize;
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -76,13 +94,32 @@ public class MainWindow : Window, IDisposable
         // The first time (no saved position) and when asked: the window goes to the centre of the screen.
         var mainViewport = ImGui.GetMainViewport();
         var viewportCenter = mainViewport.Pos + mainViewport.Size / 2f;
+        // A saved size that does not fit on the screen (another monitor, another UI scale, an old bug) would leave the window
+        // impossible to move or close: it is reset by itself to the natural size, in the centre.
+        if (lastSize.X > mainViewport.Size.X || lastSize.Y > mainViewport.Size.Y)
+        {
+            lastSize = Vector2.Zero;
+            centerRequested = true;
+        }
+
         if (centerRequested)
         {
+            // Reset: back to the centre of the screen and to the natural size.
             centerRequested = false;
+            sizeResetPending = true;
+            Size = DefaultSize;
+            SizeCondition = ImGuiCond.Always;
             ImGui.SetNextWindowPos(viewportCenter, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
         }
         else
         {
+            if (sizeResetPending)
+            {
+                // The size was forced for one frame; from now on the user can resize it again.
+                sizeResetPending = false;
+                SizeCondition = ImGuiCond.FirstUseEver;
+            }
+
             ImGui.SetNextWindowPos(viewportCenter, ImGuiCond.FirstUseEver, new Vector2(0.5f, 0.5f));
         }
 
@@ -193,7 +230,7 @@ public class MainWindow : Window, IDisposable
 
         if (ImGui.BeginPopup("##nui_title_menu"))
         {
-            if (ImGui.Selectable("Center the window"))
+            if (ImGui.Selectable("Reset window"))
                 centerRequested = true;
 
             ImGui.EndPopup();
@@ -230,19 +267,10 @@ public class MainWindow : Window, IDisposable
 
     private void DrawSidebar(float scale)
     {
-        ImGui.Dummy(new Vector2(0f, 6f * scale));
-
-        ImGui.Indent(14f * scale);
-        ImGui.TextColored(Theme.Accent, "NahjaUI");
-        ImGui.TextColored(Theme.TextMuted, PlayerSummary());
-        ImGui.Unindent(14f * scale);
-
-        ImGui.Dummy(new Vector2(0f, 8f * scale));
-        ImGui.Separator();
-        ImGui.Dummy(new Vector2(0f, 8f * scale));
+        ImGui.Dummy(new Vector2(0f, 10f * scale));
 
         ImGui.Indent(10f * scale);
-        foreach (var page in Pages)
+        foreach (var page in debugUnlocked ? Pages.Append("Debug") : Pages)
         {
             if (SidebarItem(page, plugin.Configuration.SelectedPage == page, scale))
             {
@@ -251,13 +279,6 @@ public class MainWindow : Window, IDisposable
             }
         }
         ImGui.Unindent(10f * scale);
-
-        // Version, anchored to the bottom of the sidebar.
-        var bottomY = ImGui.GetWindowHeight() - ImGui.GetTextLineHeightWithSpacing() - 12f * scale;
-        ImGui.SetCursorPosY(Math.Max(ImGui.GetCursorPosY(), bottomY));
-        ImGui.Indent(14f * scale);
-        ImGui.TextColored(Theme.TextMuted, $"v{typeof(Plugin).Assembly.GetName().Version}");
-        ImGui.Unindent(14f * scale);
     }
 
     // One sidebar entry with a rounded highlight. Returns true when it was clicked.
@@ -295,15 +316,6 @@ public class MainWindow : Window, IDisposable
         return clicked;
     }
 
-    private static string PlayerSummary()
-    {
-        var playerState = Plugin.PlayerState;
-        if (!playerState.IsLoaded || !playerState.ClassJob.IsValid)
-            return "Not logged in";
-
-        return $"{playerState.ClassJob.Value.Abbreviation.ToString()}  Lv {playerState.Level}";
-    }
-
     // ---------------------------------------------------------------- content
 
     private void DrawContent(float scale)
@@ -312,23 +324,26 @@ public class MainWindow : Window, IDisposable
         ImGui.Indent(16f * scale);
 
         var page = plugin.Configuration.SelectedPage;
-        ImGui.TextColored(Theme.Accent, page);
-        ImGui.TextColored(Theme.TextMuted, PageSubtitle(page));
 
-        ImGui.Dummy(new Vector2(0f, 6f * scale));
-        ImGui.Separator();
-        ImGui.Dummy(new Vector2(0f, 8f * scale));
+        // Pages that were merged or hidden: an older saved selection goes to the right place.
+        if (page is "Limit Break" or "Frontline gauge")
+            page = plugin.Configuration.SelectedPage = "Others";
+        else if (page == "Debug" && !debugUnlocked)
+            page = plugin.Configuration.SelectedPage = "General";
 
         switch (page)
         {
-            case "Auras":
-                plugin.AuraEditorPage.Draw();
+            case "Trackers":
+                plugin.TrackerEditorPage.Draw();
                 break;
             case "Unit frames":
                 plugin.UnitFrameEditorPage.Draw();
                 break;
             case "Status effects":
                 plugin.StatusEffectsEditorPage.Draw();
+                break;
+            case "Filters":
+                plugin.FiltersEditorPage.Draw();
                 break;
             case "Nameplates":
                 plugin.NamePlateEditorPage.Draw();
@@ -339,11 +354,30 @@ public class MainWindow : Window, IDisposable
             case "Tooltip":
                 plugin.TooltipEditorPage.Draw();
                 break;
-            case "Cast bars":
-                plugin.CastBarEditorPage.Draw();
+            case "Progress bars":
+                plugin.ProgressBarEditorPage.Draw();
                 break;
             case "Job gauges":
                 plugin.JobGaugeEditorPage.Draw();
+                break;
+            case "Others":
+                if (ImGui.BeginTabBar("##others_tabs"))
+                {
+                    if (ImGui.BeginTabItem("Limit Break"))
+                    {
+                        plugin.JobGaugeEditorPage.DrawLimitBreakPage();
+                        ImGui.EndTabItem();
+                    }
+
+                    if (ImGui.BeginTabItem("Frontline gauge"))
+                    {
+                        plugin.JobGaugeEditorPage.DrawFrontlinePage();
+                        ImGui.EndTabItem();
+                    }
+
+                    ImGui.EndTabBar();
+                }
+
                 break;
             case "Appearance":
                 DrawAppearance();
@@ -367,16 +401,18 @@ public class MainWindow : Window, IDisposable
 
     private static string PageSubtitle(string page) => page switch
     {
-        "Auras" => "Track the enhancements and enfeeblements you care about",
-        "Unit frames" => "HP, name and MP of you and your targets",
-        "Status effects" => "Your enhancements and enfeeblements, in the groups of the game's layout",
-        "Nameplates" => "Plates over enemies and players: HP, name and cast",
-        "Enmity list" => "The enemies fighting you: HP, enmity and casts",
-        "Tooltip" => "The description box of enhancements and enfeeblements",
-        "Cast bars" => "Your cast and your target's cast",
-        "Job gauges" => "The gauge of your job, drawn by NahjaUI",
-        "Appearance" => "Theme and look of the interface",
-        "Profiles" => "Back up, move and share your settings",
+        "Trackers" => "Icons for the enhancements, enfeeblements and ability cooldowns you want to watch",
+        "Unit frames" => "Player, target, focus and party frames: HP, MP, names and status icons",
+        "Status effects" => "Your own enhancements and enfeeblements, as two separate groups of icons",
+        "Filters" => "Named lists of statuses, reused by icon rows, nameplates and trackers",
+        "Nameplates" => "Bars and names over enemies and players, with progress bars and status icons",
+        "Enmity list" => "The enemies fighting you: HP, enmity, progress bars and status icons",
+        "Tooltip" => "The box that describes an enhancement or enfeeblement when you hover over its icon",
+        "Progress bars" => "Your progress bar and your target's",
+        "Job gauges" => "The gauges of your job",
+        "Others" => "Limit Break, Frontline and other special bars",
+        "Appearance" => "General settings of the interface",
+        "Profiles" => "Export, import and back up your settings",
         "Layout" => "Position and size of every element",
         "Debug" => "Live game data and diagnostics",
         _ => "Overview and status"
@@ -384,22 +420,84 @@ public class MainWindow : Window, IDisposable
 
     private void DrawGeneral()
     {
-        Widgets.Callout("##callout_open", "Use /nui to open or close this window at any time.", Theme.Info, 1);
-
-        Widgets.Callout(
-            "##callout_wip",
-            "Early development build. Create your first aura on the Auras page, then place it with unlock mode on the Layout page.",
-            Theme.Warning,
-            2);
-
-        Widgets.Card("##card_about", 5, () =>
+        // ---- Welcome
+        Widgets.Card("##card_welcome", 7, () =>
         {
-            ImGui.TextColored(Theme.Accent, "About NahjaUI");
+            ImGui.TextColored(Theme.Accent, "NahjaUI");
+            ImGui.TextColored(Theme.TextMuted, $"Version {typeof(Plugin).Assembly.GetName().Version}  -  early development build");
             ImGui.Spacing();
-            ImGui.TextWrapped("A modular interface suite for FINAL FANTASY XIV with an aura engine, so you only see the enhancements, enfeeblements and cooldowns you choose.");
+            ImGui.TextWrapped("A modular, minimal interface for FINAL FANTASY XIV. It redraws the parts of the game's interface you choose, and a tracker engine shows only the enhancements, enfeeblements and cooldowns you care about.");
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Current milestone: H4 - first auras.");
+            ImGui.TextColored(Theme.TextMuted, "Nothing here changes how the game plays: NahjaUI only reads the game and draws.");
         });
+
+        // ---- Getting started
+        Widgets.Card("##card_start", 9, () =>
+        {
+            Widgets.SectionLabel("Getting started");
+
+            ImGui.TextColored(Theme.Accent, "1");
+            ImGui.SameLine();
+            ImGui.TextWrapped("Turn on what you want to replace: Unit frames, Nameplates, Enmity list, Progress bars, Job gauges. Each page has its own switch, and the game's own element is hidden only while ours is on.");
+
+            ImGui.TextColored(Theme.Accent, "2");
+            ImGui.SameLine();
+            ImGui.TextWrapped("Create your trackers on the Trackers page: which status or cooldown to track, and how it looks.");
+
+            ImGui.TextColored(Theme.Accent, "3");
+            ImGui.SameLine();
+            ImGui.TextWrapped("Place everything with unlock mode: drag each box, or type exact values. Elements can also be attached to each other on the Layout page.");
+
+            ImGui.Spacing();
+            if (ImGui.Button("Start unlock mode"))
+                plugin.Layout.UnlockMode = true;
+
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.TextMuted, "or type /nui unlock");
+
+            ImGui.Spacing();
+            ImGui.TextColored(Theme.Accent, "4");
+            ImGui.SameLine();
+            ImGui.TextWrapped("Back up and share your setup on the Profiles page.");
+        });
+
+        // ---- What is inside
+        Widgets.Card("##card_pages", Pages.Length + 1, () =>
+        {
+            Widgets.SectionLabel("What is inside");
+
+            foreach (var page in Pages)
+            {
+                if (page is "General" or "Debug")
+                    continue;
+
+                ImGui.PushStyleColor(ImGuiCol.Text, Theme.Accent);
+                var open = ImGui.Selectable($"{page}##open_{page}", false, ImGuiSelectableFlags.None, new Vector2(ImGui.CalcTextSize("Status effects").X + 24f * ImGuiHelpers.GlobalScale, 0f));
+                ImGui.PopStyleColor();
+
+                ImGui.SameLine();
+                ImGui.TextColored(Theme.TextMuted, PageSubtitle(page));
+
+                if (open)
+                {
+                    plugin.Configuration.SelectedPage = page;
+                    plugin.RequestSave();
+                }
+            }
+        });
+
+        // ---- Commands
+        Widgets.Card("##card_commands", 4, () =>
+        {
+            Widgets.SectionLabel("Commands");
+            ImGui.TextColored(Theme.Accent, "/nui");
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.TextMuted, "Open or close this window.");
+            ImGui.TextColored(Theme.Accent, "/nui unlock");
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.TextMuted, "Start or stop unlock mode, to move elements.");
+        });
+
     }
 
     private void DrawAppearance()
@@ -439,11 +537,11 @@ public class MainWindow : Window, IDisposable
             }
 
             ImGui.Spacing();
-            if (ImGui.Button("Center the window"))
+            if (ImGui.Button("Reset window"))
                 centerRequested = true;
 
             ImGui.SameLine();
-            if (ImGui.Button("Reset to default"))
+            if (ImGui.Button("Reset appearance"))
             {
                 config.AccentColor = Theme.DefaultAccent;
                 config.WindowRoundingPx = 10;
@@ -451,7 +549,7 @@ public class MainWindow : Window, IDisposable
             }
         });
 
-        Widgets.Card("##card_game_interface", 8, () =>
+        Widgets.Card("##card_game_interface", 10, () =>
         {
             Widgets.SectionLabel("Game interface");
 
@@ -469,12 +567,47 @@ public class MainWindow : Window, IDisposable
                 plugin.RequestSave();
             }
 
+            var onTop = config.GameWindowsOnTop;
+            if (ImGui.Checkbox("Game windows over the interface", ref onTop))
+            {
+                config.GameWindowsOnTop = onTop;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The map, the character window, menus and every other window of the game stay over our frames, which are cut around them.");
+
+            var streamer = config.StreamerMode;
+            if (ImGui.Checkbox("Streamer mode", ref streamer))
+            {
+                config.StreamerMode = streamer;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The names of player characters are shown as Player 1, Player 2... in everything NahjaUI draws. The game's own windows (chat, its own lists) are not changed.");
+
             ImGui.Spacing();
             if (ImGui.Button("Use the NahjaUI font everywhere"))
                 plugin.UseNahjaFontEverywhere();
 
-            ImGui.TextColored(Theme.TextMuted, "Sets the font of every aura, aura group and cast bar to Saira.");
-            ImGui.TextColored(Theme.TextMuted, "New auras and cast bars already start with it.");
+            ImGui.TextColored(Theme.TextMuted, "Sets the font of every tracker, tracker group and progress bar to the NahjaUI font.");
+            ImGui.TextColored(Theme.TextMuted, "New trackers and progress bars already start with it.");
+        });
+
+        Widgets.Card("##card_server_bar", 3, () =>
+        {
+            Widgets.SectionLabel("Server info bar");
+
+            var inBar = plugin.Configuration.ShowInServerBar;
+            if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))
+            {
+                plugin.Configuration.ShowInServerBar = inBar;
+                plugin.ServerInfoBar.UpdateShown();
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, "The entry at the top right: click it to open the window, right click for unlock mode. /nui works either way.");
         });
 
         // The colour of each role, for the frames we draw (the nameplates use the game's own options).
@@ -486,6 +619,7 @@ public class MainWindow : Window, IDisposable
     private void DrawLayout()
     {
         var layout = plugin.Layout;
+        layout.MarkLayoutPageOpen();
 
         Widgets.Callout(
             "##callout_unlock",
@@ -522,7 +656,7 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        Widgets.Card("##card_editor", 17, () => DrawElementEditor(selected));
+        Widgets.Card("##card_editor", 16, () => DrawElementEditor(selected));
     }
 
     private void DrawElementEditor(LayoutElement element)
@@ -531,8 +665,37 @@ public class MainWindow : Window, IDisposable
 
         Widgets.SectionLabel(element.Name);
 
+        // The element can be placed on the screen or on another element (the enfeeblements under the target bar, for example).
+        var attachName = "Screen";
+        if (!string.IsNullOrEmpty(data.AttachTo))
+            attachName = plugin.Layout.Elements.FirstOrDefault(e => e.Id == data.AttachTo)?.Name ?? "Screen";
+
+        if (ImGui.BeginCombo("Attach to", attachName))
+        {
+            if (ImGui.Selectable("Screen", string.IsNullOrEmpty(data.AttachTo)))
+            {
+                data.AttachTo = null;
+                plugin.RequestSave();
+            }
+
+            foreach (var other in plugin.Layout.Elements)
+            {
+                // Only what is in use: not the groups of other jobs (the one it is attached to now stays in the list).
+                if (ReferenceEquals(other, element) || other.IsManaged || (other.IsHidden && data.AttachTo != other.Id))
+                    continue;
+
+                if (ImGui.Selectable($"{other.Name}##attach_{other.Id}", data.AttachTo == other.Id))
+                {
+                    data.AttachTo = other.Id;
+                    plugin.RequestSave();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
         var screenAnchor = data.ScreenAnchor;
-        if (AnchorCombo("Screen anchor", ref screenAnchor))
+        if (AnchorCombo(string.IsNullOrEmpty(data.AttachTo) ? "Screen anchor" : "Anchor on that element", ref screenAnchor))
         {
             data.ScreenAnchor = screenAnchor;
             plugin.RequestSave();
@@ -549,7 +712,7 @@ public class MainWindow : Window, IDisposable
 
         // The +/- buttons next to each field move by 1 px (10 px with Ctrl held).
         var x = data.OffsetX;
-        if (ImGui.InputInt("Offset X", ref x, 1, 10))
+        if (ImGui.InputInt("Offset X (px)", ref x, 1, 10))
         {
             data.OffsetX = x;
             plugin.RequestSave();
@@ -557,29 +720,15 @@ public class MainWindow : Window, IDisposable
 
         // Up is plus (the saved value counts downwards, so the sign is turned here).
         var y = -data.OffsetY;
-        if (ImGui.InputInt("Offset Y", ref y, 1, 10))
+        if (ImGui.InputInt("Offset Y (px)", ref y, 1, 10))
         {
             data.OffsetY = -y;
             plugin.RequestSave();
         }
 
-        var width = data.Width;
-        if (ImGui.InputInt("Width", ref width, 1, 10))
-        {
-            data.Width = Math.Max(1, width);
-            plugin.RequestSave();
-        }
-
-        var height = data.Height;
-        if (ImGui.InputInt("Height", ref height, 1, 10))
-        {
-            data.Height = Math.Max(1, height);
-            plugin.RequestSave();
-        }
-
         ImGui.Spacing();
 
-        // One position (and size) for each job: it follows the job you play, so a job with a big gauge and another without it can
+        // One position for each job: it follows the job you play, so a job with a big gauge and another without it can
         // each have the bars where they fit.
         var perJob = plugin.Layout.IsPerJob(element.Id);
         if (ImGui.Checkbox("A different position for each job", ref perJob))
@@ -604,7 +753,7 @@ public class MainWindow : Window, IDisposable
             plugin.RequestSave();
         }
 
-        if (ImGui.Button("Reset position and size"))
+        if (ImGui.Button("Reset position"))
         {
             element.ResetToDefaults();
             plugin.RequestSave();
@@ -833,6 +982,55 @@ public class MainWindow : Window, IDisposable
 
         StatusDebugCard.Draw(snapshot);
 
+
+        Widgets.Card("##card_limit_break_debug", 5, () =>
+        {
+            Widgets.SectionLabel("Limit Break (what the game says)");
+            ImGui.TextUnformatted(GameDataProvider.LimitBreakDebug());
+        });
+
+        Widgets.Card("##card_cover", 6, () =>
+        {
+            Widgets.SectionLabel("Game windows over the interface (test)");
+
+            var outline = plugin.Configuration.OutlineCoverAreas;
+            if (ImGui.Checkbox("Outline the cut areas in red", ref outline))
+            {
+                plugin.Configuration.OutlineCoverAreas = outline;
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, $"Areas cut right now: {plugin.GameCover.Count}");
+
+            if (ImGui.Button("Copy the names of the windows cut##cover"))
+                ImGui.SetClipboardText(plugin.GameCover.NamesAsText());
+        });
+
+        Widgets.Card("##card_menu_capture", 16 + ContextMenuCapture.Captures.Count * 2, () =>
+        {
+            Widgets.SectionLabel("Game menus seen (right click)");
+            ImGui.TextColored(Theme.TextMuted, "Right click a unit (a party member, an enemy, yourself): what the game's menu held shows here, even after it closes.");
+            ImGui.Spacing();
+
+            if (ImGui.Button("Copy everything##menus"))
+                ImGui.SetClipboardText(ContextMenuCapture.AsText());
+
+            ImGui.SameLine();
+            if (ImGui.Button("Clear##menus"))
+                ContextMenuCapture.Clear();
+
+            if (ContextMenuCapture.Captures.Count == 0)
+                ImGui.TextColored(Theme.TextMuted, "Nothing seen yet.");
+
+            foreach (var capture in ContextMenuCapture.Captures)
+            {
+                ImGui.Spacing();
+                ImGui.TextColored(Theme.Accent, $"{capture.Window} at {capture.Time}");
+                foreach (var line in capture.Lines)
+                    ImGui.TextUnformatted(line);
+            }
+        });
+
         Widgets.Card("##card_game_windows", 16, () =>
         {
             Widgets.SectionLabel("Game windows");
@@ -853,6 +1051,46 @@ public class MainWindow : Window, IDisposable
                     continue;
 
                 ImGui.TextColored(visible ? Theme.Text : Theme.TextMuted, name);
+            }
+        });
+
+        Widgets.Card("##card_addon_dump", 20, () =>
+        {
+            Widgets.SectionLabel("What a game window holds");
+            ImGui.TextColored(Theme.TextMuted, "Type the exact name of a window (see the list above) to see its values and texts right now.");
+            ImGui.Spacing();
+
+            ImGui.InputText("Window", ref dumpWindow, 48);
+            ImGui.Spacing();
+
+            foreach (var line in AddonDump.Read(dumpWindow))
+                ImGui.TextUnformatted(line);
+        });
+
+        Widgets.Card("##card_addon_raw", 40, () =>
+        {
+            Widgets.SectionLabel("Find a hidden setting (bytes of the window and its nodes)");
+            ImGui.TextColored(Theme.TextMuted, "1) Remember.  2) Press Ignore a couple of times while nothing is touched (clears noise).  3) Change the setting in game.");
+            ImGui.TextColored(Theme.TextMuted, "The offsets listed below are what changed. Send a screenshot.");
+            ImGui.Spacing();
+
+            if (ImGui.Button("Remember##raw"))
+                AddonDump.Remember(dumpWindow);
+            ImGui.SameLine();
+            if (ImGui.Button("Ignore what changes now##raw"))
+                AddonDump.IgnoreChanging(dumpWindow);
+            ImGui.SameLine();
+            if (ImGui.Button("Forget##raw"))
+                AddonDump.Forget();
+            ImGui.SameLine();
+            if (ImGui.Button("Copy all changes##raw"))
+                ImGui.SetClipboardText(AddonDump.ExportAll(dumpWindow));
+
+            if (AddonDump.HasRemembered)
+            {
+                ImGui.Spacing();
+                foreach (var line in AddonDump.Diff(dumpWindow))
+                    ImGui.TextUnformatted(line);
             }
         });
 
@@ -888,11 +1126,11 @@ public class MainWindow : Window, IDisposable
 
         Widgets.Card("##card_cooldowns", snapshot.Cooldowns.Count * 2 + 3, () =>
         {
-            Widgets.SectionLabel("Cooldowns (abilities watched by auras)");
+            Widgets.SectionLabel("Cooldowns (abilities watched by trackers)");
 
             if (snapshot.Cooldowns.Count == 0)
             {
-                ImGui.TextColored(Theme.TextMuted, "No cooldown aura is enabled.");
+                ImGui.TextColored(Theme.TextMuted, "No cooldown tracker is enabled.");
                 return;
             }
 
@@ -910,7 +1148,7 @@ public class MainWindow : Window, IDisposable
         });
     }
 
-    // One card with the live data of a unit: name, job, health, cast and every status.
+    // One card with the live data of a unit: name, job, HP, progress bar and every status.
     private static void DrawUnitCard(string id, string title, UnitSnapshot? unit)
     {
         var lines = unit is null ? 2 : 5 + unit.Statuses.Count;

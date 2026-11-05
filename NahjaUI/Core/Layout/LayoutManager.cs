@@ -23,28 +23,39 @@ internal sealed class LayoutElement
     public ElementLayout Defaults { get; }
 
     /// <summary>
-    /// True when something else (an aura group) decides where this element is.
+    /// True when something else (a tracker group) decides where this element is.
     /// Such elements keep their size but cannot be moved, so unlock mode and the Layout page skip them.
     /// </summary>
     public bool IsManaged { get; set; }
 
     /// <summary>
-    /// True when the element belongs to something that does not apply right now (an aura or gauge of another job).
+    /// True when the element belongs to something that does not apply right now (a tracker or gauge of another job).
     /// Hidden elements are left out of unlock mode and the Layout page, so only what you can use is shown.
     /// Their saved position is kept.
     /// </summary>
     public bool IsHidden { get; set; }
 
     /// <summary>
-    /// Set every frame by a module whose drawn area is not the same as its layout box (an aura group: the box that
+    /// Set every frame by a module whose drawn area is not the same as its layout box (a tracker group: the box that
     /// unlock mode shows is the whole area covered by its icons). Physical pixels. Null means "use the layout".
     /// </summary>
     public (Vector2 Pos, Vector2 Size)? DisplayRect { get; set; }
 
+    /// <summary>Extra options of this element, drawn in the panel that unlock mode shows under the X and Y fields (null = none).</summary>
+    public Action? DrawOptions { get; set; }
+
     /// <summary>The saved, editable layout (it lives inside the plugin configuration).</summary>
     public ElementLayout Layout { get; }
 
-    public void ResetToDefaults() => Layout.CopyPositionFrom(Defaults);
+    /// <summary>Back to the default place (what it is attached to, anchors and offsets). The size is chosen in the page of each element, so it is not touched.</summary>
+    public void ResetToDefaults()
+    {
+        Layout.AttachTo = Defaults.AttachTo;
+        Layout.ScreenAnchor = Defaults.ScreenAnchor;
+        Layout.SelfAnchor = Defaults.SelfAnchor;
+        Layout.OffsetX = Defaults.OffsetX;
+        Layout.OffsetY = Defaults.OffsetY;
+    }
 }
 
 /// <summary>
@@ -59,7 +70,14 @@ internal sealed class LayoutManager
     public LayoutManager(Configuration config)
     {
         this.config = config;
+        Current = this;
     }
+
+    // The manager in use: positions are worked out by a static method that may need the element another one is attached to.
+    private static LayoutManager? Current { get; set; }
+
+    // How many attachments are being followed (an element attached to one attached to it would never end).
+    private static int attachDepth;
 
     public IReadOnlyList<LayoutElement> Elements => elements;
 
@@ -70,6 +88,30 @@ internal sealed class LayoutManager
     public bool UnlockMode { get; set; }
 
     public string? SelectedId { get; set; }
+
+    /// <summary>Set by the Layout page every frame it is shown: the element selected there is then drawn with sample values even if it has nothing to show.</summary>
+    public void MarkLayoutPageOpen() => layoutPageFrame = ImGui.GetFrameCount();
+
+    private int layoutPageFrame = -10;
+
+    /// <summary>Is this element the one selected in the Layout page (open right now)? Its module then shows a sample of it, so it can be moved.</summary>
+    public bool IsPreviewing(string id)
+    {
+        if (SelectedId is null || ImGui.GetFrameCount() - layoutPageFrame > 1)
+            return false;
+
+        // The selected element, and the ones it is attached to (and those to which they are attached): the position only makes sense if they are seen too.
+        var current = SelectedId;
+        for (var step = 0; current is not null && step < 8; step++)
+        {
+            if (current == id)
+                return true;
+
+            current = elements.Find(e => e.Id == current)?.Layout.AttachTo;
+        }
+
+        return false;
+    }
 
     public LayoutElement? SelectedElement =>
         SelectedId is null ? null : elements.Find(e => e.Id == SelectedId);
@@ -91,7 +133,7 @@ internal sealed class LayoutManager
         return element;
     }
 
-    /// <summary>Removes an element from the list but keeps its saved position (used when auras are reloaded).</summary>
+    /// <summary>Removes an element from the list but keeps its saved position (used when trackers are reloaded).</summary>
     public void Detach(string id)
     {
         elements.RemoveAll(e => e.Id == id);
@@ -100,7 +142,7 @@ internal sealed class LayoutManager
             SelectedId = null;
     }
 
-    /// <summary>Removes an element and forgets its saved position (used when an aura is deleted).</summary>
+    /// <summary>Removes an element and forgets its saved position (used when a tracker is deleted).</summary>
     public void Unregister(string id)
     {
         elements.RemoveAll(e => e.Id == id);
@@ -195,6 +237,25 @@ internal sealed class LayoutManager
         var viewport = ImGui.GetMainViewport();
 
         var screenPoint = viewport.Pos + viewport.Size * layout.ScreenAnchor.Fraction();
+
+        // Attached to another element: the anchor point is a point of that element.
+        if (!string.IsNullOrEmpty(layout.AttachTo) && Current is not null && attachDepth < 8)
+        {
+            var parent = Current.elements.Find(e => e.Id == layout.AttachTo);
+            if (parent is not null && !ReferenceEquals(parent.Layout, layout))
+            {
+                attachDepth++;
+                try
+                {
+                    var (parentPos, parentSize) = GetDisplayRect(parent);
+                    screenPoint = parentPos + parentSize * layout.ScreenAnchor.Fraction();
+                }
+                finally
+                {
+                    attachDepth--;
+                }
+            }
+        }
 
         var size = new Vector2(
             MathF.Round(Math.Max(1, layout.Width) * scale),

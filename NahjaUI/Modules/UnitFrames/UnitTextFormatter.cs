@@ -40,20 +40,20 @@ internal static class UnitTextFormatter
 
     // ---------------------------------------------------------------- HP
 
-    public static string FormatHealth(IValueTextFormat settings, uint current, uint max)
+    public static string FormatValue(IValueTextFormat settings, uint current, uint max)
     {
-        if (settings.HealthPreset == HealthTextPreset.Deficit && current >= max)
+        if (settings.HpPreset == HpTextPreset.Deficit && current >= max)
             return string.Empty;
 
-        var template = settings.HealthPreset switch
+        var template = settings.HpPreset switch
         {
-            HealthTextPreset.CurrentAndPercent => "{curk}" + settings.Separator + "{pct}",
-            HealthTextPreset.CurrentFullAndPercent => "{cur}" + settings.Separator + "{pct}",
-            HealthTextPreset.Current => "{curk}",
-            HealthTextPreset.CurrentFull => "{cur}",
-            HealthTextPreset.Percent => "{pct}",
-            HealthTextPreset.CurrentAndMax => "{curk} / {maxk}",
-            HealthTextPreset.Deficit => "-{defk}",
+            HpTextPreset.CurrentAndPercent => "{curk}" + settings.Separator + "{pct}",
+            HpTextPreset.CurrentFullAndPercent => "{cur}" + settings.Separator + "{pct}",
+            HpTextPreset.Current => "{curk}",
+            HpTextPreset.CurrentFull => "{cur}",
+            HpTextPreset.Percent => "{pct}",
+            HpTextPreset.CurrentAndMax => "{curk} / {maxk}",
+            HpTextPreset.Deficit => "-{defk}",
             _ => settings.CustomTemplate
         };
 

@@ -5,8 +5,8 @@ using Dalamud.Bindings.ImGui;
 namespace NahjaUI.Core.Ui;
 
 /// <summary>
-/// The one place that draws text with a black outline, so every text of the plugin (unit frames, auras, party icons,
-/// cast bars, job gauges) looks the same. The outline is ONE PHYSICAL pixel thick, whatever the UI scale, so the edges stay clean.
+/// The one place that draws text with a black outline, so every text of the plugin (unit frames, trackers, party icons,
+/// progress bars, job gauges) looks the same. The outline is ONE PHYSICAL pixel thick, whatever the UI scale, so the edges stay clean.
 /// </summary>
 internal static class OutlinedText
 {

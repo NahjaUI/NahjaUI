@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using NahjaUI.Core.Layout;
+using NahjaUI.Modules.Trackers;
 using NahjaUI.Core.Ui;
 using NahjaUI.Modules.UnitFrames;
 
@@ -32,17 +33,8 @@ public enum PartyJobIconStyle
     Light
 }
 
-public enum PartyOrder
-{
-    /// <summary>The same order as the game's own party list, and it follows the game's option (you first, by role...) by itself.</summary>
-    GameOrder,
-
-    /// <summary>You first, then the others in the order of the game's list.</summary>
-    MeFirst
-}
-
 /// <summary>Which statuses a row of party icons shows.</summary>
-public enum PartyAuraFilter
+public enum StatusRowFilter
 {
     /// <summary>Every enhancement (or every enfeeblement, in the enfeeblement row).</summary>
     All,
@@ -54,13 +46,39 @@ public enum PartyAuraFilter
     AllExceptListed
 }
 
+/// <summary>The order of the icons of a row, by the time they have left. A status without an end (permanent) counts as the longest possible time.</summary>
+public enum StatusOrder
+{
+    /// <summary>The shortest time first, permanent statuses last.</summary>
+    Ascending,
+
+    /// <summary>The longest time first, permanent statuses first.</summary>
+    Descending
+}
+
 /// <summary>The direction in which the icons of a row are added.</summary>
-public enum PartyAuraGrowth
+public enum StatusRowGrowth
 {
     Left,
     Right,
     Up,
-    Down
+    Down,
+
+    /// <summary>The row is always centered (horizontally) on its point, whatever the number of icons.</summary>
+    CenteredHorizontally,
+
+    /// <summary>The row is always centered (vertically) on its point, whatever the number of icons.</summary>
+    CenteredVertically
+}
+
+/// <summary>What a row of icons is attached to.</summary>
+public enum StatusRowAttach
+{
+    /// <summary>The bar of the frame.</summary>
+    Frame,
+
+    /// <summary>The other row of the same frame (the enfeeblements row for the enhancements one, and the other way round).</summary>
+    OtherRow
 }
 
 /// <summary>
@@ -68,14 +86,31 @@ public enum PartyAuraGrowth
 /// offset, icon size, spacing and growth, so the two rows can be put anywhere.
 /// </summary>
 [Serializable]
-public class PartyAuraSettings
+public class StatusRowSettings
 {
     public bool Enabled { get; set; } = true;
 
-    public PartyAuraFilter Filter { get; set; } = PartyAuraFilter.All;
+    public StatusRowFilter Filter { get; set; } = StatusRowFilter.All;
 
     /// <summary>The statuses of the filter (status ids).</summary>
     public List<uint> StatusIds { get; set; } = new();
+
+    /// <summary>Filters of the Filters page whose statuses count as part of the list above.</summary>
+    public List<string> FilterIds { get; set; } = new();
+
+    /// <summary>
+    /// When on, the statuses of the ticked filters come in the order of the filters (the first ticked filter first), whatever the time they have
+    /// left; the time only orders the statuses inside each filter. When off, only the time orders the icons.
+    /// </summary>
+    public bool PriorityByFilter { get; set; }
+
+    /// <summary>Filters (ids) whose statuses only count when you applied them. The other filters of the row keep showing everybody's.</summary>
+    public List<string> OnlyMineFilterIds { get; set; } = new();
+
+    /// <summary>A border on the enfeeblements that a cleanse (Esuna and the like) can remove. The game's data says which ones.</summary>
+    public bool DispelBorder { get; set; }
+
+    public Vector4 DispelColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
 
     /// <summary>
     /// Statuses that are always shown, whoever applied them (a raid enfeeblement you want to see even if it is not yours).
@@ -85,6 +120,9 @@ public class PartyAuraSettings
 
     /// <summary>Only the statuses that you applied.</summary>
     public bool OnlyMine { get; set; }
+
+    /// <summary>What the row is attached to: the bar, or the other row of the same frame (if both choose each other, the enhancements row stays on the bar).</summary>
+    public StatusRowAttach AttachTo { get; set; } = StatusRowAttach.Frame;
 
     /// <summary>The point of the party bar the row is attached to.</summary>
     public AnchorPoint BarAnchor { get; set; } = AnchorPoint.Left;
@@ -96,30 +134,71 @@ public class PartyAuraSettings
 
     public int OffsetY { get; set; }
 
-    /// <summary>Icon size in pixels. Rectangular like the auras: wider than tall.</summary>
+    /// <summary>Icon size in pixels. Rectangular like the trackers: wider than tall.</summary>
     public int IconWidth { get; set; } = 32;
 
     public int IconHeight { get; set; } = 24;
 
-    /// <summary>The icon is cropped, never stretched. This is how much of its edge is cut, in percent (the game's icons have rounded corners).</summary>
-    public int CropPercent { get; set; } = 13;
+    /// <summary>Which empty margins of the game's icon are cut away, as in the trackers (the icon is never stretched).</summary>
+    public IconTrim Trim { get; set; } = IconTrim.AllAround;
 
     /// <summary>Corner rounding of the icons, in pixels, like the bars. 0 = square.</summary>
-    public int CornerRadiusPx { get; set; } = 3;
+    public int CornerRadiusPx { get; set; } = 6;
+
+    /// <summary>The order of the icons: by the time left.</summary>
+    public StatusOrder Order { get; set; } = StatusOrder.Ascending;
 
     public int SpacingPx { get; set; } = 3;
 
     public int MaxIcons { get; set; } = 5;
 
-    public PartyAuraGrowth Growth { get; set; } = PartyAuraGrowth.Left;
+    /// <summary>Icons in one line: more icons than this go to the next line (the game holds up to 30 statuses on a unit).</summary>
+    public int IconsPerLine { get; set; } = 6;
+
+    public StatusRowGrowth Growth { get; set; } = StatusRowGrowth.Left;
+
+    /// <summary>
+    /// Where the next line goes when a line is full: Up or Down while the icons grow in a horizontal line (Left, Right, Centered horizontally),
+    /// Left or Right while they grow in a vertical one. Any other value counts as the first choice (Down, Right).
+    /// </summary>
+    public StatusRowGrowth NextLine { get; set; } = StatusRowGrowth.Down;
+
+    /// <summary>Does the line grow horizontally (the next line is above or under it) or vertically?</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public bool GrowsHorizontally => Growth is StatusRowGrowth.Left or StatusRowGrowth.Right or StatusRowGrowth.CenteredHorizontally;
+
+    /// <summary>The side of the next line, always one that fits the growth.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public StatusRowGrowth NextLineNow => GrowsHorizontally
+        ? (NextLine == StatusRowGrowth.Up ? StatusRowGrowth.Up : StatusRowGrowth.Down)
+        : (NextLine == StatusRowGrowth.Left ? StatusRowGrowth.Left : StatusRowGrowth.Right);
 
     public bool ShowTimer { get; set; } = true;
 
     /// <summary>Font size of the time left, in pixels (one of the sizes in OverlayFonts.AvailableSizes).</summary>
     public int TimerSize { get; set; } = 8;
 
-    /// <summary>Font of the time left and of the stack count.</summary>
+    /// <summary>Font of the time left (it used to be the font of the stack count too: see StacksFont).</summary>
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
+
+    /// <summary>Font of the stack count. Starts as the old shared font (see EnsureTexts).</summary>
+    public OverlayFont StacksFont { get; set; } = OverlayFont.NahjaDisplayBold;
+
+    public Vector4 TimerColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    public Vector4 StacksColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    public bool StacksFontMigrated { get; set; }
+
+    /// <summary>The stack count gets its own font: it starts as the font the two texts shared.</summary>
+    public void EnsureTexts()
+    {
+        if (StacksFontMigrated)
+            return;
+
+        StacksFont = Font;
+        StacksFontMigrated = true;
+    }
 
     // Where the texts sit on the icon. The anchor is a point of the icon: the same point of the text is attached to it, so a
     // right anchor right-justifies the text and a centre anchor centres it. The offset moves it from there, in pixels.
@@ -141,40 +220,39 @@ public class PartyAuraSettings
     public int StacksOffsetY { get; set; } = -1;
 
     /// <summary>The enhancements row of the player, target and focus frames: above the bar, growing to the right. Off until it is switched on.</summary>
-    public static PartyAuraSettings CreateFrameEnhancements() => new()
+    public static StatusRowSettings CreateFrameEnhancements() => new()
     {
         Enabled = false,
         BarAnchor = AnchorPoint.TopLeft,
         IconAnchor = AnchorPoint.BottomLeft,
         OffsetX = 0,
         OffsetY = -14,
-        Growth = PartyAuraGrowth.Right,
+        Growth = StatusRowGrowth.Right,
         MaxIcons = 12
     };
 
-    /// <summary>The enfeeblements row of the player, target and focus frames: under the bar, growing to the right, only the ones you applied.</summary>
-    public static PartyAuraSettings CreateFrameEnfeeblements() => new()
+    /// <summary>The enfeeblements row of the player, target and focus frames: under the bar, growing to the right, all of them (whoever applied them).</summary>
+    public static StatusRowSettings CreateFrameEnfeeblements() => new()
     {
         Enabled = false,
         BarAnchor = AnchorPoint.BottomLeft,
         IconAnchor = AnchorPoint.TopLeft,
         OffsetX = 0,
         OffsetY = 6,
-        Growth = PartyAuraGrowth.Right,
-        OnlyMine = true,
+        Growth = StatusRowGrowth.Right,
         MaxIcons = 12
     };
 
     /// <summary>Enhancements go at the left of the bar and grow to the left.</summary>
-    public static PartyAuraSettings CreateEnhancements() => new();
+    public static StatusRowSettings CreateEnhancements() => new();
 
     /// <summary>Enfeeblements go at the right of the bar and grow to the right.</summary>
-    public static PartyAuraSettings CreateEnfeeblements() => new()
+    public static StatusRowSettings CreateEnfeeblements() => new()
     {
         BarAnchor = AnchorPoint.Right,
         IconAnchor = AnchorPoint.Left,
         OffsetX = 8,
-        Growth = PartyAuraGrowth.Right
+        Growth = StatusRowGrowth.Right
     };
 }
 
@@ -192,16 +270,29 @@ public class PartyFrameSettings
     /// <summary>Space between two bars, in pixels.</summary>
     public int RowSpacingPx { get; set; } = 6;
 
+    /// <summary>How visible the bar of a member is while he is dead, offline, in another area or too far away (percent).</summary>
+    public int AwayOpacityPercent { get; set; } = 50;
+
+    /// <summary>Write "Dead", "Offline", "Other area" or "Out of range" instead of the name of that member.</summary>
+    public bool ShowAwayTag { get; set; } = true;
+
     public PartyMpMode MpMode { get; set; } = PartyMpMode.HealersAndRaisers;
 
-    public PartyOrder Order { get; set; } = PartyOrder.GameOrder;
+    // The MP bar is a bar of its own, placed relative to the bar of the member. Where: a point of the MP bar (MpSelfAnchor) goes on a
+    // point of the member's bar (MpBarAnchor), then the offsets move it (the saved Y counts downwards).
+    public AnchorPoint MpBarAnchor { get; set; } = AnchorPoint.Bottom;
 
-    /// <summary>Your chocobo companion as one more bar at the end, like the game's own party list.</summary>
-    public bool ShowChocobo { get; set; } = true;
+    public AnchorPoint MpSelfAnchor { get; set; } = AnchorPoint.Top;
 
+    public int MpOffsetX { get; set; }
 
-    /// <summary>A thin stripe at the left edge of each bar: blue for tanks, green for healers, red for damage dealers.</summary>
-    public bool RoleStripe { get; set; } = true;
+    public int MpOffsetY { get; set; } = 3;
+
+    /// <summary>Width of the MP bar in pixels. 0 = as wide as the member's bar.</summary>
+    public int MpWidthPx { get; set; }
+
+    /// <summary>The rows start at the bottom of the box (which is always 9 rows tall: 8 members and the chocobo). Same idea as the game's "Align List to Bottom", but ours.</summary>
+    public bool StartFromBottom { get; set; }
 
     /// <summary>The job icon of each member, inside the bar at its left. It works for every job, crafters and gatherers too.</summary>
     public bool ShowJobIcon { get; set; }
@@ -211,22 +302,31 @@ public class PartyFrameSettings
     /// <summary>Size of the icon in pixels; it never goes over the height of the bar.</summary>
     public int JobIconSizePx { get; set; } = 16;
 
+    // Where the icon goes: a point of the icon (JobIconSelfAnchor) goes on a point of the member's bar (JobIconBarAnchor), then the offsets
+    // move it (the saved Y counts downwards). By default: inside the bar, at the left, centered vertically.
+    public AnchorPoint JobIconBarAnchor { get; set; } = AnchorPoint.Left;
+
+    public AnchorPoint JobIconSelfAnchor { get; set; } = AnchorPoint.Left;
+
+    public int JobIconOffsetX { get; set; } = 3;
+
+    public int JobIconOffsetY { get; set; }
+
     /// <summary>The enhancements of each member, at the left of the bar by default.</summary>
-    public PartyAuraSettings Enhancements { get; set; } = PartyAuraSettings.CreateEnhancements();
+    public StatusRowSettings Enhancements { get; set; } = StatusRowSettings.CreateEnhancements();
 
     /// <summary>The enfeeblements of each member, at the right of the bar by default.</summary>
-    public PartyAuraSettings Enfeeblements { get; set; } = PartyAuraSettings.CreateEnfeeblements();
+    public StatusRowSettings Enfeeblements { get; set; } = StatusRowSettings.CreateEnfeeblements();
 
     /// <summary>The look the party bars start with: role colours, the name at the left and the percentage at the right.</summary>
     public static UnitFrameSettings CreateLook() => new()
     {
-        HideNative = true,
-        RoundingPx = 4,
+        RoundingPx = 6,
         ShowMp = false,
         MpHeightPx = 5,
         HpColorMode = HpColorMode.Role,
-        HealthPreset = HealthTextPreset.Percent,
+        HpPreset = HpTextPreset.Percent,
         Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 10, OffsetY = 0, TextSize = 15, Font = OverlayFont.NahjaDisplayBold },
-        Health = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -8, OffsetY = 0, TextSize = 14, Font = OverlayFont.NahjaDisplayBold }
+        Hp = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -8, OffsetY = 0, TextSize = 14, Font = OverlayFont.NahjaDisplayBold }
     };
 }

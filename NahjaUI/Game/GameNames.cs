@@ -100,6 +100,38 @@ internal static class GameNames
         return category;
     }
 
+    private static readonly System.Collections.Generic.Dictionary<uint, bool> StatusDispellable = new();
+
+    /// <summary>The game's data says a cleanse (Esuna and the like) can remove this status.</summary>
+    public static bool StatusCanDispel(uint statusId)
+    {
+        if (StatusDispellable.TryGetValue(statusId, out var cached))
+            return cached;
+
+        var dispellable = false;
+        if (Plugin.DataManager.GetExcelSheet<Status>().TryGetRow(statusId, out var row))
+            dispellable = row.CanDispel;
+
+        StatusDispellable[statusId] = dispellable;
+        return dispellable;
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<uint, bool> StatusPermanent = new();
+
+    /// <summary>The game's data says this status has no duration (it has no countdown).</summary>
+    public static bool StatusIsPermanent(uint statusId)
+    {
+        if (StatusPermanent.TryGetValue(statusId, out var cached))
+            return cached;
+
+        var permanent = false;
+        if (Plugin.DataManager.GetExcelSheet<Status>().TryGetRow(statusId, out var row))
+            permanent = row.IsPermanent;
+
+        StatusPermanent[statusId] = permanent;
+        return permanent;
+    }
+
     /// <summary>How many stacks a status can have. 0 or 1 means it does not stack.</summary>
     public static int MaxStacks(uint statusId)
     {
@@ -224,7 +256,10 @@ internal static class GameNames
     /// at the given level, in the order they are learned. Role actions are not included: use the search for them.
     /// </summary>
     // Actions every job has (general actions that are not marked as player actions in the game's data): Sprint.
-    private static readonly HashSet<uint> UniversalActionIds = new() { 3 };
+    /// <summary>The id of Sprint, the action every job has.</summary>
+    public const uint SprintId = 3;
+
+    private static readonly HashSet<uint> UniversalActionIds = new() { SprintId };
 
     public static IReadOnlyList<ActionInfo> AbilitiesOfJob(uint jobId, int level)
     {
@@ -301,7 +336,7 @@ internal static class GameNames
     // ---------------------------------------------------------------- what is being cast
 
     /// <summary>
-    /// The name of what a character is casting. Spells and abilities have their own sheet; items, general actions
+    /// The name of what a character is casting. Actions have their own sheet; items, general actions
     /// and mounts are handled too. Anything else is just called "Casting".
     /// </summary>
     public static string CastName(byte actionType, uint id)
@@ -375,10 +410,11 @@ internal static class GameNames
         return icon;
     }
 
-    // The id of a job from its abbreviation ("BST"), read from the game's own job list, so new jobs need no update. 0 if none.
+    // The id of a job from its English abbreviation ("BST"), read from the game's own job list (the English table, whatever the language
+    // of the game), so new jobs need no update. 0 if none.
     public static uint JobIdByAbbreviation(string abbreviation)
     {
-        foreach (var row in Plugin.DataManager.GetExcelSheet<ClassJob>())
+        foreach (var row in Plugin.DataManager.GetExcelSheet<ClassJob>(Dalamud.Game.ClientLanguage.English))
         {
             if (row.Abbreviation.ToString() == abbreviation)
                 return row.RowId;

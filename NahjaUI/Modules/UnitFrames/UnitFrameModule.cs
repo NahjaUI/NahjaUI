@@ -129,6 +129,7 @@ internal sealed class UnitFrameModule : IDisposable
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);
         RestoreCursor();
+        ClearMouseOver();
     }
 
     // The game's cursor is kept only while the mouse is over one of our frames (the setting is global in Dalamud, so it is
@@ -139,8 +140,75 @@ internal sealed class UnitFrameModule : IDisposable
     // A group of status icons asks to keep the game's cursor while the mouse is over one of its icons.
     internal void KeepGameCursor() => cursorWanted = true;
 
+    // The mouse may be taken from the game only for a press that started over one of our frames. A press that started elsewhere (for
+    // example the right click that closes the game's menu, which also starts the camera) must reach the game with its release too,
+    // or the game keeps thinking the button is held and the cursor is lost.
+    private bool capturedLastFrame;
+    private bool capturedThisFrame;
+    private bool pressIsOurs;
+
+    internal bool MayCapture()
+    {
+        if (!ImGui.IsAnyMouseDown())
+        {
+            pressIsOurs = false;
+            capturedThisFrame = true;
+            return true;
+        }
+
+        if (!pressIsOurs && capturedLastFrame
+            && (ImGui.IsMouseClicked(ImGuiMouseButton.Left) || ImGui.IsMouseClicked(ImGuiMouseButton.Right) || ImGui.IsMouseClicked(ImGuiMouseButton.Middle)))
+            pressIsOurs = true;
+
+        if (pressIsOurs)
+            capturedThisFrame = true;
+
+        return pressIsOurs;
+    }
+
+    // The unit under the mouse this frame (one of our frames), to publish as the game's mouseover target.
+    private uint mouseOverEntityId;
+    private bool mouseOverPublished;
+
+    private void ClearMouseOver()
+    {
+        if (!mouseOverPublished)
+            return;
+
+        mouseOverPublished = false;
+        Plugin.TargetManager.MouseOverTarget = null;
+    }
+
+    // Tells the game which unit is under the mouse (only while the mouse is over one of our frames), and takes it back when the mouse leaves.
+    private void UpdateMouseOver()
+    {
+        var entityId = mouseOverEntityId;
+        mouseOverEntityId = 0;
+
+        if (entityId == 0)
+        {
+            ClearMouseOver();
+            return;
+        }
+
+        var target = Plugin.ObjectTable.SearchByEntityId(entityId);
+        if (target is null)
+        {
+            ClearMouseOver();
+            return;
+        }
+
+        Plugin.TargetManager.MouseOverTarget = target;
+        mouseOverPublished = true;
+    }
+
     internal void UpdateCursor()
     {
+        UpdateMouseOver();
+
+        capturedLastFrame = capturedThisFrame;
+        capturedThisFrame = false;
+
         if (cursorWanted)
         {
             Plugin.PluginInterface.UiBuilder.OverrideGameCursor = false;
@@ -183,17 +251,17 @@ internal sealed class UnitFrameModule : IDisposable
         {
             case NativeTargetStatuses:
                 var target = frames.Target;
-                return target.Enabled && target.HideNativeStatuses && (target.Enhancements.Enabled || target.Enfeeblements.Enabled);
+                return target.Enabled && (target.Enhancements.Enabled || target.Enfeeblements.Enabled);
 
             // The game's player bar (HP and MP together) is hidden whenever the Parameter bar page is Enabled.
             case NativePlayerBar:
                 return frames.Player.Enabled;
 
             case NativeTargetBar:
-                return frames.Target.Enabled && frames.Target.HideNative;
+                return frames.Target.Enabled;
 
             case NativeFocusBar:
-                return frames.Focus.Enabled && frames.Focus.HideNative;
+                return frames.Focus.Enabled;
 
             default:
                 return false;
@@ -206,7 +274,9 @@ internal sealed class UnitFrameModule : IDisposable
     {
         hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
-        var preview = PreviewRequested || plugin.Layout.UnlockMode;
+        var preview = PreviewRequested || plugin.Layout.UnlockMode
+            || plugin.Layout.IsPreviewing(PlayerElement.Id) || plugin.Layout.IsPreviewing(MpElement.Id) || plugin.Layout.IsPreviewing(TargetElement.Id)
+            || plugin.Layout.IsPreviewing(TargetOfTargetElement.Id) || plugin.Layout.IsPreviewing(FocusElement.Id);
         PreviewRequested = false;
         PreviewActive = preview;
 
@@ -265,14 +335,13 @@ internal sealed class UnitFrameModule : IDisposable
                 var frames = plugin.Configuration.UnitFrames;
                 var place = ReferenceEquals(settings, frames.Player) ? "player" : ReferenceEquals(settings, frames.Focus) ? "focus" : "target";
 
-                plugin.StatusRows.DrawRow(drawList, settings.Enhancements, true, enhancements, !isReal, playerId, barPos, barSize, place);
-                plugin.StatusRows.DrawRow(drawList, settings.Enfeeblements, false, enfeeblements, !isReal, playerId, barPos, barSize, place);
+                plugin.StatusRows.DrawRows(drawList, settings.Enhancements, settings.Enfeeblements, enhancements, enfeeblements, !isReal, playerId, barPos, barSize, place, !unit.IsHostile);
             }
         });
 
         // Clicks only make sense on a real unit, and not while the boxes are being moved (they use the same place).
         // The target of target only selects with the left click: the game gives it no menu.
-        if (isReal && settings.Clickable && !plugin.Layout.UnlockMode)
+        if (isReal && !plugin.Layout.UnlockMode)
             HandleClicks(element, unit, !ReferenceEquals(settings, plugin.Configuration.UnitFrames.TargetOfTarget));
     }
 
@@ -292,20 +361,21 @@ internal sealed class UnitFrameModule : IDisposable
         if (size.X < 1f || size.Y < 1f)
             return;
 
-        // While the game's own menu is open, our click areas step aside so its entries can be clicked.
-        if (plugin.GameCover.Any)
+        // Where a game window is over our frame (its menu, the map...), our click areas step aside so the window can be clicked.
+        if (plugin.GameCover.Contains(ImGui.GetIO().MousePos))
             return;
 
         // No window over the frame: while the mouse is over the box we tell Dalamud the mouse is ours (so the game does not
         // get the click) and read the click ourselves.
         var hovered = ImGui.IsMouseHoveringRect(pos, pos + size, false) && !ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow);
-        if (!hovered)
+        if (!hovered || !MayCapture())
             return;
 
         ImGui.SetNextFrameWantCaptureMouse(true);
 
         // Dalamud swaps the game's cursor for the Windows one while it captures the mouse; this asks it to keep the game's.
         cursorWanted = true;
+        mouseOverEntityId = unit.EntityId;
 
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
@@ -368,7 +438,7 @@ internal sealed class UnitFrameModule : IDisposable
 
             // The number over the bar, with the same choices as the HP text.
             var mpText = settings.MpText;
-            DrawText(drawList, UnitTextFormatter.FormatHealth(mpText, mp, maxMp), mpText.Text, pos, size);
+            DrawText(drawList, UnitTextFormatter.FormatValue(mpText, mp, maxMp), mpText.Text, pos, size);
         });
     }
 
@@ -417,8 +487,8 @@ internal sealed class UnitFrameModule : IDisposable
         // No HP number for things that have no HP.
         if (barShown && (hasHp || unit.Kind == UnitKind.Character))
         {
-            var health = UnitTextFormatter.FormatHealth(settings, unit.Hp, unit.MaxHp);
-            DrawText(drawList, health, settings.Health, pos, size);
+            var hpText = UnitTextFormatter.FormatValue(settings, unit.Hp, unit.MaxHp);
+            DrawText(drawList, hpText, settings.Hp, pos, size);
         }
     }
 
@@ -449,10 +519,36 @@ internal sealed class UnitFrameModule : IDisposable
         drawList.PopClipRect();
     }
 
-    // The colour of the HP: the hostile colour for enemies, and for players the job's own colour when class colours
-    // are chosen, the fixed one otherwise. Anything else (friendly NPCs) uses the fixed one.
+    // The colour of the HP: the hostile colour for enemies, and for players (characters controlled by a person) always the colour
+    // of their role. Anything else (friendly NPCs) uses the friendly colour.
+    // Sunset Orange (183, 92, 45): the colour of Ember, the chocobo of the author. It is the colour while the game's own is not known.
+    private static readonly Vector4 DefaultChocoboColor = new(183f / 255f, 92f / 255f, 45f / 255f, 1f);
+
+    // The colour of the chocobo frame: the colour the chocobo has now (read from the game). Dark coats (the blacks) are lifted to a
+    // minimum brightness so the bar can be seen; the hue and the saturation are kept.
+    private Vector4 ChocoboColor()
+    {
+        var color = plugin.GameData.ChocoboColor ?? DefaultChocoboColor;
+
+        // Brightness (the biggest channel): below 0.62 every channel is scaled up so the biggest one reaches it (black becomes grey).
+        var max = MathF.Max(color.X, MathF.Max(color.Y, color.Z));
+        if (max < 0.62f)
+        {
+            if (max <= 0.001f)
+                return new Vector4(0.62f, 0.62f, 0.62f, 1f);
+
+            var scale = 0.62f / max;
+            return new Vector4(color.X * scale, color.Y * scale, color.Z * scale, 1f);
+        }
+
+        return color;
+    }
+
     internal Vector4 HpColor(UnitFrameSettings settings, UnitSnapshot unit, bool isPlayerFrame)
     {
+        if (unit.IsCompanion)
+            return ChocoboColor();
+
         if (unit.Kind == UnitKind.Object)
             return settings.ObjectColor;
 
@@ -464,7 +560,7 @@ internal sealed class UnitFrameModule : IDisposable
         if (!isPlayer && unit.IsHostile)
             return settings.HostileColor;
 
-        if (isPlayer && settings.HpColorMode == HpColorMode.Role)
+        if (isPlayer)
             return JobRoles.Color(plugin.Configuration.UnitFrames, unit.JobId, settings.FriendlyColor);
 
         return settings.FriendlyColor;

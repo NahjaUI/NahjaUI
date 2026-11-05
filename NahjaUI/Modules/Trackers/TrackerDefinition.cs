@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 
-namespace NahjaUI.Modules.Auras;
+namespace NahjaUI.Modules.Trackers;
 
-/// <summary>What an aura watches.</summary>
-public enum AuraTriggerType
+/// <summary>What a tracker watches.</summary>
+public enum TrackerTriggerType
 {
     /// <summary>An enhancement or enfeeblement on a unit.</summary>
     Status,
@@ -14,17 +14,17 @@ public enum AuraTriggerType
     /// <summary>The cooldown of one of your own abilities (with its charges and, optionally, its effect).</summary>
     Cooldown,
 
-    /// <summary>An ability that the game turns on right now (it glows, or its button changes into it): procs and follow-up steps.</summary>
+    /// <summary>An ability that the game turns on right now (it glows, or its button changes into it): glowing actions and follow-up steps.</summary>
     Activated
 }
 
-/// <summary>Where the value of a text on an aura comes from.</summary>
+/// <summary>Where the value of a text on a tracker comes from.</summary>
 public enum TextSource
 {
-    /// <summary>The time of the aura itself: the status time, or the cooldown (or the effect time) of the ability.</summary>
+    /// <summary>The time of the tracker itself: the status time, or the cooldown (or the effect time) of the ability.</summary>
     OwnTime,
 
-    /// <summary>The stacks of the status of the aura, or the charges of its ability.</summary>
+    /// <summary>The stacks of the status of the tracker, or the charges of its ability.</summary>
     OwnStacks,
 
     /// <summary>The time left of the game's combo.</summary>
@@ -43,16 +43,16 @@ public enum TextSource
     AbilityCharges
 }
 
-/// <summary>Where the picture of an aura comes from.</summary>
+/// <summary>Where the picture of a tracker comes from.</summary>
 public enum IconSource
 {
-    /// <summary>The icon of what the aura tracks: the status, or the ability (in its current form).</summary>
+    /// <summary>The icon of what the tracker tracks: the status, or the ability (in its current form).</summary>
     Automatic,
 
-    /// <summary>The icon of a status chosen by the user, whatever the aura tracks.</summary>
+    /// <summary>The icon of a status chosen by the user, whatever the tracker tracks.</summary>
     Status,
 
-    /// <summary>The icon of an ability chosen by the user, whatever the aura tracks.</summary>
+    /// <summary>The icon of an ability chosen by the user, whatever the tracker tracks.</summary>
     Ability
 }
 
@@ -65,7 +65,7 @@ public enum ConditionKind
     /// <summary>An enhancement or enfeeblement is NOT on the unit (a reminder that it fell off).</summary>
     StatusMissing,
 
-    /// <summary>The game turns an ability on right now: it glows, or its button changes into it (procs, follow-up steps).</summary>
+    /// <summary>The game turns an ability on right now: it glows, or its button changes into it (glowing actions, follow-up steps).</summary>
     AbilityActivated,
 
     /// <summary>An ability is recharging.</summary>
@@ -75,23 +75,62 @@ public enum ConditionKind
     AbilityReady,
 
     /// <summary>An ability is known: matches ready or recharging.</summary>
-    AbilityAlways
+    AbilityAlways,
+
+    /// <summary>The icon is always there, whether the status is on the unit or not (a DoT to keep up, an enhancement to refresh).</summary>
+    StatusAlways
+}
+
+/// <summary>When an effect of an icon trigger (glow, red mask, dimmed) is applied.</summary>
+public enum EffectWhen
+{
+    Never,
+
+    /// <summary>Whenever this trigger decides.</summary>
+    Always,
+
+    /// <summary>"Status always" triggers: while the status is on the unit.</summary>
+    StatusOn,
+
+    /// <summary>"Status always" triggers: while the status is NOT on the unit.</summary>
+    StatusMissing,
+
+    /// <summary>Ability triggers that cover ready and recharging: while ready.</summary>
+    Ready,
+
+    /// <summary>Ability triggers that cover ready and recharging: while recharging.</summary>
+    Recharging,
+
+    /// <summary>Ability triggers: while the game makes the button of the ability glow.</summary>
+    Highlighted,
+
+    /// <summary>Ability triggers: while it can be used now (ready, or recharging but with a charge left).</summary>
+    Usable,
+
+    /// <summary>Ability triggers: while it cannot be used (recharging with no charge left).</summary>
+    Unavailable
 }
 
 /// <summary>
-/// One icon trigger of an aura. The triggers of an aura are tried in order: the first one that matches decides the picture,
-/// the glow and the values of the texts. When none matches, the aura is hidden.
+/// One icon trigger of a tracker. The triggers of a tracker are tried in order: the first one that matches decides the picture,
+/// the glow and the values of the texts. When none matches, the tracker is hidden.
 /// </summary>
 [Serializable]
-public class AuraRule
+public class TrackerRule
 {
     public ConditionKind Kind { get; set; } = ConditionKind.StatusPresent;
 
     /// <summary>Status conditions: the unit to look at.</summary>
-    public AuraUnit Unit { get; set; } = AuraUnit.Player;
+    public TrackerUnit Unit { get; set; } = TrackerUnit.Player;
 
     public uint StatusId { get; set; }
     public uint ActionId { get; set; }
+
+    /// <summary>Status conditions: the id of a filter of the Filters page. When set, any status of the filter counts (instead of the one status above).</summary>
+    public string FilterId { get; set; } = string.Empty;
+
+    [Newtonsoft.Json.JsonIgnore]
+    public bool UsesFilter => !string.IsNullOrEmpty(FilterId);
 
     /// <summary>Status conditions: only count a status the player applied.</summary>
     public bool OnlyMine { get; set; }
@@ -99,41 +138,59 @@ public class AuraRule
     /// <summary>Ability conditions: treat the global cooldown (about 2.5 s) as "ready".</summary>
     public bool IgnoreGlobalCooldown { get; set; } = true;
 
+    /// <summary>The texts drawn over the icon while this trigger decides: any number, each with its own value, size, font, position and colour.</summary>
+    public List<TrackerTextDefinition> Texts { get; set; } = new();
+
     /// <summary>The picture shown while this trigger decides. It can differ from what is tracked.</summary>
     public IconSource Icon { get; set; } = IconSource.Automatic;
     public uint IconStatusId { get; set; }
     public uint IconActionId { get; set; }
 
-    /// <summary>Glow around the icon while this trigger decides.</summary>
+    // The three effects of a trigger: each one has its own "when".
+    public EffectWhen GlowWhen { get; set; } = EffectWhen.Never;
+
+    /// <summary>A red mask over the icon (the border stays black).</summary>
+    public EffectWhen RedWhen { get; set; } = EffectWhen.Never;
+
+    /// <summary>The icon darkened.</summary>
+    public EffectWhen DimWhen { get; set; } = EffectWhen.Never;
+
+    /// <summary>False for triggers saved before the effects had a "when": the old glow flags and the tracker's recharge look become effects once.</summary>
+    public bool EffectsMigrated { get; set; }
+
+    // ---- Older saves (only read once, to build the effects above).
     public bool Glow { get; set; }
 
     /// <summary>Glow while the ability is ready (for the "always" condition, which also covers recharging).</summary>
     public bool GlowWhenReady { get; set; }
 
+    /// <summary>"Status always": glow while the status is NOT on the unit (time to refresh it).</summary>
+    public bool GlowWhenMissing { get; set; }
+
     /// <summary>Glow while the game makes the button of the ability glow.</summary>
     public bool GlowWhenHighlighted { get; set; }
 
     [Newtonsoft.Json.JsonIgnore]
-    public bool IsAbility => Kind is not (ConditionKind.StatusPresent or ConditionKind.StatusMissing);
+    public bool IsAbility => Kind is not (ConditionKind.StatusPresent or ConditionKind.StatusMissing or ConditionKind.StatusAlways);
 }
 
 /// <summary>One place a text can take its value from. A text tries its sources in order: the first one with a value wins.</summary>
 [Serializable]
-public class AuraTextSource
+public class TrackerTextSource
 {
     public TextSource Source { get; set; } = TextSource.OwnTime;
     public uint StatusId { get; set; }
     public uint ActionId { get; set; }
 }
 
-/// <summary>One text drawn over the icon of an aura, with its own source and look.</summary>
+/// <summary>One text drawn over the icon of a tracker, with its own source and look.</summary>
 [Serializable]
-public class AuraTextDefinition
+public class TrackerTextDefinition
 {
     /// <summary>The places the value can come from, in order of priority.</summary>
-    public List<AuraTextSource> Sources { get; set; } = new();
+    public List<TrackerTextSource> Sources { get; set; } = new();
 
-    // Older saves had one source. It becomes the first entry of Sources when the aura loads.
+    // Older saves had one source. It becomes the first entry of Sources when the tracker loads.
     public TextSource Source { get; set; } = TextSource.OwnTime;
     public uint StatusId { get; set; }
     public uint ActionId { get; set; }
@@ -149,7 +206,7 @@ public class AuraTextDefinition
     public System.Numerics.Vector4 Color { get; set; } = new(1f, 1f, 1f, 1f);
 }
 
-/// <summary>For cooldown auras: in which situations the icon is shown.</summary>
+/// <summary>For cooldown trackers: in which situations the icon is shown.</summary>
 public enum CooldownShowMode
 {
     /// <summary>Always: ready, recharging and while the effect is active.</summary>
@@ -162,7 +219,7 @@ public enum CooldownShowMode
     OnlyWhenReady
 }
 
-/// <summary>For cooldown auras: how the icon looks while there is no charge to use.</summary>
+/// <summary>For cooldown trackers: how the icon looks while there is no charge to use.</summary>
 public enum CooldownLook
 {
     Normal,
@@ -170,8 +227,8 @@ public enum CooldownLook
     Red
 }
 
-/// <summary>Which unit an aura watches.</summary>
-public enum AuraUnit
+/// <summary>Which unit a tracker watches.</summary>
+public enum TrackerUnit
 {
     Player,
     Target,
@@ -179,8 +236,17 @@ public enum AuraUnit
     TargetOfTarget
 }
 
+/// <summary>Which empty margins of the game's icon are cut away, so the art fills the box.</summary>
+public enum IconTrim
+{
+    None,
+    Sides,
+    TopAndBottom,
+    AllAround
+}
+
 /// <summary>When the icon is shown.</summary>
-public enum AuraShowMode
+public enum TrackerShowMode
 {
     /// <summary>While the status is on the unit (a normal enhancement or enfeeblement tracker).</summary>
     WhenPresent,
@@ -189,63 +255,77 @@ public enum AuraShowMode
     WhenMissing
 }
 
-public enum AuraCombatMode
+public enum TrackerCombatMode
 {
     Any,
     InCombat,
     OutOfCombat
 }
 
-/// <summary>Rules that decide whether an aura is active at all. An aura that is not loaded costs nothing.</summary>
-[Serializable]
-public class AuraLoadConditions
+/// <summary>In which kind of content a tracker loads. The statuses and abilities of PvP are not the ones of PvE, so trackers are for PvE unless said otherwise.</summary>
+public enum TrackerPvpMode
 {
-    /// <summary>Jobs the aura loads on. Empty means every job.</summary>
+    PveOnly,
+    PvpOnly,
+    Everywhere
+}
+
+/// <summary>Rules that decide whether a tracker is active at all. A tracker that is not loaded costs nothing.</summary>
+[Serializable]
+public class TrackerLoadConditions
+{
+    /// <summary>Jobs the tracker loads on. Empty means every job.</summary>
     public List<uint> JobIds { get; set; } = new();
 
-    public AuraCombatMode Combat { get; set; } = AuraCombatMode.Any;
+    public TrackerCombatMode Combat { get; set; } = TrackerCombatMode.Any;
+
+    /// <summary>PvE only by default (also for trackers saved before this option existed).</summary>
+    public TrackerPvpMode Where { get; set; } = TrackerPvpMode.PveOnly;
 }
 
 /// <summary>
-/// One aura, as saved in the configuration. Auras are DATA, not code:
+/// One tracker, as saved in the configuration. Trackers are DATA, not code:
 /// they can be edited, exported and shared safely.
 /// Position and size are not stored here, they belong to the layout system.
 /// </summary>
 [Serializable]
-public class AuraDefinition
+public class TrackerDefinition
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
-    public string Name { get; set; } = "New aura";
+    public string Name { get; set; } = "New tracker";
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Id of the group that places this aura, or null when the aura has its own position.</summary>
+    /// <summary>Id of the group that places this tracker, or null when the tracker has its own position.</summary>
     public string? GroupId { get; set; }
 
     /// <summary>The icon triggers, in order of priority: the first one that matches decides the picture and the glow.</summary>
-    public List<AuraRule> Rules { get; set; } = new();
+    public List<TrackerRule> Rules { get; set; } = new();
 
-    /// <summary>False for auras saved before the trigger list existed: their old settings become one trigger when they load.</summary>
+    /// <summary>False for trackers saved before the trigger list existed: their old settings become one trigger when they load.</summary>
     public bool RulesMigrated { get; set; }
 
     // ---- Older saves (before the trigger list). Only read once, to build Rules; nothing uses them afterwards.
-    public AuraTriggerType Trigger { get; set; } = AuraTriggerType.Status;
+    public TrackerTriggerType Trigger { get; set; } = TrackerTriggerType.Status;
     public IconSource Icon { get; set; } = IconSource.Automatic;
     public uint IconStatusId { get; set; }
     public uint IconActionId { get; set; }
 
-    /// <summary>The texts drawn over the icon: any number, each with its own source (Text 1, Text 2...).</summary>
-    public List<AuraTextDefinition> Texts { get; set; } = new();
+    /// <summary>Older saves only: the texts used to belong to the tracker. They are copied into every trigger when the tracker loads (RuleTextsMigrated) and this list is emptied.</summary>
+    public List<TrackerTextDefinition> Texts { get; set; } = new();
 
-    /// <summary>False for auras saved before the text list existed: their timer and stack texts become Texts when they load.</summary>
+    /// <summary>False for trackers saved before the text list existed: their timer and stack texts become Texts when they load.</summary>
     public bool TextsMigrated { get; set; }
+
+    /// <summary>False for trackers saved before every trigger had its own texts: the tracker's texts are copied into each trigger once.</summary>
+    public bool RuleTextsMigrated { get; set; }
 
     // Status triggers: the status to watch. Cooldown triggers: the optional effect of the ability,
     // whose remaining time is shown while it is active.
-    public AuraUnit Unit { get; set; } = AuraUnit.Player;
+    public TrackerUnit Unit { get; set; } = TrackerUnit.Player;
     public uint StatusId { get; set; }
 
     /// <summary>
-    /// Cooldown auras: more effects that count as "the effect is active" (for abilities that give two enhancements one after
+    /// Cooldown trackers: more effects that count as "the effect is active" (for abilities that give two enhancements one after
     /// the other, like Fight or Flight and Goring Blade Ready). The first one found, in this order after StatusId, is shown.
     /// </summary>
     public List<uint> ExtraEffectIds { get; set; } = new();
@@ -258,11 +338,11 @@ public class AuraDefinition
     public bool GlowWhenReady { get; set; }
     public bool GlowWhenActive { get; set; }
 
-    /// <summary>Glow while the game itself makes the button of the ability glow (follow-ups like Goring Blade, procs).</summary>
+    /// <summary>Glow while the game itself makes the button of the ability glow (follow-ups like Goring Blade, ready actions).</summary>
     public bool GlowWhenHighlighted { get; set; }
 
     /// <summary>
-    /// Cooldown auras: show the icon only while this ability is the next step of a combo (the game's own combo: you just used
+    /// Cooldown trackers: show the icon only while this ability is the next step of a combo (the game's own combo: you just used
     /// the ability it follows, and the combo timer is still running). The timer shows the seconds left to continue the combo.
     /// </summary>
     public bool OnlyAsComboStep { get; set; }
@@ -273,7 +353,7 @@ public class AuraDefinition
     /// <summary>Only count the status if the player applied it.</summary>
     public bool OnlyMine { get; set; }
 
-    public AuraShowMode ShowMode { get; set; } = AuraShowMode.WhenPresent;
+    public TrackerShowMode ShowMode { get; set; } = TrackerShowMode.WhenPresent;
 
     // Display
     public bool ShowTimer { get; set; } = true;
@@ -282,8 +362,8 @@ public class AuraDefinition
     /// <summary>Font size of the timer, in pixels. One of the sizes in OverlayFonts.AvailableSizes.</summary>
     public int TextSize { get; set; } = 8;
 
-    /// <summary>Size of the charges / stack count, in pixels (the height of its letters). Chosen like the timer's; 0 in old saved auras counts as 8.</summary>
-    public int StackTextSize { get; set; } = 8;
+    /// <summary>Size of the charges / stack count, in pixels (the height of its letters). Chosen like the timer's; 0 in old saved trackers counts as 8.</summary>
+    public int StackTextSize { get; set; } = 9;
 
     /// <summary>Font family of the timer and stack text.</summary>
     public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
@@ -295,10 +375,10 @@ public class AuraDefinition
     public int TimerOffsetX { get; set; }
     public int TimerOffsetY { get; set; }
 
-    // The number of charges (cooldown auras) or stacks (status auras).
+    // The number of charges (cooldown trackers) or stacks (status trackers).
     public AnchorPoint StacksAnchor { get; set; } = AnchorPoint.BottomRight;
-    public int StacksOffsetX { get; set; } = -2;
-    public int StacksOffsetY { get; set; } = -1;
+    public int StacksOffsetX { get; set; }
+    public int StacksOffsetY { get; set; }
 
     /// <summary>
     /// How much of the icon's outer edge is cut off, in percent. The game's icons have rounded corners drawn
@@ -306,23 +386,26 @@ public class AuraDefinition
     /// </summary>
     public int IconCropPercent { get; set; } = 13;
 
-    /// <summary>Cut the empty margin at the left and right of the game's icon, so the art fills the width of the box.</summary>
+    /// <summary>Which margins of the game's icon are cut away. Null in trackers saved before this existed: it is built from FillWidth when they load.</summary>
+    public IconTrim? Trim { get; set; }
+
+    // Older saves: "Fill the width" (now Trim = Sides) and the crop percentage (gone).
     public bool FillWidth { get; set; } = true;
 
     /// <summary>Corner rounding of the icon, in pixels. The same idea as the unit frames, so the interface looks consistent. 0 = square.</summary>
-    public int CornerRadiusPx { get; set; } = 3;
+    public int CornerRadiusPx { get; set; } = 6;
 
     // Load conditions
-    public AuraLoadConditions Load { get; set; } = new();
+    public TrackerLoadConditions Load { get; set; } = new();
 
     /// <summary>
-    /// Copies the display settings and the load conditions of another aura.
+    /// Copies the display settings and the load conditions of another tracker.
     /// The name, the trigger, the group and the position are not touched.
     /// </summary>
-    public void CopyStyleFrom(AuraDefinition other)
+    public void CopyStyleFrom(TrackerDefinition other)
     {
         IconCropPercent = other.IconCropPercent;
-        FillWidth = other.FillWidth;
+        Trim = other.Trim ?? Trim;
         CornerRadiusPx = other.CornerRadiusPx;
         ShowTimer = other.ShowTimer;
         ShowStacks = other.ShowStacks;
@@ -343,9 +426,10 @@ public class AuraDefinition
         ExtraEffectIds = new List<uint>(other.ExtraEffectIds);
         IgnoreGlobalCooldown = other.IgnoreGlobalCooldown;
 
-        Load = new AuraLoadConditions
+        Load = new TrackerLoadConditions
         {
             Combat = other.Load.Combat,
+            Where = other.Load.Where,
             JobIds = new List<uint>(other.Load.JobIds)
         };
     }

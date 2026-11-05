@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Addon.Lifecycle;
@@ -7,10 +8,11 @@ using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.Gui.NamePlate;
 using Dalamud.Interface.Textures;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using NahjaUI.Modules.Auras;
+using NahjaUI.Modules.Trackers;
 using Dalamud.Interface.Utility;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
+using NahjaUI.Modules.UnitFrames;
 using NahjaUI.Game;
 
 namespace NahjaUI.Modules.NamePlates;
@@ -27,12 +29,10 @@ internal sealed class NamePlateModule : IDisposable
     // The kind of plate of a player character (UIObjectKind.PlayerCharacter).
     private const int PlayerKind = 0;
 
-    private static readonly Vector4 BackgroundColor = new(0.04f, 0.035f, 0.09f, 0.92f);
-    private static readonly Vector4 BorderColor = new(0f, 0f, 0f, 1f);
     private static readonly Vector4 EnemyColor = new(0.79f, 0.29f, 0.27f, 1f);
 
-    // The game's own cast bars of enemies, found in the game's addon list.
-    private static readonly string[] NativeCastBars = { "CastBarEnemy" };
+    // The game's own progress bars of enemies, found in the game's addon list.
+    private static readonly string[] NativeProgressBars = { "CastBarEnemy" };
 
     // The big arrow the game floats over the target. The game has the addon AddonTargetCursor; its name string "_TargetCursor"
     // is NOT confirmed in the clones (test: if the arrow stays, the name is wrong).
@@ -59,14 +59,14 @@ internal sealed class NamePlateModule : IDisposable
     {
         this.plugin = plugin;
         Plugin.NamePlateGui.OnDataUpdate += OnDataUpdate;
-        Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeCastBars, OnNativeCastPreDraw);
+        Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeProgressBars, OnNativeProgressBarPreDraw);
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeTargetCursor, OnNativeTargetCursorPreDraw);
     }
 
     public void Dispose()
     {
         Plugin.NamePlateGui.OnDataUpdate -= OnDataUpdate;
-        Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeCastBars, OnNativeCastPreDraw);
+        Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeProgressBars, OnNativeProgressBarPreDraw);
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeTargetCursor, OnNativeTargetCursorPreDraw);
         Plugin.NamePlateGui.RequestRedraw();
     }
@@ -81,6 +81,11 @@ internal sealed class NamePlateModule : IDisposable
         foreach (var handler in handlers)
         {
             var kind = (int)handler.NamePlateKind;
+
+            // A kind of plate that is switched off keeps the game's own plate: nothing is read or changed.
+            var style = settings.StyleOf(RelationOf(handler, kind));
+            if (!style.Active)
+                continue;
 
             // Remember what the game wanted before it is switched off. A zero is either "the game wants nothing" or what
             // we wrote ourselves the last time, so it does not replace what we already know.
@@ -103,7 +108,14 @@ internal sealed class NamePlateModule : IDisposable
                     // Once we switch the game's marker off the handler reads 0 on the frames the game does not refresh, so a zero
                     // only counts when the game just refreshed this plate.
                     if (handler.IsUpdating || handler.MarkerIconId != 0)
+                    {
+                        // Test log: every change of this icon with the moment it was seen, to compare with what happens on screen.
+                        gameMarkerIcons.TryGetValue(gameObject.GameObjectId, out var before);
+                        if (before != handler.MarkerIconId)
+                            Plugin.Log.Information($"[icons] {handler.Name.TextValue}: {before} -> {handler.MarkerIconId} (game refreshed it: {handler.IsUpdating})");
+
                         gameMarkerIcons[gameObject.GameObjectId] = handler.MarkerIconId;
+                    }
                 }
             }
 
@@ -130,16 +142,33 @@ internal sealed class NamePlateModule : IDisposable
             handler.VisibilityFlags = 0;
 
             // The game floats its own marker even when the plate is switched off: when ours is drawn the game's goes away.
-            if (settings.ShowMarkerIcon)
+            if (style.ShowMarkerIcon)
                 handler.MarkerIconId = 0;
         }
     }
 
+    // Which kind of plate this is (the same kinds as the ones of the game snapshot).
+    private static NamePlateRelation RelationOf(INamePlateUpdateHandler handler, int kind)
+    {
+        if (kind == EnemyKind)
+            return NamePlateRelation.Enemy;
+
+        if (handler.GameObject is not { } owner)
+            return NamePlateRelation.Other;
+
+        if (kind == PlayerKind)
+            return GameDataProvider.PlayerRelation(owner);
+
+        return owner is Dalamud.Game.ClientState.Objects.Types.IBattleChara ? NamePlateRelation.Friendly : NamePlateRelation.Other;
+    }
+
     // Same trick as the other native windows: do not let the game draw it and keep it hidden.
-    private unsafe void OnNativeCastPreDraw(AddonEvent type, AddonArgs args)
+    private unsafe void OnNativeProgressBarPreDraw(AddonEvent type, AddonArgs args)
     {
         var settings = plugin.Configuration.NamePlates;
-        if (!settings.Enabled || !settings.ShowCast)
+        // The game's progress bar of the target goes away when our progress bar replaces it for the enemies.
+        var replaced = settings.EnemyNpcs.Active && settings.EnemyNpcs.ShowProgressBar || settings.EnemyPlayers.Active && settings.EnemyPlayers.ShowProgressBar;
+        if (!settings.Enabled || !replaced)
             return;
 
         args.PreventOriginal();
@@ -179,13 +208,51 @@ internal sealed class NamePlateModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
         var scale = ImGuiHelpers.GlobalScale;
 
-        foreach (var plate in snapshot.NamePlates)
+        var screenSize = ImGuiHelpers.MainViewport.Size;
+
+        Vector2 AnchorOf(NamePlateSnapshot plate) => new((plate.Ndc.X + 1f) * 0.5f * screenSize.X, (1f - plate.Ndc.Y) * 0.5f * screenSize.Y);
+        Vector2 SizeOf(NamePlateSnapshot plate)
         {
-            DrawPlate(drawList, scale, settings, plate, plate.IsTarget, snapshot.Player?.Level ?? 0);
+            var style = settings.StyleOf(plate.Relation);
+            return new Vector2(style.WidthPx * scale, style.HeightPx * scale);
+        }
+
+        // The area a plate takes: its bar plus the name above it (the name can be wider than the bar).
+        (Vector2 Min, Vector2 Max) AreaOf(NamePlateSnapshot plate)
+        {
+            var anchor = AnchorOf(plate);
+            var plateSize = SizeOf(plate);
+            var half = MathF.Max(plateSize.X, 150f * scale) / 2f;
+            return (new Vector2(anchor.X - half, anchor.Y - 30f * scale), new Vector2(anchor.X + half, anchor.Y + plateSize.Y));
+        }
+
+        // Only the kinds of plate that are switched on.
+        var plates = snapshot.NamePlates.Where(p => settings.StyleOf(p.Relation).Active).ToList();
+
+        // The target is drawn over the rest: a plate whose area touches the target's is not drawn, so two names never mix.
+        var target = plates.FirstOrDefault(p => p.IsTarget);
+        var targetArea = target is null ? default : AreaOf(target);
+
+        foreach (var plate in plates.OrderBy(p => p.IsTarget))
+        {
+            var anchor = AnchorOf(plate);
+            var plateSize = SizeOf(plate);
+            var current = plate;
+
+            var hidden = false;
+            if (target is not null && !plate.IsTarget)
+            {
+                var area = AreaOf(plate);
+                hidden = area.Min.X < targetArea.Max.X && area.Max.X > targetArea.Min.X
+                         && area.Min.Y < targetArea.Max.Y && area.Max.Y > targetArea.Min.Y;
+            }
+
+            plugin.GameCover.Draw(anchor - new Vector2(plateSize.X / 2f, 0f), plateSize, 200f * scale,
+                hidden ? () => { } : () => DrawPlate(drawList, scale, settings, settings.StyleOf(current.Relation), current, current.IsTarget, snapshot.Player?.Level ?? 0));
         }
     }
 
-    private void DrawPlate(ImDrawListPtr drawList, float scale, NamePlateSettings settings, NamePlateSnapshot plate, bool isTarget, int playerLevel)
+    private void DrawPlate(ImDrawListPtr drawList, float scale, NamePlateSettings settings, NamePlateStyle style, NamePlateSnapshot plate, bool isTarget, int playerLevel)
     {
         // What the game would have drawn for this plate (everything, when it is not known yet or the option is off).
         var flags = GameDrawsName | GameDrawsGauge;
@@ -204,7 +271,7 @@ internal sealed class NamePlateModule : IDisposable
         // The name and the title the game would have written (players); enemies keep the plain name.
         var displayName = plate.Name;
         GameTexts? texts = null;
-        if (plate.Relation != NamePlateRelation.Enemy)
+        if (!plate.Relation.IsEnemy() && !StreamerMode.IsAlias(plate.Name))
         {
             lock (gameFlagsLock)
                 gameTexts.TryGetValue(plate.Key, out texts);
@@ -213,9 +280,15 @@ internal sealed class NamePlateModule : IDisposable
                 displayName = texts.Name;
         }
 
+        // The game wraps some names in its own quote symbols (in PvP the plate of an enemy player is only its job, between two of them):
+        // our font does not have them and they showed as "?". Only what the font can draw is kept.
+        var drawableName = StripUndrawable(displayName);
+        if (drawableName.Length > 0)
+            displayName = drawableName;
+
         // The bar takes the color the game gives this plate (Character Configuration > Nameplates). The color of the name is
         // ours (the game's option colors the bar) and the outline of the texts is always black.
-        var nameColor = ImGui.GetColorU32(settings.NameColor);
+        var nameColor = ImGui.GetColorU32(style.NameColor);
         var edgeColor = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f));
         Vector4? gameBarColor = null;
         lock (gameFlagsLock)
@@ -248,9 +321,9 @@ internal sealed class NamePlateModule : IDisposable
         if (chevrons)
             drawName = true;
 
-        var width = MathF.Round(settings.WidthPx * scale);
-        var height = MathF.Round(settings.HeightPx * scale);
-        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), height / 2f);
+        var width = MathF.Round(style.WidthPx * scale);
+        var height = MathF.Round(style.HeightPx * scale);
+        var rounding = MathF.Min(MathF.Round(style.RoundingPx * scale), height / 2f);
 
         // The game's point is in the range -1 to 1 with y going up: turn it into pixels of the screen.
         var size = ImGuiHelpers.MainViewport.Size;
@@ -262,7 +335,7 @@ internal sealed class NamePlateModule : IDisposable
 
         if (drawBar)
         {
-            drawList.AddRectFilled(min, max, ImGui.GetColorU32(BackgroundColor), rounding);
+            drawList.AddRectFilled(min, max, ImGui.GetColorU32(style.BarBackgroundColor), rounding);
 
             // The fill is the full rounded bar cut by a clip rectangle, so a short fill never sticks out of the corners.
             var fraction = plate.MaxHp == 0 ? 0f : Math.Clamp(plate.Hp / (float)plate.MaxHp, 0f, 1f);
@@ -274,7 +347,7 @@ internal sealed class NamePlateModule : IDisposable
                 drawList.PopClipRect();
             }
 
-            drawList.AddRect(min, max, ImGui.GetColorU32(BorderColor), rounding, ImDrawFlags.None, 1f);
+            drawList.AddRect(min, max, ImGui.GetColorU32(style.BarBorderColor), rounding, ImDrawFlags.None, 1f);
 
             if (isTarget)
             {
@@ -292,12 +365,12 @@ internal sealed class NamePlateModule : IDisposable
 
         if (drawName)
         {
-            var showLevel = plate.Relation == NamePlateRelation.Enemy && settings.LevelMode != NamePlateLevelMode.Hidden
-                            && !(settings.HideSameLevel && plate.Level == playerLevel);
-            var levelText = settings.LevelMode == NamePlateLevelMode.WithPrefix ? $"Lv {plate.Level}" : plate.Level.ToString();
+            var showLevel = hasHp && style.LevelMode != NamePlateLevelMode.Hidden
+                            && !(style.HideSameLevel && plate.Level == playerLevel);
+            var levelText = style.LevelMode == NamePlateLevelMode.WithPrefix ? $"Lv {plate.Level}" : plate.Level.ToString();
             var text = showLevel ? $"{displayName}  {levelText}" : displayName;
             // The size is the height of the letters; a line is that tall, and the next one starts a gap below.
-            using (var face = plugin.Fonts.PushCap(settings.NameFont, settings.NameSize))
+            using (var face = plugin.Fonts.PushCap(style.NameFont, style.NameSize))
             {
                 // Name and title are ONE block of text (title in the line above or under the name, as the game puts it).
                 // The same point of the block is placed on the chosen point of the bar, then the offset moves it.
@@ -306,15 +379,15 @@ internal sealed class NamePlateModule : IDisposable
                 var lineGap = MathF.Round(face.Height * 0.45f);
                 var titleSize = title is null ? Vector2.Zero : face.Measure(title);
 
-                var anchorFraction = settings.NameAnchor.Fraction();
-                var offset = new Vector2(settings.NameOffsetX, settings.NameOffsetY) * scale;
+                var anchorFraction = style.NameAnchor.Fraction();
+                var offset = new Vector2(style.NameOffsetX, style.NameOffsetY) * scale;
 
                 // Where the name alone would be.
                 var namePos = min + (max - min) * anchorFraction - new Vector2(textSize.X * anchorFraction.X, textSize.Y * 0.5f) + offset;
 
                 // The small icon is part of the name line: the whole line (icon + name + level) is what gets centered.
-                var iconWidth = settings.ShowNameIcon && nameIconId > 0 && hasNameIcon
-                    ? MathF.Round(settings.NameIconSizePx * scale) + MathF.Round(settings.NameIconGapPx * scale)
+                var iconWidth = style.ShowNameIcon && nameIconId > 0 && hasNameIcon
+                    ? MathF.Round(style.NameIconSizePx * scale) + MathF.Round(style.NameIconGapPx * scale)
                     : 0f;
                 var lineWidth = iconWidth + textSize.X;
 
@@ -342,11 +415,11 @@ internal sealed class NamePlateModule : IDisposable
 
                 // The game's small icon at the left of the name (only for plates with HP: on objects and NPCs the value the game keeps in
                 // that slot is not shown by the game itself, it looked like a leftover, e.g. a hostile icon on a quest destination).
-                if (settings.ShowNameIcon && nameIconId > 0 && hasNameIcon)
+                if (style.ShowNameIcon && nameIconId > 0 && hasNameIcon)
                 {
-                    var side = MathF.Round(settings.NameIconSizePx * scale);
+                    var side = MathF.Round(style.NameIconSizePx * scale);
                     var iconMin = new Vector2(
-                        pos.X - side - MathF.Round(settings.NameIconGapPx * scale),
+                        pos.X - side - MathF.Round(style.NameIconGapPx * scale),
                         MathF.Round(pos.Y + (textSize.Y - side) / 2f));
                     var iconTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup((uint)nameIconId)).GetWrapOrEmpty();
                     drawList.AddImage(iconTexture.Handle, iconMin, iconMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
@@ -359,7 +432,7 @@ internal sealed class NamePlateModule : IDisposable
                     var namePart = $"{displayName}  ";
                     face.Draw(drawList, pos, namePart, nameColor, edgeColor);
                     var levelPos = new Vector2(MathF.Round(pos.X + face.Width(namePart)), pos.Y);
-                    face.Draw(drawList, levelPos, levelText, ImGui.GetColorU32(settings.LevelColor), edgeColor);
+                    face.Draw(drawList, levelPos, levelText, ImGui.GetColorU32(style.LevelColor), edgeColor);
                 }
                 else
                 {
@@ -385,36 +458,54 @@ internal sealed class NamePlateModule : IDisposable
         }
 
         // The game's big marker, centered over the name block and sitting on top of it.
-        if (settings.ShowMarkerIcon && markerIconId > 0)
+        if (style.ShowMarkerIcon && markerIconId > 0)
         {
-            var side = MathF.Round(settings.MarkerIconSizePx * scale);
+            var side = MathF.Round(style.MarkerIconSizePx * scale);
             var markerMin = new Vector2(
-                MathF.Round(markerCenterX - side / 2f + settings.MarkerOffsetX * scale),
-                MathF.Round(markerTop - side + settings.MarkerOffsetY * scale));
+                MathF.Round(markerCenterX - side / 2f + style.MarkerOffsetX * scale),
+                MathF.Round(markerTop - side + style.MarkerOffsetY * scale));
             var markerTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup((uint)markerIconId)).GetWrapOrEmpty();
             drawList.AddImage(markerTexture.Handle, markerMin, markerMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
         }
 
-        if (settings.ShowGameFlags)
+        if (style.ShowProgressBar && plate.Cast is not null && plate.Cast.TotalTime > 0f)
         {
-            var colorsText = string.Empty;
-            lock (gameFlagsLock)
-            {
-                if (gameColors.TryGetValue(plate.Key, out var colors))
-                    colorsText = $"  text {colors.Text:X8}  edge {colors.Edge:X8}";
-            }
+            var progressBarHeight = MathF.Round(style.ProgressBarHeightPx * scale);
+            var progressBarWidth = style.ProgressBarWidthPx > 0 ? MathF.Round(style.ProgressBarWidthPx * scale) : width;
+            var gap = MathF.Round(style.ProgressBarGapPx * scale);
+            var barHeight = max.Y - min.Y;
 
-            using (var face = plugin.Fonts.PushCap(settings.NameFont, 9))
-                face.Draw(drawList, new Vector2(max.X + 4f * scale, min.Y), $"flags {flags}{colorsText}  icon {nameIconId}  marker {markerIconId}", ImGui.GetColorU32(new Vector4(0.6f, 1f, 0.6f, 1f)));
+            // On the chosen side of the bar, then moved by the offsets (plus Y is up in the page, saved downwards).
+            var progressBarPos = style.ProgressBarPosition switch
+            {
+                NahjaUI.Modules.EnmityList.ProgressBarSide.Right => new Vector2(max.X + gap, min.Y + MathF.Round((barHeight - progressBarHeight) / 2f)),
+                NahjaUI.Modules.EnmityList.ProgressBarSide.Left => new Vector2(min.X - gap - progressBarWidth, min.Y + MathF.Round((barHeight - progressBarHeight) / 2f)),
+                _ => new Vector2(min.X, max.Y + gap)
+            };
+
+            progressBarPos += new Vector2(MathF.Round(style.ProgressBarOffsetX * scale), MathF.Round(style.ProgressBarOffsetY * scale));
+            DrawProgressBar(drawList, scale, style, plate.Cast, progressBarPos.X, progressBarPos.Y, progressBarWidth);
         }
 
-        if (settings.ShowCast && plate.Cast is not null && plate.Cast.TotalTime > 0f)
-            DrawCast(drawList, scale, settings, plate.Cast, min.X, max.Y + MathF.Round(settings.CastGapPx * scale), width);
+        // The rows of status icons are attached to the HP bar, so they only go with plates that draw one.
+        if (drawBar && plate.Statuses is { Count: > 0 } statuses)
+        {
+            var playerId = plugin.GameData.Current.Player?.EntityId ?? 0u;
+            var barSize = max - min;
+            plugin.StatusRows.DrawRows(drawList, style.Enhancements, style.Enfeeblements, statuses, statuses, false, playerId, min, barSize, "nameplate", !plate.Relation.IsEnemy());
+        }
     }
 
     // The game wraps the title in its own quote symbols (special characters our font does not have, they showed as "?").
     // Everything the font cannot draw is dropped and the title gets plain quotes.
     private static string CleanTitle(string raw)
+    {
+        var text = StripUndrawable(raw);
+        return text.Length == 0 ? string.Empty : $"\u00AB{text}\u00BB";
+    }
+
+    // Keeps only the characters the NahjaUI fonts can draw (the same ranges as OverlayFonts: Latin, accents, common punctuation).
+    private static string StripUndrawable(string raw)
     {
         var kept = new System.Text.StringBuilder(raw.Length);
         foreach (var c in raw)
@@ -424,8 +515,7 @@ internal sealed class NamePlateModule : IDisposable
                 kept.Append(c);
         }
 
-        var text = kept.ToString().Trim();
-        return text.Length == 0 ? string.Empty : $"\u00AB{text}\u00BB";
+        return kept.ToString().Trim();
     }
 
     // The game stores a color as a number (red in the lowest byte, like the colors of ImGui). A zero alpha means "not set":
@@ -440,20 +530,19 @@ internal sealed class NamePlateModule : IDisposable
 
     // Only until the game's color of a plate is known (the first frames).
     private static Vector4 FallbackBarColor(NamePlateRelation relation) =>
-        relation == NamePlateRelation.Enemy ? EnemyColor : new Vector4(0.62f, 0.62f, 0.72f, 1f);
+        relation.IsEnemy() ? EnemyColor : new Vector4(0.62f, 0.62f, 0.72f, 1f);
 
-    // The cast frame: the fill, the spell name and the time. It looks like the cast bar of the target (same colors, from the
-    // Cast bars page): the color of the fill says if you can interrupt the cast or not.
-    private void DrawCast(ImDrawListPtr drawList, float scale, NamePlateSettings settings, CastSnapshot cast, float left, float top, float width)
+    // The progress bar: the fill, the action name and the time. The colors are ours (Nameplates page); the fill says if the cast
+    // can be interrupted. The texts are placed like the other frame texts.
+    private void DrawProgressBar(ImDrawListPtr drawList, float scale, NamePlateStyle settings, CastSnapshot cast, float left, float top, float width)
     {
-        var look = plugin.Configuration.CastBars.Target;
-        var height = MathF.Round(settings.CastHeightPx * scale);
+        var height = MathF.Round(settings.ProgressBarHeightPx * scale);
         var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), height / 2f);
         var min = new Vector2(left, top);
         var max = min + new Vector2(width, height);
-        var color = cast.Interruptible ? look.BarColor : look.UninterruptibleColor;
+        var color = cast.Interruptible ? settings.ProgressBarColor : settings.ProgressBarUninterruptibleColor;
 
-        drawList.AddRectFilled(min, max, ImGui.GetColorU32(look.BackgroundColor), rounding);
+        drawList.AddRectFilled(min, max, ImGui.GetColorU32(settings.ProgressBarBackgroundColor), rounding);
 
         // The fill is the full rounded frame cut by a clip rectangle, so it never sticks out of the corners.
         var fraction = Math.Clamp(cast.CurrentTime / cast.TotalTime, 0f, 1f);
@@ -466,22 +555,31 @@ internal sealed class NamePlateModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(min, max, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, 1f);
+        drawList.AddRect(min, max, ImGui.GetColorU32(settings.ProgressBarBorderColor), rounding, ImDrawFlags.None, 1f);
 
-        var padding = 6f * scale;
-        using (var face = plugin.Fonts.PushCap(settings.CastFont, settings.CastTextSize))
+        var boxSize = max - min;
+        var timeText = settings.ProgressBarTimeMode == NahjaUI.Modules.ProgressBars.ProgressBarTimeMode.Remaining
+            ? MathF.Max(0f, cast.TotalTime - cast.CurrentTime).ToString("0.0")
+            : $"{cast.CurrentTime:0.0} / {cast.TotalTime:0.0}";
+        var timeRoom = 0f;
+        if (settings.ProgressBarTime.Enabled && settings.ProgressBarTime.Anchor.Fraction().X >= 0.5f)
         {
-            var y = MathF.Round((min.Y + max.Y - face.Height) / 2f);
-            var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-
-            // The time is at the right, the spell name at the left (shortened with "..." if it does not fit).
-            var timeText = MathF.Max(0f, cast.TotalTime - cast.CurrentTime).ToString("0.0");
-            var timeWidth = face.Width(timeText);
-            face.Draw(drawList, new Vector2(MathF.Round(max.X - padding - timeWidth), y), timeText, white);
-
-            var name = Fit(face, GameNames.CastName(cast.ActionType, cast.ActionId), width - padding * 3f - timeWidth);
-            face.Draw(drawList, new Vector2(MathF.Round(min.X + padding), y), name, white);
+            using (var face = plugin.Fonts.PushCap(settings.ProgressBarTime.Font, settings.ProgressBarTime.TextSize))
+                timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
         }
+
+        // The action name is shortened with "..." so it does not run into the time.
+        if (settings.ProgressBarName.Enabled)
+        {
+            string name;
+            using (var face = plugin.Fonts.PushCap(settings.ProgressBarName.Font, settings.ProgressBarName.TextSize))
+                name = Fit(face, GameNames.CastName(cast.ActionType, cast.ActionId), width - timeRoom - MathF.Round(12f * scale));
+
+            plugin.UnitFrameSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
+        }
+
+        if (settings.ProgressBarTime.Enabled)
+            plugin.UnitFrameSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.

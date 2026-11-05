@@ -9,18 +9,18 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
-using NahjaUI.Modules.Auras;
+using NahjaUI.Modules.Trackers;
 
-namespace NahjaUI.Modules.CastBars;
+namespace NahjaUI.Modules.ProgressBars;
 
 /// <summary>
-/// Draws your cast bar and your target's cast bar: a plain rectangle that fills from left to right,
-/// with the spell icon inside it, the spell name and the time. It also hides the game's own cast bars.
+/// Draws your progress bar and your target's progress bar: a plain rectangle that fills from left to right,
+/// with the action icon inside it, the action name and the time. It also hides the game's own progress bars.
 /// It only reads the game snapshot.
 /// </summary>
-internal sealed class CastBarModule : IDisposable
+internal sealed class ProgressBarModule : IDisposable
 {
-    // The game's own cast bars: yours, and the one of the target (the separate part of "Target Info").
+    // The game's own progress bars: yours, and the one of the target (the separate part of "Target Info").
     private const string NativePlayerBar = "_CastBar";
     private const string NativeTargetBar = "_TargetInfoCastBar";
 
@@ -29,11 +29,11 @@ internal sealed class CastBarModule : IDisposable
     private readonly Plugin plugin;
     private readonly NativeWindowHider hider = new();
 
-    public CastBarModule(Plugin plugin)
+    public ProgressBarModule(Plugin plugin)
     {
         this.plugin = plugin;
 
-        PlayerElement = plugin.Layout.Register("castbar.player", "Player cast bar", new ElementLayout
+        PlayerElement = plugin.Layout.Register("progressbar.player", "Player progress bar", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -43,7 +43,7 @@ internal sealed class CastBarModule : IDisposable
             Height = 26
         });
 
-        TargetElement = plugin.Layout.Register("castbar.target", "Target cast bar", new ElementLayout
+        TargetElement = plugin.Layout.Register("progressbar.target", "Target progress bar", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -53,10 +53,24 @@ internal sealed class CastBarModule : IDisposable
             Height = 22
         });
 
+        // The global cooldown bar sits on top of the player's progress bar (1 px apart, like the other stacked bars).
+        GcdElement = plugin.Layout.Register("progressbar.gcd", "Global cooldown bar", new ElementLayout
+        {
+            AttachTo = "progressbar.player",
+            ScreenAnchor = AnchorPoint.Top,
+            SelfAnchor = AnchorPoint.Bottom,
+            OffsetX = 0,
+            OffsetY = -1,
+            Width = 240,
+            Height = 6
+        });
+
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);
     }
 
     public LayoutElement PlayerElement { get; }
+
+    public LayoutElement GcdElement { get; }
 
     public LayoutElement TargetElement { get; }
 
@@ -73,14 +87,14 @@ internal sealed class CastBarModule : IDisposable
 
     // ---------------------------------------------------------------- hiding the game's bars
 
-    // Runs right before the game draws one of its own cast bars: marking it invisible makes the game skip it.
+    // Runs right before the game draws one of its own progress bars: marking it invisible makes the game skip it.
     private unsafe void OnNativePreDraw(AddonEvent type, AddonArgs args)
     {
         var settings = args.AddonName == NativePlayerBar
-            ? plugin.Configuration.CastBars.Player
-            : plugin.Configuration.CastBars.Target;
+            ? plugin.Configuration.ProgressBars.Player
+            : plugin.Configuration.ProgressBars.Target;
 
-        if (!settings.Enabled || !settings.HideNative)
+        if (!settings.Enabled)
             return;
 
         // Skipping the game's own drawing hides the bar completely. Only clearing the "visible" flag was not enough:
@@ -92,13 +106,13 @@ internal sealed class CastBarModule : IDisposable
     // ---------------------------------------------------------------- drawing
 
     // What a bar shows for one frame.
-    private readonly record struct CastView(string Name, uint IconId, float Current, float Total, bool Interruptible);
+    private readonly record struct ProgressBarView(string Name, uint IconId, float Current, float Total, bool Interruptible);
 
     // Does this module want the game's window hidden right now?
     private bool HidesNative(string windowName)
     {
-        var settings = windowName == NativePlayerBar ? plugin.Configuration.CastBars.Player : plugin.Configuration.CastBars.Target;
-        return settings.Enabled && settings.HideNative;
+        var settings = windowName == NativePlayerBar ? plugin.Configuration.ProgressBars.Player : plugin.Configuration.ProgressBars.Target;
+        return settings.Enabled;
     }
 
     public void Draw()
@@ -108,23 +122,99 @@ internal sealed class CastBarModule : IDisposable
         var preview = PreviewRequested || plugin.Layout.UnlockMode;
         PreviewRequested = false;
 
-        var settings = plugin.Configuration.CastBars;
+        var settings = plugin.Configuration.ProgressBars;
 
-        DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false, true);
+        var (playerPos, playerSize) = LayoutManager.GetRect(PlayerElement.Layout);
+        plugin.GameCover.Draw(playerPos, playerSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false, true));
+
+        DrawGcd(settings.Gcd, snapshot.Gcd, preview);
+
         // The icon of an enemy action means nothing (the game's own bar has none): the target bar shows it only for allies.
-        DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, false);
+        var (targetPos, targetSize) = LayoutManager.GetRect(TargetElement.Layout);
+        plugin.GameCover.Draw(targetPos, targetSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, false));
     }
 
-    private void DrawBar(CastBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
+    // The global cooldown: a thin bar that fills while it runs, with the queue window (last 0.5 s) and the weave limit marked.
+    private void DrawGcd(GcdBarSettings settings, GcdSnapshot? gcd, bool preview)
     {
         if (!settings.Enabled)
             return;
 
-        CastView view;
+        preview |= plugin.Layout.IsPreviewing(GcdElement.Id);
+
+        float elapsed, total;
+        if (gcd is { Active: true })
+        {
+            elapsed = gcd.Elapsed;
+            total = gcd.Total;
+        }
+        else if (preview)
+        {
+            total = 2.5f;
+            elapsed = 1.5f;
+        }
+        else if (settings.AlwaysVisible)
+        {
+            total = 2.5f;
+            elapsed = 0f;
+        }
+        else
+        {
+            return;
+        }
+
+        var scale = ImGuiHelpers.GlobalScale;
+        var (pos, size) = LayoutManager.GetRect(GcdElement.Layout);
+        var max = pos + size;
+        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), size.Y / 2f);
+        var thickness = MathF.Max(1f, MathF.Round(scale));
+        var drawList = ImGui.GetBackgroundDrawList();
+
+        var fraction = Math.Clamp(elapsed / total, 0f, 1f);
+
+        drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.BackgroundColor), rounding, ImDrawFlags.RoundCornersAll);
+
+        var fillRight = MathF.Round(pos.X + size.X * fraction);
+        if (fillRight > pos.X)
+            FillShape(drawList, pos, max, pos.X, fillRight, ImGui.GetColorU32(settings.BarColor), rounding, ImDrawFlags.RoundCornersAll);
+
+        // The queue window: from 0.5 s before the end to the end. An action pressed here is kept and used right when the cooldown ends.
+        var queue = settings.QueueMs / 1000f;
+        if (settings.ShowQueueWindow && queue > 0f && total > queue)
+        {
+            var x = MathF.Round(pos.X + size.X * ((total - queue) / total));
+            FillShape(drawList, pos, max, x, max.X, ImGui.GetColorU32(Theme.WithAlpha(settings.QueueColor, 0.45f)), rounding, ImDrawFlags.RoundCornersAll);
+            var lineX = x + thickness / 2f;
+            drawList.AddLine(new Vector2(lineX, pos.Y), new Vector2(lineX, max.Y), ImGui.GetColorU32(settings.QueueColor), thickness);
+        }
+
+        // The weave limit: an ability used after this line delays the next global action.
+        var weave = settings.WeaveMs / 1000f;
+        if (settings.ShowWeaveWindow && weave > 0f && total > weave)
+        {
+            var x = MathF.Round(pos.X + size.X * ((total - weave) / total));
+            var lineX = x + thickness / 2f;
+            drawList.AddLine(new Vector2(lineX, pos.Y), new Vector2(lineX, max.Y), ImGui.GetColorU32(settings.WeaveColor), thickness);
+        }
+
+        drawList.AddRect(pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.RoundCornersAll, thickness);
+    }
+
+    private void DrawBar(ProgressBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
+    {
+        if (!settings.Enabled)
+            return;
+
+        settings.EnsureTexts();
+
+        // The bar selected in the Layout page shows a sample, so it can be placed even when nothing is being cast.
+        preview |= plugin.Layout.IsPreviewing(element.Id);
+
+        ProgressBarView view;
 
         if (cast is not null && cast.TotalTime > 0f)
         {
-            view = new CastView(
+            view = new ProgressBarView(
                 GameNames.CastName(cast.ActionType, cast.ActionId),
                 GameNames.CastIconId(cast.ActionType, cast.ActionId),
                 cast.CurrentTime,
@@ -134,7 +224,7 @@ internal sealed class CastBarModule : IDisposable
         else if (preview)
         {
             // A sample cast, 60 % done.
-            view = new CastView("Spell name", GameNames.ActionIconId(3), 1.2f, 2.0f, true);
+            view = new ProgressBarView("Action name", GameNames.ActionIconId(3), 1.2f, 2.0f, true);
         }
         else
         {
@@ -163,7 +253,7 @@ internal sealed class CastBarModule : IDisposable
         {
             var iconMax = new Vector2(pos.X + size.Y, max.Y);
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(view.IconId)).GetWrapOrEmpty();
-            var (uv0, uv1) = AuraEngine.IconUv(new Vector2(size.Y, size.Y), 1f, 0.08f);
+            var (uv0, uv1) = TrackerEngine.IconUv(new Vector2(size.Y, size.Y), 1f, 0.08f);
 
             drawList.AddImageRounded(texture.Handle, pos, iconMax, uv0, uv1, 0xFFFFFFFFu, rounding, ImDrawFlags.RoundCornersLeft);
             barLeft = iconMax.X;
@@ -205,7 +295,7 @@ internal sealed class CastBarModule : IDisposable
         drawList.PopClipRect();
     }
 
-    private static void DrawSlideCast(ImDrawListPtr drawList, CastBarSettings settings, CastView view, float barLeft, Vector2 pos, Vector2 max, float thickness, float rounding, ImDrawFlags shapeFlags)
+    private static void DrawSlideCast(ImDrawListPtr drawList, ProgressBarSettings settings, ProgressBarView view, float barLeft, Vector2 pos, Vector2 max, float thickness, float rounding, ImDrawFlags shapeFlags)
     {
         var window = settings.SlideCastMs / 1000f;
 
@@ -229,40 +319,38 @@ internal sealed class CastBarModule : IDisposable
             thickness);
     }
 
-    // The spell name at the left and the time at the right, in the interface font with an outline.
-    private void DrawTexts(ImDrawListPtr drawList, CastBarSettings settings, CastView view, float barLeft, Vector2 pos, Vector2 max)
+    // The action name and the time left: two texts, each placed like every other text of the interface (point of the bar, offsets, size, font, color).
+    // The name's box starts after the icon; the name is shortened with "..." so it never runs into the time.
+    private void DrawTexts(ImDrawListPtr drawList, ProgressBarSettings settings, ProgressBarView view, float barLeft, Vector2 pos, Vector2 max)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var padding = 6f * scale;
-        var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
 
-        // The size is the height of the letters, in logical pixels.
-        using (var face = plugin.Fonts.PushCap(settings.Font, settings.TextSize))
+        var remaining = Math.Max(0f, view.Total - view.Current);
+        var timeText = settings.TimeMode == ProgressBarTimeMode.Remaining
+            ? remaining.ToString("0.0")
+            : $"{view.Current:0.0} / {view.Total:0.0}";
+
+        var timeRoom = 0f;
+        if (settings.Time.Enabled && settings.Time.Anchor.Fraction().X >= 0.5f)
         {
-            // The letters are centred in the bar.
-            var y = MathF.Round((pos.Y + max.Y - face.Height) / 2f);
-
-            var timeWidth = 0f;
-            if (settings.ShowTime)
-            {
-                var remaining = Math.Max(0f, view.Total - view.Current);
-                var timeText = settings.TimeMode == CastTimeMode.Remaining
-                    ? remaining.ToString("0.0")
-                    : $"{view.Current:0.0} / {view.Total:0.0}";
-
-                timeWidth = face.Width(timeText);
-                face.Draw(drawList, new Vector2(MathF.Round(max.X - padding - timeWidth), y), timeText, white);
-            }
-
-            if (settings.ShowName)
-            {
-                // The name never runs into the time: it is shortened if it does not fit.
-                var available = max.X - padding - (settings.ShowTime ? timeWidth + padding : 0f) - (barLeft + padding);
-                var name = Fit(face, view.Name, available);
-
-                face.Draw(drawList, new Vector2(MathF.Round(barLeft + padding), y), name, white);
-            }
+            using (var face = plugin.Fonts.PushCap(settings.Time.Font, settings.Time.TextSize))
+                timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
         }
+
+        var boxPos = new Vector2(barLeft, pos.Y);
+        var boxSize = new Vector2(max.X - barLeft, max.Y - pos.Y);
+
+        if (settings.Name.Enabled)
+        {
+            string name;
+            using (var face = plugin.Fonts.PushCap(settings.Name.Font, settings.Name.TextSize))
+                name = Fit(face, view.Name, boxSize.X - timeRoom - MathF.Round(12f * scale));
+
+            plugin.UnitFrameSystem.DrawText(drawList, name, settings.Name, boxPos, boxSize);
+        }
+
+        if (settings.Time.Enabled)
+            plugin.UnitFrameSystem.DrawText(drawList, timeText, settings.Time, boxPos, boxSize);
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.

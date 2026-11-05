@@ -24,7 +24,7 @@ public enum OverlayFont
     /// <summary>A narrow, bold font (Trump Gothic). Fits more text in a small icon.</summary>
     Condensed,
 
-    /// <summary>NahjaUI display font: Saira Condensed SemiBold. For names and cast bar texts.</summary>
+    /// <summary>NahjaUI display font: Saira Condensed SemiBold. For names and progress bar texts.</summary>
     NahjaDisplay,
 
     /// <summary>NahjaUI number font: Saira Condensed Bold. For timers, stacks and numbers.</summary>

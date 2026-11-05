@@ -10,16 +10,16 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 
-namespace NahjaUI.Modules.Auras;
+namespace NahjaUI.Modules.Trackers;
 
 /// <summary>
-/// The "Auras" page of the main window. On the left, an explorer: groups and loose auras mixed in any order,
-/// groups that open and close, and drag and drop to reorder or to move auras in and out of groups.
+/// The "Trackers" page of the main window. On the left, an explorer: groups and loose trackers mixed in any order,
+/// groups that open and close, and drag and drop to reorder or to move trackers in and out of groups.
 /// On the right, the editor of what is selected.
 /// </summary>
-internal sealed class AuraEditor
+internal sealed class TrackerEditor
 {
-    private const string DefaultName = "New aura";
+    private const string DefaultName = "New tracker";
     private const string NoGroupLabel = "None (free position)";
     private const int MaxListedStatuses = 12;
     private const int MaxSearchResults = 10;
@@ -33,16 +33,21 @@ internal sealed class AuraEditor
     private readonly Plugin plugin;
 
     // At most one of these two is set: the thing being edited.
-    private string? selectedAuraId;
+    private string? selectedTrackerId;
     private string? selectedGroupId;
 
-    // The aura or group waiting for a second click on its delete button.
+    // The tracker or group waiting for a second click on its delete button.
     private string? pendingDeleteId;
-    private AuraRuntime? pendingDuplicate;
-    private AuraRuntime? pendingRemove;
+    private TrackerRuntime? pendingDuplicate;
+    private TrackerRuntime? pendingRemove;
+    private TrackerGroupRuntime? pendingDuplicateGroup;
+    private TrackerGroupRuntime? pendingRemoveGroup;
+
+    // What the last preset did (shown under the buttons of the explorer until it is dismissed).
+    private string? presetReport;
 
     // Status search
-    // The filter of the explorer: only the auras that load on a job (the one you play, or the one you pick), or every aura.
+    // The filter of the explorer: only the trackers that load on a job (the one you play, or the one you pick), or every tracker.
     private enum JobFilterMode
     {
         MyJob,
@@ -50,11 +55,21 @@ internal sealed class AuraEditor
         PickedJob
     }
 
+    // PvE trackers and PvP trackers never are the same ones: by default the list shows the kind of content you are in.
+    private enum ContentFilterMode
+    {
+        Here,
+        Pve,
+        Pvp,
+        Both
+    }
+
+    private ContentFilterMode contentFilter = ContentFilterMode.Here;
+
     private JobFilterMode jobFilter = JobFilterMode.MyJob;
     private uint pickedFilterJob;
 
     private string search = string.Empty;
-    private bool addAsExtraEffect;
     private string appliedSearch = string.Empty;
     private IReadOnlyList<StatusSearchResult> searchResults = Array.Empty<StatusSearchResult>();
 
@@ -73,7 +88,7 @@ internal sealed class AuraEditor
     private bool dragging;
     private Vector2 pressPosition;
 
-    public AuraEditor(Plugin plugin)
+    public TrackerEditor(Plugin plugin)
     {
         this.plugin = plugin;
     }
@@ -81,7 +96,7 @@ internal sealed class AuraEditor
     // ---------------------------------------------------------------- explorer data types
 
     // A row of the explorer, with its place on the screen. Parent is the group of a member row.
-    private sealed record RowRect(string Key, AuraGroupRuntime? Group, AuraRuntime? Aura, AuraGroupRuntime? Parent, Vector2 Min, Vector2 Max)
+    private sealed record RowRect(string Key, TrackerGroupRuntime? Group, TrackerRuntime? Tracker, TrackerGroupRuntime? Parent, Vector2 Min, Vector2 Max)
     {
         public bool IsGroup => Group is not null;
     }
@@ -100,8 +115,8 @@ internal sealed class AuraEditor
     private readonly record struct DropTarget(
         DropKind Kind,
         string? TargetKey,
-        AuraGroupRuntime? Group,
-        AuraRuntime? Neighbour,
+        TrackerGroupRuntime? Group,
+        TrackerRuntime? Neighbour,
         float LineY,
         float LineX,
         RowRect? Highlight);
@@ -110,24 +125,41 @@ internal sealed class AuraEditor
 
     public void Draw()
     {
-        var engine = plugin.AuraSystem;
+        var engine = plugin.TrackerSystem;
 
         if (pendingRemove is not null)
         {
             engine.Remove(pendingRemove);
-            if (selectedAuraId == pendingRemove.Definition.Id)
-                selectedAuraId = null;
+            if (selectedTrackerId == pendingRemove.Definition.Id)
+                selectedTrackerId = null;
 
             pendingRemove = null;
             pendingDeleteId = null;
             pendingDuplicate = null;
         }
 
+        if (pendingRemoveGroup is not null)
+        {
+            if (selectedGroupId == pendingRemoveGroup.Definition.Id)
+                selectedGroupId = null;
+
+            engine.RemoveGroupWithTrackers(pendingRemoveGroup);
+            pendingRemoveGroup = null;
+            selectedTrackerId = selectedTrackerId is not null && engine.Trackers.Any(a => a.Definition.Id == selectedTrackerId) ? selectedTrackerId : null;
+        }
+
+        if (pendingDuplicateGroup is not null)
+        {
+            var groupCopy = engine.DuplicateGroup(pendingDuplicateGroup);
+            pendingDuplicateGroup = null;
+            SelectGroup(groupCopy.Definition.Id);
+        }
+
         if (pendingDuplicate is not null)
         {
             var copy = engine.Duplicate(pendingDuplicate);
             pendingDuplicate = null;
-            SelectAura(copy.Definition.Id);
+            SelectTracker(copy.Definition.Id);
         }
         var snapshot = plugin.GameData.Current;
         var scale = ImGuiHelpers.GlobalScale;
@@ -139,7 +171,7 @@ internal sealed class AuraEditor
         {
             var explorerWidth = Math.Clamp(available.X * 0.42f, 300f * scale, 440f * scale);
 
-            using (var left = ImRaii.Child("##aura_explorer_column", new Vector2(explorerWidth, 0f), false))
+            using (var left = ImRaii.Child("##tracker_explorer_column", new Vector2(explorerWidth, 0f), false))
             {
                 if (left.Success)
                     DrawExplorer(engine, ImGui.GetContentRegionAvail().Y - 4f * scale);
@@ -147,7 +179,7 @@ internal sealed class AuraEditor
 
             ImGui.SameLine();
 
-            using (var right = ImRaii.Child("##aura_editor_column", Vector2.Zero, false))
+            using (var right = ImRaii.Child("##tracker_editor_column", Vector2.Zero, false))
             {
                 if (right.Success)
                     DrawEditor(engine, snapshot);
@@ -160,7 +192,7 @@ internal sealed class AuraEditor
         }
     }
 
-    private void DrawEditor(AuraEngine engine, GameSnapshot snapshot)
+    private void DrawEditor(TrackerEngine engine, GameSnapshot snapshot)
     {
         var group = engine.Groups.FirstOrDefault(g => g.Definition.Id == selectedGroupId);
         if (group is not null)
@@ -169,36 +201,35 @@ internal sealed class AuraEditor
             return;
         }
 
-        var aura = engine.Auras.FirstOrDefault(r => r.Definition.Id == selectedAuraId);
-        if (aura is null)
+        var tracker = engine.Trackers.FirstOrDefault(r => r.Definition.Id == selectedTrackerId);
+        if (tracker is null)
         {
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Select a group or an aura to edit it,");
+            ImGui.TextColored(Theme.TextMuted, "Select a group or a tracker to edit it,");
             ImGui.TextColored(Theme.TextMuted, "or create a new one.");
             return;
         }
 
-        var definition = aura.Definition;
+        var definition = tracker.Definition;
 
-        DrawGeneral(engine, aura);
+        DrawGeneral(engine, tracker);
 
         DrawRules(definition, snapshot);
-        DrawDisplay(engine, definition, aura, null);
-        DrawTexts(definition);
+        DrawDisplay(engine, definition, tracker, null);
         DrawLoad(engine, definition, snapshot, null);
-        DrawDelete(engine, aura);
+        DrawDelete(engine, tracker);
     }
 
     // ---------------------------------------------------------------- explorer
 
     // The card that holds the list. A height of 0 or less fills the space that is left.
-    private void DrawExplorer(AuraEngine engine, float height)
+    private void DrawExplorer(TrackerEngine engine, float height)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var width = ImGui.GetContentRegionAvail().X - 16f * scale;
 
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Card))
-        using (var card = ImRaii.Child("##aura_explorer", new Vector2(width, Math.Max(0f, height)), true))
+        using (var card = ImRaii.Child("##tracker_explorer", new Vector2(width, Math.Max(0f, height)), true))
         {
             if (card.Success)
                 DrawExplorerContent(engine);
@@ -207,11 +238,11 @@ internal sealed class AuraEditor
         ImGui.Spacing();
     }
 
-    private void DrawExplorerContent(AuraEngine engine)
+    private void DrawExplorerContent(TrackerEngine engine)
     {
         var scale = ImGuiHelpers.GlobalScale;
 
-        Widgets.SectionLabel("Groups and auras");
+        Widgets.SectionLabel("Groups and trackers");
 
         if (Widgets.PrimaryButton("New group"))
         {
@@ -221,14 +252,14 @@ internal sealed class AuraEditor
 
         ImGui.SameLine();
 
-        if (ImGui.Button("New aura"))
+        if (ImGui.Button("New tracker"))
         {
-            // A new aura goes into the group that is selected, or into the group of the selected aura.
+            // A new tracker goes into the group that is selected, or into the group of the selected tracker.
             var target = SelectedGroupContext(engine);
             var created = engine.AddNew(target);
 
-            // Looking at the auras of one job: a loose new aura loads on that job (it can be changed in its load conditions).
-            // An aura created inside a group keeps loading on every job, so a general group never ends up limited by mistake.
+            // Looking at the trackers of one job: a loose new tracker loads on that job (it can be changed in its load conditions).
+            // A tracker created inside a group keeps loading on every job, so a general group never ends up limited by mistake.
             var filterNow = JobFilterNow();
             if (target is null && filterNow is { } jobForNew && !created.Definition.Load.JobIds.Contains(jobForNew))
                 created.Definition.Load.JobIds.Add(jobForNew);
@@ -236,27 +267,68 @@ internal sealed class AuraEditor
             if (target is not null)
                 target.Definition.Expanded = true;
 
-            SelectAura(created.Definition.Id);
+            SelectTracker(created.Definition.Id);
+        }
+
+        ImGui.SameLine();
+
+        if (ImGui.Button("Presets"))
+            ImGui.OpenPopup("##tracker_presets");
+
+        if (ImGui.BeginPopup("##tracker_presets"))
+        {
+            ImGui.TextColored(Theme.TextMuted, "Add the trackers of a job");
+
+            // The preset of the job you are playing first, then the others in the order of the game's job list.
+            var myPreset = TrackerPresets.NameForJob(plugin.GameData.Current.Player?.JobId ?? 0);
+            var ordered = TrackerPresets.Names.OrderBy(name => name == myPreset ? 0 : 1).ToArray();
+
+            foreach (var presetName in ordered)
+            {
+                if (ImGui.Selectable(presetName))
+                    presetReport = TrackerPresets.Apply(engine, presetName);
+            }
+
+            ImGui.EndPopup();
+        }
+
+        if (presetReport is not null)
+        {
+            ImGui.Spacing();
+            ImGui.TextWrapped(presetReport);
+
+            if (ImGui.SmallButton("OK##preset_report"))
+                presetReport = null;
         }
 
         ImGui.Spacing();
 
         // The header (buttons and filter) stays in place; only the list below it scrolls.
-        ImGui.TextColored(Theme.TextMuted, "Show auras of");
+        ImGui.TextColored(Theme.TextMuted, "Show trackers of");
+        var filterWidth = ImGui.GetContentRegionAvail().X;
         var filterJob = DrawJobFilter();
+
+        // The second filter goes next to the first one when both fit; otherwise it goes on the next line (never cut).
+        var filterGap = ImGui.GetStyle().ItemSpacing.X;
+        if (filterWidth >= (220f + 150f) * ImGuiHelpers.GlobalScale + filterGap + 8f * ImGuiHelpers.GlobalScale)
+            ImGui.SameLine();
+
+        var filterPvp = DrawContentFilter();
 
         ImGui.Spacing();
 
-        using var list = ImRaii.Child("##aura_explorer_list", Vector2.Zero, false);
+        using var list = ImRaii.Child("##tracker_explorer_list", Vector2.Zero, false);
         if (!list.Success)
             return;
 
         rows.Clear();
         explorerHovered = ImGui.IsWindowHovered();
 
-        // An aura passes the filter when it loads on every job or on the chosen one.
-        bool Passes(AuraRuntime aura) =>
-            filterJob is null || aura.Definition.Load.JobIds.Count == 0 || aura.Definition.Load.JobIds.Contains(filterJob.Value);
+        // A tracker passes the filter when it loads on every job or on the chosen one.
+        bool Passes(TrackerRuntime tracker) =>
+            (filterJob is null || tracker.Definition.Load.JobIds.Count == 0 || tracker.Definition.Load.JobIds.Contains(filterJob.Value))
+            && (filterPvp is null || tracker.Definition.Load.Where == TrackerPvpMode.Everywhere
+                || (filterPvp.Value ? tracker.Definition.Load.Where == TrackerPvpMode.PvpOnly : tracker.Definition.Load.Where == TrackerPvpMode.PveOnly));
 
         // Rows are close together, like in a file explorer.
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f * scale, RowGap * scale));
@@ -274,7 +346,7 @@ internal sealed class AuraEditor
                 var members = allMembers.Where(Passes).ToList();
                 hidden += allMembers.Count - members.Count;
 
-                // A group with auras but none for this job is left out; an empty group is always shown.
+                // A group with trackers but none for this job is left out; an empty group is always shown.
                 if (allMembers.Count > 0 && members.Count == 0)
                     continue;
 
@@ -283,13 +355,13 @@ internal sealed class AuraEditor
                 if (group.Definition.Expanded)
                 {
                     foreach (var member in members)
-                        DrawAuraRow(member, group);
+                        DrawTrackerRow(member, group);
                 }
             }
-            else if (entry.Aura is { } aura)
+            else if (entry.Tracker is { } tracker)
             {
-                if (Passes(aura))
-                    DrawAuraRow(aura, null);
+                if (Passes(tracker))
+                    DrawTrackerRow(tracker, null);
                 else
                     hidden++;
             }
@@ -298,13 +370,13 @@ internal sealed class AuraEditor
         ImGui.PopStyleVar();
 
         if (hidden > 0)
-            ImGui.TextColored(Theme.TextMuted, $"{hidden} aura(s) of other jobs are hidden by the filter.");
+            ImGui.TextColored(Theme.TextMuted, $"{hidden} tracker(s) of other jobs are hidden by the filter.");
 
         HandleDrag(engine);
     }
 
     // The job filter of the explorer: a combo with my job, every job, or one job of the list. Returns the job to filter by
-    // (null = show every aura).
+    // (null = show every tracker).
     private uint? DrawJobFilter()
     {
         var myJob = plugin.GameData.Current.Player?.JobId;
@@ -320,7 +392,7 @@ internal sealed class AuraEditor
         };
 
         ImGui.SetNextItemWidth(220f * ImGuiHelpers.GlobalScale);
-        if (ImGui.BeginCombo("##aura_job_filter", label, ImGuiComboFlags.None))
+        if (ImGui.BeginCombo("##tracker_job_filter", label, ImGuiComboFlags.None))
         {
             if (myJob is not null && ImGui.Selectable($"My job ({GameNames.JobAbbreviation(myJob.Value)})", jobFilter == JobFilterMode.MyJob))
                 jobFilter = JobFilterMode.MyJob;
@@ -353,7 +425,48 @@ internal sealed class AuraEditor
         };
     }
 
-    // The job the explorer is filtering by right now (null when it shows every aura).
+    // The content filter of the explorer: the kind of content you are in, PvE, PvP or both. Returns true to show the trackers of PvP,
+    // false for PvE, null for both.
+    private bool? DrawContentFilter()
+    {
+        var inPvp = plugin.GameData.Current.Context.InPvP;
+
+        var label = contentFilter switch
+        {
+            ContentFilterMode.Pve => "PvE",
+            ContentFilterMode.Pvp => "PvP",
+            ContentFilterMode.Both => "PvE and PvP",
+            _ => inPvp ? "Here (PvP)" : "Here (PvE)"
+        };
+
+        ImGui.SetNextItemWidth(150f * ImGuiHelpers.GlobalScale);
+        if (ImGui.BeginCombo("##tracker_content_filter", label, ImGuiComboFlags.None))
+        {
+            if (ImGui.Selectable(inPvp ? "Here (PvP)" : "Here (PvE)", contentFilter == ContentFilterMode.Here))
+                contentFilter = ContentFilterMode.Here;
+
+            if (ImGui.Selectable("PvE", contentFilter == ContentFilterMode.Pve))
+                contentFilter = ContentFilterMode.Pve;
+
+            if (ImGui.Selectable("PvP", contentFilter == ContentFilterMode.Pvp))
+                contentFilter = ContentFilterMode.Pvp;
+
+            if (ImGui.Selectable("PvE and PvP", contentFilter == ContentFilterMode.Both))
+                contentFilter = ContentFilterMode.Both;
+
+            ImGui.EndCombo();
+        }
+
+        return contentFilter switch
+        {
+            ContentFilterMode.Pve => false,
+            ContentFilterMode.Pvp => true,
+            ContentFilterMode.Both => null,
+            _ => inPvp
+        };
+    }
+
+    // The job the explorer is filtering by right now (null when it shows every tracker).
     private uint? JobFilterNow()
     {
         var myJob = plugin.GameData.Current.Player?.JobId;
@@ -365,21 +478,21 @@ internal sealed class AuraEditor
         };
     }
 
-    // The group a "New aura" should go into: the selected group, or the group of the selected aura.
-    private AuraGroupRuntime? SelectedGroupContext(AuraEngine engine)
+    // The group a "New tracker" should go into: the selected group, or the group of the selected tracker.
+    private TrackerGroupRuntime? SelectedGroupContext(TrackerEngine engine)
     {
         if (selectedGroupId is not null)
             return engine.FindGroup(selectedGroupId);
 
-        var aura = engine.Auras.FirstOrDefault(a => a.Definition.Id == selectedAuraId);
-        return engine.FindGroup(aura?.Definition.GroupId);
+        var tracker = engine.Trackers.FirstOrDefault(a => a.Definition.Id == selectedTrackerId);
+        return engine.FindGroup(tracker?.Definition.GroupId);
     }
 
-    private void DrawGroupRow(AuraGroupRuntime group, int memberCount)
+    private void DrawGroupRow(TrackerGroupRuntime group, int memberCount)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var definition = group.Definition;
-        var key = AuraEngine.GroupKey(definition);
+        var key = TrackerEngine.GroupKey(definition);
 
         var width = ImGui.GetContentRegionAvail().X - 4f * scale;
         var height = RowHeight * scale;
@@ -404,9 +517,11 @@ internal sealed class AuraEditor
 
         var name = string.IsNullOrWhiteSpace(definition.Name) ? "Unnamed group" : definition.Name;
         var textY = center - ImGui.GetTextLineHeight() / 2f;
-        drawList.AddText(new Vector2(min.X + 58f * scale, textY), ImGui.GetColorU32(Theme.Text), name);
+        var groupCountText = !definition.Enabled ? "Off" : memberCount == 1 ? "1 tracker" : $"{memberCount} trackers";
+        var nameRoom = max.X - 10f * scale - ImGui.CalcTextSize(groupCountText).X - 10f * scale - (min.X + 58f * scale);
+        drawList.AddText(new Vector2(min.X + 58f * scale, textY), ImGui.GetColorU32(Theme.Text), FitText(name, nameRoom));
 
-        var count = memberCount == 1 ? "1 aura" : $"{memberCount} auras";
+        var count = groupCountText;
         var countWidth = ImGui.CalcTextSize(count).X;
         drawList.AddText(new Vector2(max.X - 10f * scale - countWidth, textY), ImGui.GetColorU32(Theme.TextMuted), count);
 
@@ -430,13 +545,51 @@ internal sealed class AuraEditor
                 StartDrag(key, mouse);
             }
         }
+
+        // Right click: the menu of the group.
+        var menuId = $"##group_menu_{key}";
+        if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+        {
+            SelectGroup(definition.Id);
+            ImGui.OpenPopup(menuId);
+        }
+
+        if (ImGui.BeginPopup(menuId))
+        {
+            if (ImGui.Selectable(definition.Enabled ? "Disable" : "Enable"))
+            {
+                definition.Enabled = !definition.Enabled;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.Selectable("Duplicate"))
+                pendingDuplicateGroup = group;
+
+            if (ImGui.Selectable("Delete"))
+                pendingRemoveGroup = group;
+
+            ImGui.EndPopup();
+        }
     }
 
-    private void DrawAuraRow(AuraRuntime aura, AuraGroupRuntime? parent)
+    // The text cut with "..." at the end so it is not wider than <room> pixels (the whole text when it fits).
+    private static string FitText(string text, float room)
+    {
+        if (ImGui.CalcTextSize(text).X <= room)
+            return text;
+
+        var end = text.Length;
+        while (end > 0 && ImGui.CalcTextSize(text[..end].TrimEnd() + "...").X > room)
+            end--;
+
+        return end <= 0 ? string.Empty : text[..end].TrimEnd() + "...";
+    }
+
+    private void DrawTrackerRow(TrackerRuntime tracker, TrackerGroupRuntime? parent)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var definition = aura.Definition;
-        var key = AuraEngine.AuraKey(definition);
+        var definition = tracker.Definition;
+        var key = TrackerEngine.TrackerKey(definition);
         var indent = parent is null ? 0f : MemberIndent * scale;
 
         var width = ImGui.GetContentRegionAvail().X - 4f * scale;
@@ -445,43 +598,47 @@ internal sealed class AuraEditor
         var max = min + new Vector2(width, height);
         ImGui.InvisibleButton($"##explorer_row_{key}", new Vector2(width, height));
 
-        rows.Add(new RowRect(key, null, aura, parent, min, max));
+        rows.Add(new RowRect(key, null, tracker, parent, min, max));
 
         var mouse = ImGui.GetMousePos();
         var hovered = explorerHovered && Inside(min, max, mouse);
-        var selected = selectedAuraId == definition.Id;
+        var selected = selectedTrackerId == definition.Id;
         var center = (min.Y + max.Y) / 2f;
 
 
         var drawList = ImGui.GetWindowDrawList();
         FillRow(drawList, min, max, selected, hovered && dragKey is null, dragKey == key);
 
-        // The game's own icon: the ability for a cooldown aura, the status for an enhancement or enfeeblement aura.
+        // The game's own icon: the ability for a cooldown tracker, the status for an enhancement or enfeeblement tracker.
         var iconSize = 24f * scale;
         var iconMin = new Vector2(min.X + indent + 10f * scale, center - iconSize / 2f);
-        DrawAuraIcon(drawList, definition, iconMin, iconSize);
+        DrawTrackerIcon(drawList, definition, iconMin, iconSize);
 
         var nameColor = definition.Enabled ? Theme.Text : Theme.TextMuted;
-        var name = string.IsNullOrWhiteSpace(definition.Name) ? "Unnamed aura" : definition.Name;
+        var name = string.IsNullOrWhiteSpace(definition.Name) ? "Unnamed tracker" : definition.Name;
         var textY = center - ImGui.GetTextLineHeight() / 2f;
-        drawList.AddText(new Vector2(iconMin.X + iconSize + 10f * scale, textY), ImGui.GetColorU32(nameColor), name);
-
         var tag = KindTag(definition);
         var tagWidth = ImGui.CalcTextSize(tag).X;
+
+        // A long name is cut with "..." so it never runs over the tag at the right.
+        var nameLeft = iconMin.X + iconSize + 10f * scale;
+        var nameRoom = max.X - 10f * scale - tagWidth - 10f * scale - nameLeft;
+        drawList.AddText(new Vector2(nameLeft, textY), ImGui.GetColorU32(nameColor), FitText(name, nameRoom));
+
         drawList.AddText(new Vector2(max.X - 10f * scale - tagWidth, textY), ImGui.GetColorU32(Theme.TextMuted), tag);
 
         if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
-            // Any point of the row can be grabbed to move the aura.
-            SelectAura(definition.Id);
+            // Any point of the row can be grabbed to move the tracker.
+            SelectTracker(definition.Id);
             StartDrag(key, mouse);
         }
 
-        // Right click: the menu of the aura.
-        var menuId = $"##aura_menu_{key}";
+        // Right click: the menu of the tracker.
+        var menuId = $"##tracker_menu_{key}";
         if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
         {
-            SelectAura(definition.Id);
+            SelectTracker(definition.Id);
             ImGui.OpenPopup(menuId);
         }
 
@@ -497,18 +654,18 @@ internal sealed class AuraEditor
             if (ImGui.Selectable("Duplicate"))
             {
                 // Done after the list is drawn, so the list is not changed while it is being walked.
-                pendingDuplicate = aura;
+                pendingDuplicate = tracker;
             }
 
             if (ImGui.Selectable("Delete"))
-                pendingRemove = aura;
+                pendingRemove = tracker;
 
             ImGui.EndPopup();
         }
     }
 
-    // The small label at the right of an aura row.
-    private static string KindTag(AuraDefinition definition)
+    // The small label at the right of a tracker row.
+    private static string KindTag(TrackerDefinition definition)
     {
         if (!definition.Enabled)
             return "Off";
@@ -541,12 +698,12 @@ internal sealed class AuraEditor
         };
     }
 
-    private static void DrawAuraIcon(ImDrawListPtr drawList, AuraDefinition definition, Vector2 min, float size)
+    private static void DrawTrackerIcon(ImDrawListPtr drawList, TrackerDefinition definition, Vector2 min, float size)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var max = min + new Vector2(size, size);
 
-        var iconId = AuraEngine.ResolveIcon(definition.Rules.FirstOrDefault(), 0, out var iconIsStatus);
+        var iconId = TrackerEngine.ResolveIcon(definition.Rules.FirstOrDefault(), 0, out var iconIsStatus);
 
         if (iconId == 0)
         {
@@ -556,7 +713,7 @@ internal sealed class AuraEditor
         }
 
         var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
-        var (uv0, uv1) = AuraEngine.IconUv(new Vector2(size, size), iconIsStatus ? AuraEngine.StatusIconAspect : 1f, 0.10f);
+        var (uv0, uv1) = TrackerEngine.IconUv(new Vector2(size, size), iconIsStatus ? TrackerEngine.StatusIconAspect : 1f, 0.10f, 0.10f, 0.10f, 0.10f);
 
         drawList.AddImage(texture.Handle, min, max, uv0, uv1, 0xFFFFFFFFu);
         drawList.AddRect(min, max, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f)), 0f, ImDrawFlags.None, 1f);
@@ -631,9 +788,9 @@ internal sealed class AuraEditor
         return point.X >= min.X && point.X < max.X && point.Y >= min.Y && point.Y < max.Y;
     }
 
-    private void SelectAura(string id)
+    private void SelectTracker(string id)
     {
-        selectedAuraId = id;
+        selectedTrackerId = id;
         selectedGroupId = null;
         pendingDeleteId = null;
     }
@@ -641,7 +798,7 @@ internal sealed class AuraEditor
     private void SelectGroup(string id)
     {
         selectedGroupId = id;
-        selectedAuraId = null;
+        selectedTrackerId = null;
         pendingDeleteId = null;
     }
 
@@ -656,7 +813,7 @@ internal sealed class AuraEditor
 
     // Runs once per frame after the rows are drawn: follows the drag, shows where the row would land
     // and, when the mouse button is released, moves it there.
-    private void HandleDrag(AuraEngine engine)
+    private void HandleDrag(TrackerEngine engine)
     {
         if (dragKey is null)
             return;
@@ -686,16 +843,16 @@ internal sealed class AuraEditor
         dragging = false;
     }
 
-    private DropTarget ComputeDrop(AuraEngine engine, Vector2 mouse)
+    private DropTarget ComputeDrop(TrackerEngine engine, Vector2 mouse)
     {
         var none = new DropTarget(DropKind.None, null, null, null, 0f, 0f, null);
         if (rows.Count == 0 || dragKey is null)
             return none;
 
         var scale = ImGuiHelpers.GlobalScale;
-        var dragAura = engine.Auras.FirstOrDefault(a => AuraEngine.AuraKey(a.Definition) == dragKey);
-        var dragGroup = engine.Groups.FirstOrDefault(g => AuraEngine.GroupKey(g.Definition) == dragKey);
-        if (dragAura is null && dragGroup is null)
+        var dragTracker = engine.Trackers.FirstOrDefault(a => TrackerEngine.TrackerKey(a.Definition) == dragKey);
+        var dragGroup = engine.Groups.FirstOrDefault(g => TrackerEngine.GroupKey(g.Definition) == dragKey);
+        if (dragTracker is null && dragGroup is null)
             return none;
 
         // The row under the mouse. Above the list it is the first row, below the list the last one.
@@ -738,10 +895,10 @@ internal sealed class AuraEditor
             new(DropKind.RootAfter, targetKey, null, null, target.Max.Y + RowGap * scale / 2f, left, null);
 
         // After a group means after its last visible row.
-        DropTarget RootAfterGroup(AuraGroupRuntime group)
+        DropTarget RootAfterGroup(TrackerGroupRuntime group)
         {
             var last = rows.Last(r => r.Group == group || r.Parent == group);
-            return RootAfter(last, AuraEngine.GroupKey(group.Definition));
+            return RootAfter(last, TrackerEngine.GroupKey(group.Definition));
         }
 
         // ---- dragging a group: it can only go to the top level
@@ -750,7 +907,7 @@ internal sealed class AuraEditor
             if (owner == dragGroup)
                 return none;
 
-            // Over a group (its row or one of its auras): before or after the WHOLE group,
+            // Over a group (its row or one of its trackers): before or after the WHOLE group,
             // depending on which half of the group's block the mouse is in.
             if (owner is not null)
             {
@@ -759,22 +916,22 @@ internal sealed class AuraEditor
                 var upperHalf = mouse.Y < (groupRow.Min.Y + blockBottom) / 2f;
 
                 return upperHalf
-                    ? RootBefore(groupRow, AuraEngine.GroupKey(owner.Definition))
+                    ? RootBefore(groupRow, TrackerEngine.GroupKey(owner.Definition))
                     : RootAfterGroup(owner);
             }
 
-            // Over a loose aura: before or after it.
+            // Over a loose tracker: before or after it.
             return rel < 0.5f ? RootBefore(row, row.Key) : RootAfter(row, row.Key);
         }
 
-        // ---- dragging an aura
-        if (dragAura is null)
+        // ---- dragging a tracker
+        if (dragTracker is null)
             return none;
 
-        // A loose aura: before or after it, at the top level.
+        // A loose tracker: before or after it, at the top level.
         if (owner is null)
         {
-            if (row.Aura == dragAura)
+            if (row.Tracker == dragTracker)
                 return none;
 
             return rel < 0.5f ? RootBefore(row, row.Key) : RootAfter(row, row.Key);
@@ -791,7 +948,7 @@ internal sealed class AuraEditor
 
             if (rel > 0.7f)
             {
-                if (groupDefinition.Expanded && firstMember?.Aura is { } first && first != dragAura)
+                if (groupDefinition.Expanded && firstMember?.Tracker is { } first && first != dragTracker)
                 {
                     return new DropTarget(DropKind.IntoGroupBefore, null, owner, first,
                         firstMember.Min.Y - RowGap * scale / 2f, left + MemberIndent * scale, null);
@@ -808,12 +965,12 @@ internal sealed class AuraEditor
         if (mouse.X < row.Min.X + MemberIndent * scale * 0.7f)
             return RootAfterGroup(owner);
 
-        if (row.Aura is null || row.Aura == dragAura)
+        if (row.Tracker is null || row.Tracker == dragTracker)
             return none;
 
         return rel < 0.5f
-            ? new DropTarget(DropKind.IntoGroupBefore, null, owner, row.Aura, row.Min.Y - RowGap * scale / 2f, left + MemberIndent * scale, null)
-            : new DropTarget(DropKind.IntoGroupAfter, null, owner, row.Aura, row.Max.Y + RowGap * scale / 2f, left + MemberIndent * scale, null);
+            ? new DropTarget(DropKind.IntoGroupBefore, null, owner, row.Tracker, row.Min.Y - RowGap * scale / 2f, left + MemberIndent * scale, null)
+            : new DropTarget(DropKind.IntoGroupAfter, null, owner, row.Tracker, row.Max.Y + RowGap * scale / 2f, left + MemberIndent * scale, null);
     }
 
     private void DrawDropIndicator(DropTarget drop)
@@ -840,13 +997,13 @@ internal sealed class AuraEditor
     }
 
     // A small label that follows the mouse while a row is being dragged.
-    private void DrawDragLabel(AuraEngine engine, Vector2 mouse)
+    private void DrawDragLabel(TrackerEngine engine, Vector2 mouse)
     {
         var scale = ImGuiHelpers.GlobalScale;
 
-        var aura = engine.Auras.FirstOrDefault(a => AuraEngine.AuraKey(a.Definition) == dragKey);
-        var group = engine.Groups.FirstOrDefault(g => AuraEngine.GroupKey(g.Definition) == dragKey);
-        var name = aura?.Definition.Name ?? group?.Definition.Name ?? string.Empty;
+        var tracker = engine.Trackers.FirstOrDefault(a => TrackerEngine.TrackerKey(a.Definition) == dragKey);
+        var group = engine.Groups.FirstOrDefault(g => TrackerEngine.GroupKey(g.Definition) == dragKey);
+        var name = tracker?.Definition.Name ?? group?.Definition.Name ?? string.Empty;
         if (string.IsNullOrWhiteSpace(name))
             name = "Unnamed";
 
@@ -861,13 +1018,13 @@ internal sealed class AuraEditor
         foreground.AddText(min + padding, ImGui.GetColorU32(Theme.Text), name);
     }
 
-    private void ApplyDrop(AuraEngine engine, DropTarget drop)
+    private void ApplyDrop(TrackerEngine engine, DropTarget drop)
     {
         if (drop.Kind == DropKind.None || dragKey is null)
             return;
 
-        var aura = engine.Auras.FirstOrDefault(a => AuraEngine.AuraKey(a.Definition) == dragKey);
-        var group = engine.Groups.FirstOrDefault(g => AuraEngine.GroupKey(g.Definition) == dragKey);
+        var tracker = engine.Trackers.FirstOrDefault(a => TrackerEngine.TrackerKey(a.Definition) == dragKey);
+        var group = engine.Groups.FirstOrDefault(g => TrackerEngine.GroupKey(g.Definition) == dragKey);
 
         switch (drop.Kind)
         {
@@ -875,8 +1032,8 @@ internal sealed class AuraEditor
             case DropKind.RootAfter:
                 var after = drop.Kind == DropKind.RootAfter;
 
-                if (aura is not null)
-                    engine.MoveAuraToRoot(aura, drop.TargetKey!, after);
+                if (tracker is not null)
+                    engine.MoveTrackerToRoot(tracker, drop.TargetKey!, after);
                 else if (group is not null)
                     engine.MoveGroup(group, drop.TargetKey!, after);
                 break;
@@ -884,30 +1041,30 @@ internal sealed class AuraEditor
             case DropKind.IntoGroupEnd:
             case DropKind.IntoGroupBefore:
             case DropKind.IntoGroupAfter:
-                if (aura is null || drop.Group is null)
+                if (tracker is null || drop.Group is null)
                     break;
 
-                engine.MoveAuraIntoGroup(aura, drop.Group, drop.Neighbour, drop.Kind == DropKind.IntoGroupAfter);
+                engine.MoveTrackerIntoGroup(tracker, drop.Group, drop.Neighbour, drop.Kind == DropKind.IntoGroupAfter);
 
                 // Show where it went.
                 drop.Group.Definition.Expanded = true;
                 break;
         }
 
-        if (aura is not null)
-            SelectAura(aura.Definition.Id);
+        if (tracker is not null)
+            SelectTracker(tracker.Definition.Id);
         else if (group is not null)
             SelectGroup(group.Definition.Id);
     }
 
     // ---------------------------------------------------------------- group editor
 
-    private void DrawGroupEditor(AuraEngine engine, AuraGroupRuntime group, GameSnapshot snapshot)
+    private void DrawGroupEditor(TrackerEngine engine, TrackerGroupRuntime group, GameSnapshot snapshot)
     {
         var definition = group.Definition;
 
         // The template holds the display settings and the load conditions of the whole group.
-        var template = definition.Template ??= new AuraDefinition();
+        var template = definition.Template ??= new TrackerDefinition();
 
         Widgets.Card("##card_group_settings", 8, () =>
         {
@@ -921,24 +1078,24 @@ internal sealed class AuraEditor
             }
 
             var growth = definition.Growth;
-            if (EnumCombo("Growth", ref growth, GrowthLabel))
+            if (EnumCombo("Grow towards", ref growth, GrowthLabel, GrowthOrder))
             {
                 definition.Growth = growth;
                 plugin.RequestSave();
             }
 
             var spacing = definition.Spacing;
-            if (ImGui.InputInt("Spacing (px)", ref spacing, 1, 4))
+            if (ImGui.InputInt("Space between icons (px)", ref spacing, 1, 4))
             {
                 definition.Spacing = Math.Clamp(spacing, 0, 128);
                 plugin.RequestSave();
             }
 
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Drag the auras in the list on the left to change their order.");
+            ImGui.TextColored(Theme.TextMuted, "Drag the trackers in the list on the left to change their order.");
         });
 
-        // The same cards as for one aura, but what is set here is applied to every aura of the group.
+        // The same cards as for one tracker, but what is set here is applied to every tracker of the group.
         DrawDisplay(engine, template, null, group);
         DrawLoad(engine, template, snapshot, group);
 
@@ -946,7 +1103,7 @@ internal sealed class AuraEditor
         {
             if (ImGui.Button("Click again to delete this group"))
             {
-                engine.RemoveGroup(group);
+                engine.RemoveGroupWithTrackers(group);
                 selectedGroupId = null;
                 pendingDeleteId = null;
                 return;
@@ -961,16 +1118,16 @@ internal sealed class AuraEditor
             pendingDeleteId = definition.Id;
         }
 
-        ImGui.TextColored(Theme.TextMuted, "Deleting a group keeps its auras; they stay in the list.");
+        ImGui.TextColored(Theme.TextMuted, "Deleting a group deletes all the trackers inside it.");
     }
 
     // ---------------------------------------------------------------- general
 
-    private void DrawGeneral(AuraEngine engine, AuraRuntime runtime)
+    private void DrawGeneral(TrackerEngine engine, TrackerRuntime runtime)
     {
         var definition = runtime.Definition;
 
-        Widgets.Card("##card_aura_general", 4, () =>
+        Widgets.Card("##card_tracker_general", 4, () =>
         {
             Widgets.SectionLabel("General");
 
@@ -1036,14 +1193,73 @@ internal sealed class AuraEditor
             : Array.Empty<ActionInfo>();
     }
 
-    private static string ConditionLabel(ConditionKind kind) => kind switch
+    private static readonly ConditionKind[] StatusConditions =
+        { ConditionKind.StatusPresent, ConditionKind.StatusMissing, ConditionKind.StatusAlways };
+
+    private static readonly ConditionKind[] AbilityConditions =
+        { ConditionKind.AbilityActivated, ConditionKind.AbilityOnCooldown, ConditionKind.AbilityReady, ConditionKind.AbilityAlways };
+
+    // When can an effect be applied, for each kind of trigger.
+    private static EffectWhen[] WhenOptions(ConditionKind kind) => kind switch
     {
-        ConditionKind.StatusPresent => "An enhancement or enfeeblement is on",
-        ConditionKind.StatusMissing => "An enhancement or enfeeblement is missing",
-        ConditionKind.AbilityActivated => "An ability is activated",
-        ConditionKind.AbilityOnCooldown => "An ability is recharging",
-        ConditionKind.AbilityReady => "An ability is ready",
-        _ => "An ability, always (ready or recharging)"
+        ConditionKind.StatusAlways => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.StatusOn, EffectWhen.StatusMissing },
+        ConditionKind.AbilityAlways => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.Usable, EffectWhen.Unavailable, EffectWhen.Ready, EffectWhen.Recharging, EffectWhen.Highlighted },
+        ConditionKind.AbilityOnCooldown => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.Usable, EffectWhen.Unavailable, EffectWhen.Highlighted },
+        ConditionKind.AbilityActivated or ConditionKind.AbilityReady
+            => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.Highlighted },
+        _ => new[] { EffectWhen.Never, EffectWhen.Always }
+    };
+
+    private static string EffectLabel(EffectWhen when) => when switch
+    {
+        EffectWhen.Never => "Never",
+        EffectWhen.Always => "Always",
+        EffectWhen.StatusOn => "While it is on",
+        EffectWhen.StatusMissing => "While it is missing",
+        EffectWhen.Ready => "While it is full",
+        EffectWhen.Recharging => "While it is not full",
+        EffectWhen.Usable => "While it is ready",
+        EffectWhen.Unavailable => "While it is not ready",
+        _ => "While the game highlights it"
+    };
+
+    // One effect of a trigger: a combo with the situations that make sense for the trigger. Returns the (possibly new) value.
+    private EffectWhen EffectCombo(string label, EffectWhen current, EffectWhen[] options, EffectWhen[] allOptions)
+    {
+        // A value that this kind of trigger cannot use (after changing the trigger) counts as "Never".
+        if (!allOptions.Contains(current))
+            current = EffectWhen.Never;
+
+        // A value saved earlier that is not offered now (single charge ability) stays in the list, so it is not lost.
+        if (!options.Contains(current))
+            options = options.Append(current).ToArray();
+
+        if (ImGui.BeginCombo(label, EffectLabel(current), ImGuiComboFlags.None))
+        {
+            foreach (var option in options)
+            {
+                if (ImGui.Selectable(EffectLabel(option), current == option) && option != current)
+                {
+                    current = option;
+                    plugin.RequestSave();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        return current;
+    }
+
+    private static string WhenLabel(ConditionKind kind) => kind switch
+    {
+        ConditionKind.StatusPresent => "It is on",
+        ConditionKind.StatusMissing => "It is missing",
+        ConditionKind.StatusAlways => "Always (on or missing)",
+        ConditionKind.AbilityActivated => "It is activated",
+        ConditionKind.AbilityOnCooldown => "It is recharging",
+        ConditionKind.AbilityReady => "It is ready",
+        _ => "Always (ready or recharging)"
     };
 
     private void EnsureAbilities(GameSnapshot snapshot)
@@ -1066,8 +1282,8 @@ internal sealed class AuraEditor
     private Vector2 ruleDragStart;
     private readonly List<(Vector2 Min, Vector2 Max)> ruleRects = new();
 
-    // The icon triggers of an aura, in order of priority. The first one that matches decides the picture and the glow.
-    private void DrawRules(AuraDefinition definition, GameSnapshot snapshot)
+    // The icon triggers of a tracker, in order of priority. The first one that matches decides the picture and the glow.
+    private void DrawRules(TrackerDefinition definition, GameSnapshot snapshot)
     {
         EnsureAbilities(snapshot);
 
@@ -1078,7 +1294,7 @@ internal sealed class AuraEditor
         ruleRects.Clear();
 
         // All the triggers live in one card: trigger 1, then "if not" trigger 2, and so on.
-        Widgets.Card("##card_aura_triggers", 22 * definition.Rules.Count + 2, () =>
+        Widgets.Card("##card_tracker_triggers", 22 * definition.Rules.Count + 2, () =>
         {
             Widgets.SectionLabel("Icon triggers");
 
@@ -1094,7 +1310,7 @@ internal sealed class AuraEditor
 
             if (ImGui.Button("Add trigger"))
             {
-                definition.Rules.Add(new AuraRule());
+                definition.Rules.Add(TrackerEngine.NewRule());
                 plugin.RequestSave();
             }
         });
@@ -1119,7 +1335,7 @@ internal sealed class AuraEditor
     }
 
     // Follows a drag of a trigger card: a line shows where it would land; on release it moves there.
-    private void HandleRuleDrag(AuraDefinition definition, ref int moveFrom, ref int moveTo)
+    private void HandleRuleDrag(TrackerDefinition definition, ref int moveFrom, ref int moveTo)
     {
         if (ruleDragIndex < 0)
             return;
@@ -1176,7 +1392,17 @@ internal sealed class AuraEditor
         ruleDragging = false;
     }
 
-    private void DrawRuleSection(AuraDefinition definition, int index, GameSnapshot snapshot, ref int moveFrom, ref int moveTo, ref int remove)
+    // What a folded trigger shows after its title: what it tracks.
+    private static string RuleSummary(TrackerRule rule)
+    {
+        var id = rule.IsAbility ? rule.ActionId : rule.StatusId;
+        if (id == 0)
+            return "(nothing selected)";
+
+        return rule.IsAbility ? GameNames.ActionName(id) : GameNames.StatusName(id);
+    }
+
+    private void DrawRuleSection(TrackerDefinition definition, int index, GameSnapshot snapshot, ref int moveFrom, ref int moveTo, ref int remove)
     {
         var rule = definition.Rules[index];
         var count = definition.Rules.Count;
@@ -1196,16 +1422,23 @@ internal sealed class AuraEditor
         {
             ImGui.PushID(index);
 
+            // With several triggers each one is a header that opens and closes like the texts of a trigger (it follows the
+            // trigger when it moves), to work on the others without a huge card. Everything of the trigger is inside it.
+            var collapsed = false;
             if (count > 1)
-                ImGui.TextColored(Theme.Accent, index == 0 ? "Trigger 1" : $"If not, trigger {index + 1}");
+            {
+                var title = index == 0 ? "Trigger 1" : $"If not, trigger {index + 1}";
+                var headerId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(rule);
+                collapsed = !ImGui.CollapsingHeader($"{title}: {RuleSummary(rule)}###rule_header_{headerId}", ImGuiTreeNodeFlags.DefaultOpen);
+            }
 
             // Order: the first trigger that matches wins. Arrows move this one up or down.
-            if (count > 1)
+            if (count > 1 && !collapsed)
             {
                 if (index > 0)
                 {
                     if (ImGui.ArrowButton("##rule_up", ImGuiDir.Up))
-                        {
+                    {
                         moveFrom = index;
                         moveTo = index - 1;
                     }
@@ -1216,7 +1449,7 @@ internal sealed class AuraEditor
                 if (index < count - 1)
                 {
                     if (ImGui.ArrowButton("##rule_down", ImGuiDir.Down))
-                        {
+                    {
                         moveFrom = index;
                         moveTo = index + 1;
                     }
@@ -1228,51 +1461,67 @@ internal sealed class AuraEditor
                     remove = index;
             }
 
-            var kind = rule.Kind;
-            if (EnumCombo("When", ref kind, ConditionLabel))
+            if (!collapsed)
             {
-                rule.Kind = kind;
-                pick.Query = string.Empty;
-                plugin.RequestSave();
-            }
-
-            if (isStatus)
-                DrawStatusPart(definition, index, rule, pick, unit);
-            else
-                DrawAbilityPart(definition, index, rule, pick);
-
-            ImGui.Spacing();
-            DrawRuleIcon(rule, iconPick);
-
-            ImGui.Spacing();
-
-            var glow = rule.Glow;
-            if (ImGui.Checkbox("Glow while this trigger decides", ref glow))
-            {
-                rule.Glow = glow;
-                plugin.RequestSave();
-            }
-
-            if (rule.Kind == ConditionKind.AbilityAlways)
-            {
-                var glowReady = rule.GlowWhenReady;
-                if (ImGui.Checkbox("Glow when the ability is ready", ref glowReady))
+                // Two steps: what is tracked (a status or an ability), then in which situation.
+                var tracksAbility = rule.IsAbility;
+                if (ImGui.BeginCombo("Track", tracksAbility ? "An ability" : "An enhancement or enfeeblement", ImGuiComboFlags.None))
                 {
-                    rule.GlowWhenReady = glowReady;
-                    plugin.RequestSave();
-                }
-            }
+                    if (ImGui.Selectable("An enhancement or enfeeblement", !tracksAbility) && tracksAbility)
+                    {
+                        rule.Kind = ConditionKind.StatusPresent;
+                        pick.Query = string.Empty;
+                        pick.Initialized = false;
+                        plugin.RequestSave();
+                    }
 
-            if (rule.IsAbility)
-            {
-                var glowHighlighted = rule.GlowWhenHighlighted;
-                if (ImGui.Checkbox("Glow when the game highlights it", ref glowHighlighted))
-                {
-                    rule.GlowWhenHighlighted = glowHighlighted;
-                    plugin.RequestSave();
+                    if (ImGui.Selectable("An ability", tracksAbility) && !tracksAbility)
+                    {
+                        rule.Kind = ConditionKind.AbilityAlways;
+                        pick.Query = string.Empty;
+                        pick.Initialized = false;
+                        plugin.RequestSave();
+                    }
+
+                    ImGui.EndCombo();
                 }
 
-                if (rule.Kind != ConditionKind.AbilityActivated)
+                var options = tracksAbility ? AbilityConditions : StatusConditions;
+                if (ImGui.BeginCombo("When", WhenLabel(rule.Kind), ImGuiComboFlags.None))
+                {
+                    foreach (var option in options)
+                    {
+                        if (ImGui.Selectable(WhenLabel(option), rule.Kind == option))
+                        {
+                            rule.Kind = option;
+                            plugin.RequestSave();
+                        }
+                    }
+
+                    ImGui.EndCombo();
+                }
+
+                if (isStatus)
+                    DrawStatusPart(definition, index, rule, pick, unit);
+                else
+                    DrawAbilityPart(definition, index, rule, pick);
+
+                ImGui.Spacing();
+                DrawRuleIcon(rule, iconPick);
+
+                ImGui.Spacing();
+
+                // Effects: each one can be applied always, or only in one situation of the trigger.
+                // An ability with a single charge has no "full" and no "recharging" (they would be the same as "ready" / "not ready"):
+                // they are offered only when the game says the ability has charges (or while that is not known yet).
+                var singleCharge = rule.IsAbility && snapshot.Cooldowns.TryGetValue(rule.ActionId, out var cooldownData) && cooldownData.MaxCharges <= 1;
+                var allOptions = WhenOptions(rule.Kind);
+                var whenOptions = singleCharge ? allOptions.Where(o => o is not (EffectWhen.Ready or EffectWhen.Recharging)).ToArray() : allOptions;
+                rule.GlowWhen = EffectCombo("Glow", rule.GlowWhen, whenOptions, allOptions);
+                rule.RedWhen = EffectCombo("Red", rule.RedWhen, whenOptions, allOptions);
+                rule.DimWhen = EffectCombo("Dimmed", rule.DimWhen, whenOptions, allOptions);
+
+                if (rule.IsAbility && rule.Kind != ConditionKind.AbilityActivated)
                 {
                     var ignoreGcd = rule.IgnoreGlobalCooldown;
                     if (ImGui.Checkbox("Ignore the global cooldown", ref ignoreGcd))
@@ -1281,6 +1530,9 @@ internal sealed class AuraEditor
                         plugin.RequestSave();
                     }
                 }
+
+                ImGui.Spacing();
+                DrawRuleTexts(definition, index, rule);
             }
 
             // Pressing on an empty point of the section (not on a control) grabs it, to drag it to another place in the list.
@@ -1301,7 +1553,7 @@ internal sealed class AuraEditor
         }
     }
 
-    private void DrawStatusPart(AuraDefinition definition, int index, AuraRule rule, TextSearch pick, UnitSnapshot? unit)
+    private void DrawStatusPart(TrackerDefinition definition, int index, TrackerRule rule, TextSearch pick, UnitSnapshot? unit)
     {
         var watched = rule.Unit;
         if (EnumCombo("Watch", ref watched, UnitLabel))
@@ -1311,10 +1563,46 @@ internal sealed class AuraEditor
         }
 
         var onlyMine = rule.OnlyMine;
-        if (ImGui.Checkbox("Only statuses I applied", ref onlyMine))
+        if (ImGui.Checkbox("Only the ones I applied", ref onlyMine))
         {
             rule.OnlyMine = onlyMine;
             plugin.RequestSave();
+        }
+
+        // One status, or any status of a filter of the Filters page.
+        var allFilters = plugin.Configuration.Filters.Filters;
+        if (allFilters.Count > 0 || rule.UsesFilter)
+        {
+            var current = rule.UsesFilter
+                ? $"Filter: {plugin.Configuration.Filters.Find(rule.FilterId)?.Name ?? "(deleted)"}"
+                : "One status";
+
+            if (ImGui.BeginCombo("Which", current, ImGuiComboFlags.None))
+            {
+                if (ImGui.Selectable("One status", !rule.UsesFilter) && rule.UsesFilter)
+                {
+                    rule.FilterId = string.Empty;
+                    pick.Initialized = false;
+                    plugin.RequestSave();
+                }
+
+                foreach (var filter in allFilters)
+                {
+                    if (ImGui.Selectable($"Filter: {filter.Name}##flt_{filter.Id}", rule.FilterId == filter.Id) && rule.FilterId != filter.Id)
+                    {
+                        rule.FilterId = filter.Id;
+                        plugin.RequestSave();
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+
+            if (rule.UsesFilter)
+            {
+                ImGui.TextColored(Theme.TextMuted, "Any status of the filter counts. If several are there, the one that ends first shows.");
+                return;
+            }
         }
 
         if (rule.StatusId == 0)
@@ -1379,7 +1667,7 @@ internal sealed class AuraEditor
             && mouse.X >= windowX && mouse.X <= windowX + ImGui.GetWindowSize().X;
     }
 
-    private void DrawAbilityPart(AuraDefinition definition, int index, AuraRule rule, TextSearch pick)
+    private void DrawAbilityPart(TrackerDefinition definition, int index, TrackerRule rule, TextSearch pick)
     {
         if (rule.ActionId == 0)
             ImGui.TextColored(Theme.Warning, "No ability selected yet.");
@@ -1439,23 +1727,52 @@ internal sealed class AuraEditor
             && mouse.X >= windowX && mouse.X <= windowX + ImGui.GetWindowSize().X;
     }
 
-    private static string IconSourceLabel(IconSource source) => source switch
-    {
-        IconSource.Automatic => "The icon of what it tracks",
-        IconSource.Status => "The icon of a status I choose",
-        _ => "The icon of an ability I choose"
-    };
-
     // Any game icon can be the picture of a trigger, whatever it tracks: the icon of Requiescat's status has the stack number drawn
     // in it, so another status icon (without the number) can be used while the stacks are shown as a text of our own.
-    private void DrawRuleIcon(AuraRule rule, TextSearch iconPick)
+    private void DrawRuleIcon(TrackerRule rule, TextSearch iconPick)
     {
-        var source = rule.Icon;
-        if (EnumCombo("Icon", ref source, IconSourceLabel))
+        // Default = the icon of what the trigger tracks. Personalized = any game icon, of an enhancement/enfeeblement or of an ability.
+        var personalized = rule.Icon != IconSource.Automatic;
+        if (ImGui.BeginCombo("Icon", personalized ? "Personalized" : "Default", ImGuiComboFlags.None))
         {
-            rule.Icon = source;
-            iconPick.Query = string.Empty;
-            plugin.RequestSave();
+            if (ImGui.Selectable("Default", !personalized) && personalized)
+            {
+                rule.Icon = IconSource.Automatic;
+                iconPick.Query = string.Empty;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.Selectable("Personalized", personalized) && !personalized)
+            {
+                rule.Icon = rule.IsAbility ? IconSource.Ability : IconSource.Status;
+                iconPick.Query = string.Empty;
+                plugin.RequestSave();
+            }
+
+            ImGui.EndCombo();
+        }
+
+        if (rule.Icon != IconSource.Automatic)
+        {
+            var fromAbility = rule.Icon == IconSource.Ability;
+            if (ImGui.BeginCombo("Icon of", fromAbility ? "An ability" : "An enhancement or enfeeblement", ImGuiComboFlags.None))
+            {
+                if (ImGui.Selectable("An enhancement or enfeeblement", !fromAbility) && fromAbility)
+                {
+                    rule.Icon = IconSource.Status;
+                    iconPick.Query = string.Empty;
+                    plugin.RequestSave();
+                }
+
+                if (ImGui.Selectable("An ability", fromAbility) && !fromAbility)
+                {
+                    rule.Icon = IconSource.Ability;
+                    iconPick.Query = string.Empty;
+                    plugin.RequestSave();
+                }
+
+                ImGui.EndCombo();
+            }
         }
 
         if (rule.Icon == IconSource.Automatic)
@@ -1469,15 +1786,46 @@ internal sealed class AuraEditor
         else
             ImGui.Text($"Selected: {(isStatus ? GameNames.StatusName(chosen) : GameNames.ActionName(chosen))} ({chosen})");
 
+        // The box starts with the name of the icon already chosen.
+        if (!iconPick.Initialized)
+        {
+            iconPick.Initialized = true;
+
+            if (chosen != 0)
+            {
+                iconPick.Query = isStatus ? GameNames.StatusName(chosen) : GameNames.ActionName(chosen);
+                iconPick.Dismissed = true;
+            }
+        }
+
         var query = iconPick.Query;
-        if (ImGui.InputText(isStatus ? "Search status icon by name" : "Search ability icon by name", ref query, 64))
+        if (ImGui.InputText(isStatus ? "Search status icon" : "Search ability icon", ref query, 64))
+        {
             iconPick.Query = query;
+            iconPick.Dismissed = false;
+        }
+
+        var active = ImGui.IsItemActive();
+        if (ImGui.IsItemActivated())
+            iconPick.Dismissed = false;
+
+        // The matches show while the box has the focus (or the mouse is over them, so a click still lands).
+        var hasResults = isStatus ? iconPick.Statuses.Count > 0 : iconPick.Actions.Count > 0;
+        if (iconPick.Dismissed || !(active || iconPick.ResultsHovered) || !hasResults)
+        {
+            iconPick.ResultsHovered = false;
+            return;
+        }
+
+        var top = ImGui.GetCursorScreenPos().Y;
 
         foreach (var result in iconPick.Statuses)
         {
             if (ImGui.Selectable($"{result.Name} ({result.Id})##icon_status_{result.Id}", rule.IconStatusId == result.Id))
             {
                 rule.IconStatusId = result.Id;
+                iconPick.Query = result.Name;
+                iconPick.Dismissed = true;
                 plugin.RequestSave();
             }
         }
@@ -1487,27 +1835,39 @@ internal sealed class AuraEditor
             if (ImGui.Selectable($"{result.Name} ({result.Id})##icon_action_{result.Id}", rule.IconActionId == result.Id))
             {
                 rule.IconActionId = result.Id;
+                iconPick.Query = result.Name;
+                iconPick.Dismissed = true;
                 plugin.RequestSave();
             }
         }
+
+        var bottom = ImGui.GetCursorScreenPos().Y;
+        var mouse = ImGui.GetMousePos();
+        var windowX = ImGui.GetWindowPos().X;
+        iconPick.ResultsHovered = !iconPick.Dismissed
+            && mouse.Y >= top && mouse.Y <= bottom
+            && mouse.X >= windowX && mouse.X <= windowX + ImGui.GetWindowSize().X;
     }
 
-    private void PickStatus(AuraDefinition definition, int index, AuraRule rule, uint statusId)
+    // A brand new tracker, or a copy that still carries "(copy)", takes the name of what its first trigger tracks.
+    private static bool IsRenamable(string name) => name == DefaultName || name.EndsWith(" (copy)", StringComparison.Ordinal);
+
+    private void PickStatus(TrackerDefinition definition, int index, TrackerRule rule, uint statusId)
     {
         rule.StatusId = statusId;
 
-        // A brand new aura takes the name of the first thing it watches.
-        if (index == 0 && definition.Name == DefaultName)
+        // A brand new tracker takes the name of the first thing it watches.
+        if (index == 0 && IsRenamable(definition.Name))
             definition.Name = GameNames.StatusName(statusId);
 
         plugin.RequestSave();
     }
 
-    private void PickAction(AuraDefinition definition, int index, AuraRule rule, uint actionId)
+    private void PickAction(TrackerDefinition definition, int index, TrackerRule rule, uint actionId)
     {
         rule.ActionId = actionId;
 
-        if (index == 0 && definition.Name == DefaultName)
+        if (index == 0 && IsRenamable(definition.Name))
             definition.Name = GameNames.ActionName(actionId);
 
         plugin.RequestSave();
@@ -1515,45 +1875,79 @@ internal sealed class AuraEditor
 
     // ---------------------------------------------------------------- texts over the icon
 
-    private static string TextSourceLabel(TextSource source) => source switch
+    private enum TextGroup
     {
-        TextSource.OwnTime => "The time of the trigger that decides",
-        TextSource.OwnStacks => "The stacks or charges of the trigger that decides",
-        TextSource.ComboTime => "The combo time",
-        TextSource.StatusTime => "The time of a status I choose",
-        TextSource.StatusStacks => "The stacks of a status I choose",
-        TextSource.AbilityCooldown => "The cooldown of an ability I choose",
-        _ => "The charges of an ability I choose"
+        Trigger,
+        Combo,
+        Status,
+        Ability
+    }
+
+    private static readonly TextGroup[] TextGroups = { TextGroup.Trigger, TextGroup.Combo, TextGroup.Status, TextGroup.Ability };
+
+    private static TextGroup TextGroupOf(TextSource source) => source switch
+    {
+        TextSource.OwnTime or TextSource.OwnStacks => TextGroup.Trigger,
+        TextSource.ComboTime => TextGroup.Combo,
+        TextSource.StatusTime or TextSource.StatusStacks => TextGroup.Status,
+        _ => TextGroup.Ability
     };
 
-    // The texts of an aura: Text 1, Text 2... Each one has its own sources (the first with a value wins) and look, and sits over the icon.
-    private void DrawTexts(AuraDefinition definition)
+    // The source for a group; "second" = the stacks / charges instead of the time.
+    private static TextSource TextSourceOf(TextGroup group, bool second) => group switch
     {
-        for (var i = 0; i < definition.Texts.Count; i++)
+        TextGroup.Trigger => second ? TextSource.OwnStacks : TextSource.OwnTime,
+        TextGroup.Combo => TextSource.ComboTime,
+        TextGroup.Status => second ? TextSource.StatusStacks : TextSource.StatusTime,
+        _ => second ? TextSource.AbilityCharges : TextSource.AbilityCooldown
+    };
+
+    private static string TextGroupLabel(TextGroup group) => group switch
+    {
+        TextGroup.Trigger => "This trigger",
+        TextGroup.Combo => "The combo",
+        TextGroup.Status => "An enhancement or enfeeblement I choose",
+        _ => "An ability I choose"
+    };
+
+    private static string TextValueLabel(TextGroup group, bool second) => group switch
+    {
+        TextGroup.Trigger => second ? "The stacks or charges" : "The time",
+        TextGroup.Status => second ? "The stacks" : "The time",
+        _ => second ? "The charges" : "The cooldown"
+    };
+
+    // The texts of one trigger: Text 1, Text 2... They are drawn over the icon while this trigger decides. Each one has its own
+    // sources (the first with a value wins) and its own look.
+    private void DrawRuleTexts(TrackerDefinition definition, int ruleIndex, TrackerRule rule)
+    {
+        if (!ImGui.CollapsingHeader($"Texts of this trigger ({rule.Texts.Count})###texts", ImGuiTreeNodeFlags.DefaultOpen))
+            return;
+
+        for (var i = 0; i < rule.Texts.Count; i++)
         {
-            if (DrawTextCard(definition, i))
+            if (DrawTextBlock(definition, ruleIndex, rule, i))
                 break;
         }
 
         if (ImGui.Button("Add text"))
         {
             // A new text starts at the bottom right corner (no offset), so it does not hide behind Text 1 in the centre.
-            definition.Texts.Add(new AuraTextDefinition
+            rule.Texts.Add(new TrackerTextDefinition
             {
-                Sources = { new AuraTextSource { Source = TextSource.OwnStacks } },
-                Anchor = AnchorPoint.BottomRight
+                Sources = { new TrackerTextSource { Source = TextSource.OwnStacks } },
+                Anchor = AnchorPoint.BottomRight,
+                Size = 9
             });
 
             plugin.RequestSave();
         }
-
-        ImGui.Spacing();
     }
 
-    // One text card. Returns true when the text was removed (the list changed, so the caller stops walking it).
-    private bool DrawTextCard(AuraDefinition definition, int index)
+    // One text of a trigger. Returns true when the text was removed (the list changed, so the caller stops walking it).
+    private bool DrawTextBlock(TrackerDefinition definition, int ruleIndex, TrackerRule rule, int index)
     {
-        var text = definition.Texts[index];
+        var text = rule.Texts[index];
         var removed = false;
 
         var moveFrom = -1;
@@ -1561,7 +1955,6 @@ internal sealed class AuraEditor
         var removeSource = -1;
 
         var searches = new TextSearch[text.Sources.Count];
-        var lines = 12;
 
         for (var j = 0; j < text.Sources.Count; j++)
         {
@@ -1569,83 +1962,78 @@ internal sealed class AuraEditor
             var needsStatus = source.Source is TextSource.StatusTime or TextSource.StatusStacks;
             var needsAbility = source.Source is TextSource.AbilityCooldown or TextSource.AbilityCharges;
 
-            searches[j] = SearchOf($"{definition.Id}:text{index}:{j}");
+            searches[j] = SearchOf($"{definition.Id}:rule{ruleIndex}:text{index}:{j}");
             RunSearch(searches[j], needsStatus, needsAbility, (int)source.Source);
-
-            lines += 2 + ((needsStatus || needsAbility) ? 3 + searches[j].Statuses.Count + searches[j].Actions.Count : 0);
         }
 
-        Widgets.Card($"##card_aura_text_{index}", lines, () =>
+        ImGui.PushID(index);
+        ImGui.Separator();
+        ImGui.TextColored(Theme.Accent, $"Text {index + 1}");
+
+        for (var j = 0; j < text.Sources.Count; j++)
         {
-            ImGui.PushID(index);
+            if (j > 0)
+                ImGui.Separator();
 
-            Widgets.SectionLabel($"Text {index + 1}");
-
-            for (var j = 0; j < text.Sources.Count; j++)
-            {
-                if (j > 0)
-                    ImGui.Separator();
-
-                ImGui.PushID(j);
-                DrawSourceRow(text, j, searches[j], ref moveFrom, ref moveTo, ref removeSource);
-                ImGui.PopID();
-            }
-
-            if (ImGui.Button("Add source"))
-            {
-                text.Sources.Add(new AuraTextSource());
-                plugin.RequestSave();
-            }
-
-            ImGui.Spacing();
-
-            // Font sizes are fixed steps: each one is a real font, so the text is always sharp.
-            if (ImGui.BeginCombo("Text size (px)", $"{text.Size} px", ImGuiComboFlags.None))
-            {
-                foreach (var size in OverlayFonts.AvailableSizes)
-                {
-                    if (ImGui.Selectable($"{size} px", text.Size == size))
-                    {
-                        text.Size = size;
-                        plugin.RequestSave();
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
-            var anchor = text.Anchor;
-            var x = text.OffsetX;
-            var y = text.OffsetY;
-            if (PlacementControls("Text", ref anchor, ref x, ref y))
-            {
-                text.Anchor = anchor;
-                text.OffsetX = x;
-                text.OffsetY = y;
-                plugin.RequestSave();
-            }
-
-            var font = text.Font;
-            if (EnumCombo("Text font", ref font, FontLabel))
-            {
-                text.Font = font;
-                plugin.RequestSave();
-            }
-
-            var color = text.Color;
-            if (ImGui.ColorEdit4("Text color", ref color, ImGuiColorEditFlags.NoAlpha))
-            {
-                text.Color = new Vector4(color.X, color.Y, color.Z, 1f);
-                plugin.RequestSave();
-            }
-
-            if (ImGui.Button("Remove this text"))
-                removed = true;
-
+            ImGui.PushID(j);
+            DrawSourceRow(text, j, searches[j], ref moveFrom, ref moveTo, ref removeSource);
             ImGui.PopID();
-        });
+        }
 
-        // The list of sources changes only after the card is drawn.
+        if (ImGui.Button("Add source"))
+        {
+            text.Sources.Add(new TrackerTextSource());
+            plugin.RequestSave();
+        }
+
+        ImGui.Spacing();
+
+        // Font sizes are fixed steps: each one is a real font, so the text is always sharp.
+        if (ImGui.BeginCombo("Text size (px)", $"{text.Size} px", ImGuiComboFlags.None))
+        {
+            foreach (var size in OverlayFonts.AvailableSizes)
+            {
+                if (ImGui.Selectable($"{size} px", text.Size == size))
+                {
+                    text.Size = size;
+                    plugin.RequestSave();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        var anchor = text.Anchor;
+        var x = text.OffsetX;
+        var y = text.OffsetY;
+        if (PlacementControls("Text", ref anchor, ref x, ref y))
+        {
+            text.Anchor = anchor;
+            text.OffsetX = x;
+            text.OffsetY = y;
+            plugin.RequestSave();
+        }
+
+        var font = text.Font;
+        if (EnumCombo("Text font", ref font, FontLabel))
+        {
+            text.Font = font;
+            plugin.RequestSave();
+        }
+
+        var color = text.Color;
+        if (ImGui.ColorEdit4("Text color", ref color, ImGuiColorEditFlags.NoAlpha))
+        {
+            text.Color = new Vector4(color.X, color.Y, color.Z, 1f);
+            plugin.RequestSave();
+        }
+
+        if (ImGui.Button("Remove this text"))
+            removed = true;
+
+        ImGui.PopID();
+
+        // The list of sources changes only after the block is drawn.
         if (removeSource >= 0 && text.Sources.Count > 1)
         {
             text.Sources.RemoveAt(removeSource);
@@ -1662,14 +2050,14 @@ internal sealed class AuraEditor
         if (!removed)
             return false;
 
-        definition.Texts.RemoveAt(index);
+        rule.Texts.RemoveAt(index);
         textSearches.Clear();
         plugin.RequestSave();
         return true;
     }
 
     // One source of a text: where the value comes from, with arrows to change its priority.
-    private void DrawSourceRow(AuraTextDefinition text, int j, TextSearch search, ref int moveFrom, ref int moveTo, ref int removeSource)
+    private void DrawSourceRow(TrackerTextDefinition text, int j, TextSearch search, ref int moveFrom, ref int moveTo, ref int removeSource)
     {
         var source = text.Sources[j];
         var count = text.Sources.Count;
@@ -1680,12 +2068,40 @@ internal sealed class AuraEditor
         if (count > 1)
             ImGui.TextColored(Theme.Accent, j == 0 ? "Source 1" : $"If not, source {j + 1}");
 
-        var choice = source.Source;
-        if (EnumCombo("Text from", ref choice, TextSourceLabel))
+        // Two steps, like the icon triggers: where the value comes from, then which value.
+        var group = TextGroupOf(source.Source);
+        if (ImGui.BeginCombo("Text from", TextGroupLabel(group), ImGuiComboFlags.None))
         {
-            source.Source = choice;
-            search.Query = string.Empty;
-            plugin.RequestSave();
+            foreach (var option in TextGroups)
+            {
+                if (ImGui.Selectable(TextGroupLabel(option), group == option) && option != group)
+                {
+                    source.Source = TextSourceOf(option, false);
+                    search.Query = string.Empty;
+                    plugin.RequestSave();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        group = TextGroupOf(source.Source);
+        if (group != TextGroup.Combo)
+        {
+            var second = source.Source is TextSource.OwnStacks or TextSource.StatusStacks or TextSource.AbilityCharges;
+            if (ImGui.BeginCombo("Show", TextValueLabel(group, second), ImGuiComboFlags.None))
+            {
+                foreach (var option in new[] { false, true })
+                {
+                    if (ImGui.Selectable(TextValueLabel(group, option), second == option) && option != second)
+                    {
+                        source.Source = TextSourceOf(group, option);
+                        plugin.RequestSave();
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
         }
 
         if (count > 1)
@@ -1760,13 +2176,13 @@ internal sealed class AuraEditor
 
     // ---------------------------------------------------------------- display
 
-    // The display settings of one aura (runtime given), or of a whole group (group given, definition = its template).
-    // For a group, every change is copied to all the auras of the group.
-    private void DrawDisplay(AuraEngine engine, AuraDefinition definition, AuraRuntime? runtime, AuraGroupRuntime? group)
+    // The display settings of one tracker (runtime given), or of a whole group (group given, definition = its template).
+    // For a group, every change is copied to all the trackers of the group.
+    private void DrawDisplay(TrackerEngine engine, TrackerDefinition definition, TrackerRuntime? runtime, TrackerGroupRuntime? group)
     {
         var isGroup = group is not null;
 
-        // A group can hold both kinds of aura, so it shows every option.
+        // A group can hold both kinds of tracker, so it shows every option.
         var hasAbility = isGroup || definition.Rules.Any(r => r.IsAbility);
 
         // The size of an icon belongs to the layout system (the same size you see in unlock mode).
@@ -1775,13 +2191,13 @@ internal sealed class AuraEditor
         var lines = 8 + (isGroup ? 0 : 4) + (hasAbility ? 3 : 0) + (isGroup ? 3 : 0);
         var changed = false;
 
-        Widgets.Card(isGroup ? "##card_group_display" : "##card_aura_display", lines, () =>
+        Widgets.Card(isGroup ? "##card_group_display" : "##card_tracker_display", lines, () =>
         {
-            Widgets.SectionLabel(isGroup ? "Display (every aura in the group)" : "Display");
+            Widgets.SectionLabel(isGroup ? "Display (every tracker in the group)" : "Display");
 
             if (group is not null)
             {
-                // One size for every aura of the group at once.
+                // One size for every tracker of the group at once.
                 var width = group.Definition.IconWidth;
                 if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
                 {
@@ -1814,17 +2230,11 @@ internal sealed class AuraEditor
                 }
             }
 
-            var iconCrop = definition.IconCropPercent;
-            if (ImGui.SliderInt("Icon crop (%)", ref iconCrop, 0, 30))
+            // The game's icons have an empty margin (and rounded corners) drawn in the image: cut it so the art fills the box.
+            var trim = definition.Trim ?? IconTrim.AllAround;
+            if (EnumCombo("Trim icon margins", ref trim, TrimLabel))
             {
-                definition.IconCropPercent = iconCrop;
-                changed = true;
-            }
-
-            var fillWidth = definition.FillWidth;
-            if (ImGui.Checkbox("Fill the width (cut the icon's side margins)", ref fillWidth))
-            {
-                definition.FillWidth = fillWidth;
+                definition.Trim = trim;
                 changed = true;
             }
 
@@ -1839,13 +2249,6 @@ internal sealed class AuraEditor
             {
                 ImGui.Spacing();
 
-                var look = definition.CooldownLook;
-                if (EnumCombo("While recharging", ref look, CooldownLookLabel))
-                {
-                    definition.CooldownLook = look;
-                    changed = true;
-                }
-
                 var sweep = definition.ShowCooldownSweep;
                 if (ImGui.Checkbox("Show the recharge sweep", ref sweep))
                 {
@@ -1857,8 +2260,8 @@ internal sealed class AuraEditor
             if (isGroup)
             {
                 ImGui.Spacing();
-                ImGui.TextColored(Theme.TextMuted, "A change here overwrites that setting in every aura of the group,");
-                ImGui.TextColored(Theme.TextMuted, "and auras that join the group later take these values too.");
+                ImGui.TextColored(Theme.TextMuted, "A change here overwrites that setting in every tracker of the group,");
+                ImGui.TextColored(Theme.TextMuted, "and trackers that join the group later take these values too.");
             }
         });
 
@@ -1873,9 +2276,9 @@ internal sealed class AuraEditor
 
     // ---------------------------------------------------------------- load conditions
 
-    // The load conditions of one aura, or of a whole group (group given, definition = its template).
-    // For a group, every change is copied to all the auras of the group.
-    // The jobs of the game by role, to choose which ones an aura loads on.
+    // The load conditions of one tracker, or of a whole group (group given, definition = its template).
+    // For a group, every change is copied to all the trackers of the group.
+    // The jobs of the game by role, to choose which ones a tracker loads on.
     private static readonly (string Role, uint[] Jobs)[] JobsByRole =
     {
         ("Tanks", new uint[] { 19, 21, 32, 37 }),
@@ -1973,19 +2376,26 @@ internal sealed class AuraEditor
         return changed;
     }
 
-    private void DrawLoad(AuraEngine engine, AuraDefinition definition, GameSnapshot snapshot, AuraGroupRuntime? group)
+    private void DrawLoad(TrackerEngine engine, TrackerDefinition definition, GameSnapshot snapshot, TrackerGroupRuntime? group)
     {
         var isGroup = group is not null;
         var changed = false;
 
-        Widgets.Card(isGroup ? "##card_group_load" : "##card_aura_load", isGroup ? 10 : 8, () =>
+        Widgets.Card(isGroup ? "##card_group_load" : "##card_tracker_load", isGroup ? 11 : 9, () =>
         {
-            Widgets.SectionLabel(isGroup ? "Load conditions (every aura in the group)" : "Load conditions");
+            Widgets.SectionLabel(isGroup ? "Load conditions (every tracker in the group)" : "Load conditions");
 
             var combat = definition.Load.Combat;
             if (EnumCombo("Combat", ref combat, CombatLabel))
             {
                 definition.Load.Combat = combat;
+                changed = true;
+            }
+
+            var where = definition.Load.Where;
+            if (EnumCombo("Content", ref where, PvpLabel))
+            {
+                definition.Load.Where = where;
                 changed = true;
             }
 
@@ -2014,7 +2424,7 @@ internal sealed class AuraEditor
             }
 
             // A menu to pick any jobs, by role (no need to be playing them).
-            var popupId = isGroup ? "##jobs_popup_group" : "##jobs_popup_aura";
+            var popupId = isGroup ? "##jobs_popup_group" : "##jobs_popup_tracker";
             if (ImGui.Button("Choose jobs..."))
                 ImGui.OpenPopup(popupId);
 
@@ -2029,7 +2439,7 @@ internal sealed class AuraEditor
             if (isGroup)
             {
                 ImGui.Spacing();
-                ImGui.TextColored(Theme.TextMuted, "A change here overwrites the load conditions of every aura in the group.");
+                ImGui.TextColored(Theme.TextMuted, "A change here overwrites the load conditions of every tracker in the group.");
             }
         });
 
@@ -2044,16 +2454,16 @@ internal sealed class AuraEditor
 
     // ---------------------------------------------------------------- delete
 
-    private void DrawDelete(AuraEngine engine, AuraRuntime runtime)
+    private void DrawDelete(TrackerEngine engine, TrackerRuntime runtime)
     {
         var id = runtime.Definition.Id;
 
         if (pendingDeleteId == id)
         {
-            if (ImGui.Button("Click again to delete this aura"))
+            if (ImGui.Button("Click again to delete this tracker"))
             {
                 engine.Remove(runtime);
-                selectedAuraId = null;
+                selectedTrackerId = null;
                 pendingDeleteId = null;
                 return;
             }
@@ -2062,7 +2472,7 @@ internal sealed class AuraEditor
             if (ImGui.Button("Cancel"))
                 pendingDeleteId = null;
         }
-        else if (ImGui.Button("Delete aura"))
+        else if (ImGui.Button("Delete tracker"))
         {
             pendingDeleteId = id;
         }
@@ -2070,22 +2480,30 @@ internal sealed class AuraEditor
 
     // ---------------------------------------------------------------- helpers
 
-    private static UnitSnapshot? UnitOf(AuraUnit unit, GameSnapshot snapshot) => unit switch
+    private static UnitSnapshot? UnitOf(TrackerUnit unit, GameSnapshot snapshot) => unit switch
     {
-        AuraUnit.Player => snapshot.Player,
-        AuraUnit.Target => snapshot.Target,
-        AuraUnit.Focus => snapshot.Focus,
-        AuraUnit.TargetOfTarget => snapshot.TargetOfTarget,
+        TrackerUnit.Player => snapshot.Player,
+        TrackerUnit.Target => snapshot.Target,
+        TrackerUnit.Focus => snapshot.Focus,
+        TrackerUnit.TargetOfTarget => snapshot.TargetOfTarget,
         _ => null
     };
 
-    private static string UnitLabel(AuraUnit unit) => unit switch
+    private static string UnitLabel(TrackerUnit unit) => unit switch
     {
-        AuraUnit.Player => "Player",
-        AuraUnit.Target => "Target",
-        AuraUnit.Focus => "Focus target",
-        AuraUnit.TargetOfTarget => "Target of target",
+        TrackerUnit.Player => "Player",
+        TrackerUnit.Target => "Target",
+        TrackerUnit.Focus => "Focus target",
+        TrackerUnit.TargetOfTarget => "Target of target",
         _ => unit.ToString()
+    };
+
+    internal static string TrimLabel(IconTrim trim) => trim switch
+    {
+        IconTrim.None => "None",
+        IconTrim.Sides => "Sides",
+        IconTrim.TopAndBottom => "Top and bottom",
+        _ => "All around"
     };
 
     private static string CooldownLookLabel(CooldownLook look) => look switch
@@ -2096,14 +2514,21 @@ internal sealed class AuraEditor
         _ => look.ToString()
     };
 
+    // The same six words as every "Grow towards" of the interface (the icon rows next to the bars and the player's groups).
+    private static readonly GroupGrowth[] GrowthOrder =
+    {
+        GroupGrowth.ToLeft, GroupGrowth.ToRight, GroupGrowth.Up, GroupGrowth.Down,
+        GroupGrowth.FromCenterHorizontal, GroupGrowth.FromCenterVertical
+    };
+
     private static string GrowthLabel(GroupGrowth growth) => growth switch
     {
-        GroupGrowth.ToRight => "Starts at the left, grows to the right",
-        GroupGrowth.ToLeft => "Starts at the right, grows to the left",
-        GroupGrowth.FromCenterHorizontal => "From the center, horizontal",
-        GroupGrowth.Down => "Starts at the top, grows down",
-        GroupGrowth.Up => "Starts at the bottom, grows up",
-        GroupGrowth.FromCenterVertical => "From the center, vertical",
+        GroupGrowth.ToRight => "Right",
+        GroupGrowth.ToLeft => "Left",
+        GroupGrowth.FromCenterHorizontal => "Centered horizontally",
+        GroupGrowth.Down => "Down",
+        GroupGrowth.Up => "Up",
+        GroupGrowth.FromCenterVertical => "Centered vertically",
         _ => growth.ToString()
     };
 
@@ -2113,17 +2538,24 @@ internal sealed class AuraEditor
         OverlayFont.GameUi => "Game interface (Axis)",
         OverlayFont.GameUiBold => "Game interface, bold (Axis)",
         OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI display (Saira Condensed)",
-        OverlayFont.NahjaDisplayBold => "NahjaUI numbers (Saira Condensed, bold)",
-        OverlayFont.NahjaText => "NahjaUI text (Saira)",
+        OverlayFont.NahjaDisplay => "NahjaUI Display",
+        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
+        OverlayFont.NahjaText => "NahjaUI Text",
         _ => font.ToString()
     };
 
-    private static string CombatLabel(AuraCombatMode mode) => mode switch
+    private static string PvpLabel(TrackerPvpMode mode) => mode switch
     {
-        AuraCombatMode.Any => "Always",
-        AuraCombatMode.InCombat => "Only in combat",
-        AuraCombatMode.OutOfCombat => "Only out of combat",
+        TrackerPvpMode.PveOnly => "Only in PvE (not in PvP)",
+        TrackerPvpMode.PvpOnly => "Only in PvP",
+        _ => "Everywhere (PvE and PvP)"
+    };
+
+    private static string CombatLabel(TrackerCombatMode mode) => mode switch
+    {
+        TrackerCombatMode.Any => "Always",
+        TrackerCombatMode.InCombat => "Only in combat",
+        TrackerCombatMode.OutOfCombat => "Only out of combat",
         _ => mode.ToString()
     };
 
@@ -2152,13 +2584,13 @@ internal sealed class AuraEditor
     }
 
     // A drop-down list for any enum. Returns true when the user picked a different value.
-    private static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler) where T : struct, Enum
+    private static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler, IReadOnlyList<T>? options = null) where T : struct, Enum
     {
         var changed = false;
 
         if (ImGui.BeginCombo(label, labeler(value), ImGuiComboFlags.None))
         {
-            foreach (var option in Enum.GetValues<T>())
+            foreach (var option in options ?? Enum.GetValues<T>())
             {
                 if (ImGui.Selectable(labeler(option), EqualityComparer<T>.Default.Equals(option, value)))
                 {

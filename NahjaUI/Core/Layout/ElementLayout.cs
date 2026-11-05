@@ -12,6 +12,9 @@ namespace NahjaUI.Core.Layout;
 [Serializable]
 public class ElementLayout
 {
+    /// <summary>The id of another element this one is placed on (null = the screen). Then <see cref="ScreenAnchor"/> is a point of that element, not of the screen.</summary>
+    public string? AttachTo { get; set; }
+
     public AnchorPoint ScreenAnchor { get; set; } = AnchorPoint.Center;
     public AnchorPoint SelfAnchor { get; set; } = AnchorPoint.Center;
     public int OffsetX { get; set; }
@@ -25,6 +28,7 @@ public class ElementLayout
     /// <summary>Copies anchors, offsets and size from another layout. The lock state is kept.</summary>
     public void CopyPositionFrom(ElementLayout other)
     {
+        AttachTo = other.AttachTo;
         ScreenAnchor = other.ScreenAnchor;
         SelfAnchor = other.SelfAnchor;
         OffsetX = other.OffsetX;

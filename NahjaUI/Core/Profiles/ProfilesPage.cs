@@ -14,7 +14,7 @@ namespace NahjaUI.Core.Profiles;
 /// </summary>
 internal sealed class ProfilesPage
 {
-    // Big enough for a full configuration with hundreds of auras.
+    // Big enough for a full configuration with hundreds of trackers.
     private const int MaxCodeLength = 1_000_000;
 
     private readonly Plugin plugin;
@@ -29,7 +29,7 @@ internal sealed class ProfilesPage
     private string importCode = string.Empty;
     private ProfilePreview? preview;
     private readonly HashSet<ProfileBlock> importBlocks = new();
-    private AuraImportMode auraMode = AuraImportMode.Add;
+    private TrackerImportMode trackerMode = TrackerImportMode.Add;
     private string importMessage = string.Empty;
     private bool importOk;
 
@@ -50,7 +50,7 @@ internal sealed class ProfilesPage
 
     private void DrawExport()
     {
-        Widgets.Card("##card_profile_export", 14, () =>
+        Widgets.Card("##card_profile_export", 21, () =>
         {
             Widgets.SectionLabel("Export");
             ImGui.TextColored(Theme.TextMuted, "Choose what goes into the code. With everything ticked it is a full backup of your settings.");
@@ -118,7 +118,7 @@ internal sealed class ProfilesPage
 
     private void DrawImport()
     {
-        Widgets.Card("##card_profile_import", 14, () =>
+        Widgets.Card("##card_profile_import", 22, () =>
         {
             Widgets.SectionLabel("Import");
             ImGui.TextColored(Theme.TextMuted, "Paste a code, check what is inside, and choose what to take. Nothing changes until you press Import.");
@@ -175,8 +175,8 @@ internal sealed class ProfilesPage
             importBlocks.Add(block);
 
         // A code with positions is a backup of a whole setup: restore it as it was. Without positions it is a set of
-        // auras made to be shared: add them to mine.
-        auraMode = preview.Present.Contains(ProfileBlock.Placement) ? AuraImportMode.Replace : AuraImportMode.Add;
+        // trackers made to be shared: add them to mine.
+        trackerMode = preview.Present.Contains(ProfileBlock.Placement) ? TrackerImportMode.Replace : TrackerImportMode.Add;
     }
 
     private void DrawPreview(ProfilePreview shown)
@@ -199,18 +199,18 @@ internal sealed class ProfilesPage
             }
         }
 
-        if (importBlocks.Contains(ProfileBlock.Auras))
+        if (importBlocks.Contains(ProfileBlock.Trackers))
         {
             ImGui.Spacing();
 
-            if (ImGui.RadioButton("Add these auras to mine", auraMode == AuraImportMode.Add))
-                auraMode = AuraImportMode.Add;
+            if (ImGui.RadioButton("Add these trackers to mine", trackerMode == TrackerImportMode.Add))
+                trackerMode = TrackerImportMode.Add;
 
-            if (ImGui.RadioButton("Replace all my auras with these", auraMode == AuraImportMode.Replace))
-                auraMode = AuraImportMode.Replace;
+            if (ImGui.RadioButton("Replace all my trackers with these", trackerMode == TrackerImportMode.Replace))
+                trackerMode = TrackerImportMode.Replace;
 
-            if (auraMode == AuraImportMode.Add && importBlocks.Contains(ProfileBlock.Placement))
-                ImGui.TextColored(Theme.TextMuted, "Added auras get no position from the code: you place them yourself.");
+            if (trackerMode == TrackerImportMode.Add && importBlocks.Contains(ProfileBlock.Placement))
+                ImGui.TextColored(Theme.TextMuted, "Added trackers get no position from the code: you place them yourself.");
         }
 
         ImGui.Spacing();
@@ -218,7 +218,7 @@ internal sealed class ProfilesPage
         ImGui.BeginDisabled(importBlocks.Count == 0);
         if (Widgets.PrimaryButton("Import"))
         {
-            importMessage = manager.Apply(shown, importBlocks, auraMode, out importOk);
+            importMessage = manager.Apply(shown, importBlocks, trackerMode, out importOk);
 
             if (importOk)
             {
@@ -251,7 +251,7 @@ internal sealed class ProfilesPage
     {
         var backups = manager.ListBackups();
 
-        Widgets.Card("##card_profile_backups", 6 + Math.Min(backups.Count, 8), () =>
+        Widgets.Card("##card_profile_backups", 14 + Math.Min(backups.Count, 8) + ConfigSafety.List().Length, () =>
         {
             Widgets.SectionLabel("Automatic backups");
             ImGui.TextColored(Theme.TextMuted, "Before every import your settings are saved here. Load one to undo an import.");
@@ -259,10 +259,7 @@ internal sealed class ProfilesPage
             ImGui.Spacing();
 
             if (backups.Count == 0)
-            {
                 ImGui.TextColored(Theme.TextMuted, "No backups yet.");
-                return;
-            }
 
             var shownCount = 0;
             foreach (var file in backups)
@@ -276,6 +273,18 @@ internal sealed class ProfilesPage
                 if (ImGui.Button($"Load into the import box##backup_{file.Name}"))
                     LoadBackup(file);
             }
+
+            var copies = ConfigSafety.List();
+            ImGui.Spacing();
+            Widgets.SectionLabel("Copies before an update");
+            ImGui.TextWrapped("Every time the plugin is updated, a plain copy of your settings file is kept here. To go back: close the game and put that file in place of NahjaUI.json.");
+            ImGui.TextColored(Theme.TextMuted, ConfigSafety.CopiesDirectory);
+
+            if (copies.Length == 0)
+                ImGui.TextColored(Theme.TextMuted, "None yet.");
+
+            foreach (var copy in copies)
+                ImGui.TextColored(Theme.TextMuted, $"{copy.LastWriteTime:yyyy-MM-dd HH:mm}   {copy.Name}");
         });
     }
 

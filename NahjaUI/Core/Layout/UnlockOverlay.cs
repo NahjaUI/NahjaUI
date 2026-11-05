@@ -288,6 +288,12 @@ internal sealed class UnlockOverlay
                 plugin.RequestSave();
             }
 
+            if (selected.DrawOptions is not null)
+            {
+                ImGui.Spacing();
+                selected.DrawOptions();
+            }
+
             // Remember where the panel is and whether a field is in use, for the next frame.
             panelPos = ImGui.GetWindowPos();
             panelSize = ImGui.GetWindowSize();

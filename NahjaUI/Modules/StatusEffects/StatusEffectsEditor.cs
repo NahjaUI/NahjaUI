@@ -8,15 +8,14 @@ using NahjaUI.Modules.UnitFrames;
 namespace NahjaUI.Modules.StatusEffects;
 
 /// <summary>
-/// The "Status effects" page: your enhancements and enfeeblements drawn by NahjaUI. It follows the game's own layout option (HUD Layout >
-/// Status Effects: one element, three groups or four groups); each group has its own box, its row layout and the look of its icons.
+/// The "Status effects" page: your enhancements and enfeeblements drawn by NahjaUI in two groups, whatever the game's own layout option
+/// says. Each group has its own box, its row layout and the look of its icons.
 /// </summary>
 internal sealed class StatusEffectsEditor
 {
     private readonly Plugin plugin;
 
-    // The group being edited. Until the user picks one, it is the first group the game's layout option uses.
-    private StatusGroupKind? selected;
+    private StatusGroupKind selected = StatusGroupKind.Enhancements;
 
     public StatusEffectsEditor(Plugin plugin)
     {
@@ -25,21 +24,15 @@ internal sealed class StatusEffectsEditor
 
     public void Draw()
     {
-        var system = plugin.StatusEffectsSystem;
         var settings = plugin.Configuration.StatusEffects;
-        var mode = system.CurrentMode;
 
-        selected ??= FirstInUse(mode);
-        var kind = selected.Value;
+        // While this page is open, the groups are drawn (with samples if there is nothing to show).
+        plugin.StatusEffectsSystem.PreviewRequested = true;
 
-        // While this page is open, the group being edited is drawn (with samples if there is nothing to show).
-        system.PreviewRequested = true;
-        system.PreviewGroup = kind;
+        DrawMain(settings);
+        DrawPicker();
 
-        DrawMain(settings, mode);
-        DrawPicker(mode, ref kind);
-        selected = kind;
-
+        var kind = selected;
         var group = settings.For(kind);
         DrawGroupCard(group, kind);
         DrawIconsCard(group.Look, kind);
@@ -47,73 +40,41 @@ internal sealed class StatusEffectsEditor
         DrawStacksCard(group.Look, kind);
     }
 
-    private static StatusGroupKind FirstInUse(StatusLayoutMode mode) => mode switch
-    {
-        StatusLayoutMode.OneElement => StatusGroupKind.Single,
-        _ => StatusGroupKind.Enhancements
-    };
-
     // ---------------------------------------------------------------- main switch
 
-    private void DrawMain(StatusEffectsSettings settings, StatusLayoutMode mode)
+    private void DrawMain(StatusEffectsSettings settings)
     {
-        Widgets.Card("##card_status_main", 6, () =>
+        Widgets.Card("##card_status_main", 3, () =>
         {
             Widgets.SectionLabel("Status effects");
 
             var enabled = settings.Enabled;
-            if (ImGui.Checkbox("Enabled (NahjaUI draws them and hides the game's)", ref enabled))
+            if (ImGui.Checkbox("Enabled", ref enabled))
             {
                 settings.Enabled = enabled;
                 plugin.RequestSave();
             }
+            Widgets.EnabledHint();
 
-            var layoutName = mode switch
-            {
-                StatusLayoutMode.OneElement => "Display as Single Element",
-                StatusLayoutMode.ThreeGroups => "Split Element into 3 Groups",
-                _ => "Split Element into 4 Groups"
-            };
-
-            ImGui.TextColored(Theme.TextMuted, $"The game's layout now: {layoutName}.");
-            ImGui.TextColored(Theme.TextMuted, "NahjaUI follows it. Change it in the game: HUD Layout > Status Effects > UI Element Settings.");
-            ImGui.TextColored(Theme.TextMuted, "Move each group with /nui unlock. Right click on one of your own statuses cancels it, as in the game.");
+            ImGui.TextColored(Theme.TextMuted, "Right click on one of your own statuses cancels it, as in the game.");
         });
     }
 
     // ---------------------------------------------------------------- group picker
 
-    private void DrawPicker(StatusLayoutMode mode, ref StatusGroupKind kind)
+    private void DrawPicker()
     {
-        var current = kind;
-
-        Widgets.Card("##card_status_picker", 3, () =>
+        Widgets.Card("##card_status_picker", 2, () =>
         {
             Widgets.SectionLabel("Group");
 
-            var value = current;
-            if (UnitFrameEditor.EnumCombo("Group to edit", ref value, group => GroupLabel(group, mode)))
-                current = value;
-
-            ImGui.TextColored(Theme.TextMuted, "The ones marked \"in use\" are the ones the game's layout shows now. The others are kept for when you change it.");
+            var value = selected;
+            if (UnitFrameEditor.EnumCombo("Group to edit", ref value, GroupLabel))
+                selected = value;
         });
-
-        kind = current;
     }
 
-    private static string GroupLabel(StatusGroupKind kind, StatusLayoutMode mode)
-    {
-        var name = kind switch
-        {
-            StatusGroupKind.Single => "All together (single element)",
-            StatusGroupKind.Enhancements => "Enhancements",
-            StatusGroupKind.Conditional => "Conditional enhancements",
-            StatusGroupKind.Enfeeblements => "Enfeeblements",
-            _ => "Others"
-        };
-
-        return StatusEffectsModule.IsInUse(kind, mode) ? $"{name}  (in use)" : name;
-    }
+    private static string GroupLabel(StatusGroupKind kind) => kind == StatusGroupKind.Enhancements ? "Enhancements" : "Enfeeblements";
 
     // ---------------------------------------------------------------- the group
 
@@ -130,10 +91,10 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            var columns = group.Columns;
-            if (ImGui.SliderInt("Icons in a row", ref columns, 1, 30))
+            var perLine = group.Look.IconsPerLine;
+            if (ImGui.SliderInt("Icons per line", ref perLine, 1, 30))
             {
-                group.Columns = columns;
+                group.Look.IconsPerLine = perLine;
                 plugin.RequestSave();
             }
 
@@ -144,35 +105,29 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            var justify = group.Justify;
-            if (UnitFrameEditor.EnumCombo("Row justified to the", ref justify, JustifyLabel))
+            var order = group.Look.Order;
+            if (UnitFrameEditor.EnumCombo("Order", ref order, UnitFrameEditor.OrderLabel))
             {
-                group.Justify = justify;
+                group.Look.Order = order;
                 plugin.RequestSave();
             }
 
-            var up = group.RowsGrowUp;
-            if (ImGui.Checkbox("The next rows go above the first", ref up))
+            var growth = group.Look.Growth;
+            if (UnitFrameEditor.EnumCombo("Grow towards", ref growth, UnitFrameEditor.GrowthLabel))
             {
-                group.RowsGrowUp = up;
+                group.Look.Growth = growth;
                 plugin.RequestSave();
             }
 
-            if (kind == StatusGroupKind.Conditional)
-                ImGui.TextColored(Theme.TextMuted, "The game's conditional enhancements are not told apart yet: this group is empty for now.");
+            if (UnitFrameEditor.NextLineCombo(group.Look))
+                plugin.RequestSave();
+
         });
     }
 
-    private static string JustifyLabel(StatusJustify justify) => justify switch
-    {
-        StatusJustify.Left => "Left",
-        StatusJustify.Right => "Right",
-        _ => "Center"
-    };
-
     // ---------------------------------------------------------------- the icons
 
-    private void DrawIconsCard(NahjaUI.Modules.PartyFrames.PartyAuraSettings look, StatusGroupKind kind)
+    private void DrawIconsCard(NahjaUI.Modules.PartyFrames.StatusRowSettings look, StatusGroupKind kind)
     {
         Widgets.Card($"##card_status_{kind}_icons", 8, () =>
         {
@@ -192,10 +147,10 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            var crop = look.CropPercent;
-            if (ImGui.SliderInt("Icon crop (%)", ref crop, 0, 30))
+            var trim = look.Trim;
+            if (UnitFrameEditor.EnumCombo("Trim icon margins", ref trim, NahjaUI.Modules.Trackers.TrackerEditor.TrimLabel))
             {
-                look.CropPercent = crop;
+                look.Trim = trim;
                 plugin.RequestSave();
             }
 
@@ -217,7 +172,7 @@ internal sealed class StatusEffectsEditor
 
     // ---------------------------------------------------------------- the time
 
-    private void DrawTimeCard(NahjaUI.Modules.PartyFrames.PartyAuraSettings look, StatusGroupKind kind)
+    private void DrawTimeCard(NahjaUI.Modules.PartyFrames.StatusRowSettings look, StatusGroupKind kind)
     {
         Widgets.Card($"##card_status_{kind}_time", 9, () =>
         {
@@ -230,47 +185,14 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            var size = look.TimerSize;
-            if (UnitFrameEditor.SizeCombo("Time size (px)", ref size))
-            {
-                look.TimerSize = size;
+            if (UnitFrameEditor.StatusTextControls(look, true))
                 plugin.RequestSave();
-            }
-
-            var anchor = look.TimerAnchor;
-            if (UnitFrameEditor.EnumCombo("Time position", ref anchor, point => point.Label()))
-            {
-                look.TimerAnchor = anchor;
-                plugin.RequestSave();
-            }
-
-            var x = look.TimerOffsetX;
-            if (ImGui.InputInt("Time offset X (px)", ref x, 1, 5))
-            {
-                look.TimerOffsetX = x;
-                plugin.RequestSave();
-            }
-
-            // Up is plus (the saved value counts downwards, so the sign is turned in the editors).
-            var y = -look.TimerOffsetY;
-            if (ImGui.InputInt("Time offset Y (px)", ref y, 1, 5))
-            {
-                look.TimerOffsetY = -y;
-                plugin.RequestSave();
-            }
-
-            var font = look.Font;
-            if (UnitFrameEditor.EnumCombo("Text font", ref font, UnitFrameEditor.FontLabel))
-            {
-                look.Font = font;
-                plugin.RequestSave();
-            }
         });
     }
 
     // ---------------------------------------------------------------- the stacks
 
-    private void DrawStacksCard(NahjaUI.Modules.PartyFrames.PartyAuraSettings look, StatusGroupKind kind)
+    private void DrawStacksCard(NahjaUI.Modules.PartyFrames.StatusRowSettings look, StatusGroupKind kind)
     {
         Widgets.Card($"##card_status_{kind}_stacks", 7, () =>
         {
@@ -283,33 +205,8 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            var size = look.StackTextSize > 0 ? look.StackTextSize : 8;
-            if (ImGui.SliderInt("Stack size (px)", ref size, 4, 24))
-            {
-                look.StackTextSize = size;
+            if (UnitFrameEditor.StatusTextControls(look, false))
                 plugin.RequestSave();
-            }
-
-            var anchor = look.StacksAnchor;
-            if (UnitFrameEditor.EnumCombo("Stack position", ref anchor, point => point.Label()))
-            {
-                look.StacksAnchor = anchor;
-                plugin.RequestSave();
-            }
-
-            var x = look.StacksOffsetX;
-            if (ImGui.InputInt("Stack offset X (px)", ref x, 1, 5))
-            {
-                look.StacksOffsetX = x;
-                plugin.RequestSave();
-            }
-
-            var y = -look.StacksOffsetY;
-            if (ImGui.InputInt("Stack offset Y (px)", ref y, 1, 5))
-            {
-                look.StacksOffsetY = -y;
-                plugin.RequestSave();
-            }
         });
     }
 }

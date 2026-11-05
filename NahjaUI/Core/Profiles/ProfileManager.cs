@@ -7,8 +7,8 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NahjaUI.Core.Layout;
-using NahjaUI.Modules.Auras;
-using NahjaUI.Modules.CastBars;
+using NahjaUI.Modules.Trackers;
+using NahjaUI.Modules.ProgressBars;
 using NahjaUI.Modules.JobGauges;
 using NahjaUI.Modules.UnitFrames;
 
@@ -17,21 +17,26 @@ namespace NahjaUI.Core.Profiles;
 /// <summary>The parts of the configuration that can be exported and imported on their own.</summary>
 internal enum ProfileBlock
 {
-    Auras,
+    Trackers,
     Placement,
     UnitFrames,
-    CastBars,
+    ProgressBars,
     JobGauges,
-    Appearance
+    Appearance,
+    Filters,
+    NamePlates,
+    EnmityList,
+    StatusEffects,
+    Tooltip
 }
 
-/// <summary>What to do with the auras of an import.</summary>
-internal enum AuraImportMode
+/// <summary>What to do with the trackers of an import.</summary>
+internal enum TrackerImportMode
 {
-    /// <summary>Keep my auras and add the imported ones (they get new ids, and no positions).</summary>
+    /// <summary>Keep my trackers and add the imported ones (they get new ids, and no positions).</summary>
     Add,
 
-    /// <summary>Replace all my auras with the imported ones (a full restore, positions included).</summary>
+    /// <summary>Replace all my trackers with the imported ones (a full restore, positions included).</summary>
     Replace
 }
 
@@ -79,23 +84,33 @@ internal sealed class ProfileManager
 
     public static string Label(ProfileBlock block) => block switch
     {
-        ProfileBlock.Auras => "Auras and groups",
+        ProfileBlock.Trackers => "Trackers and groups",
         ProfileBlock.Placement => "Position and size of every element",
         ProfileBlock.UnitFrames => "Unit frames",
-        ProfileBlock.CastBars => "Cast bars",
+        ProfileBlock.ProgressBars => "Progress bars",
         ProfileBlock.JobGauges => "Job gauges",
         ProfileBlock.Appearance => "Appearance (accent color, target ring color, menu text size)",
+        ProfileBlock.Filters => "Filters (the named lists of statuses)",
+        ProfileBlock.NamePlates => "Nameplates",
+        ProfileBlock.EnmityList => "Enmity list",
+        ProfileBlock.StatusEffects => "Status effects (your own enhancements and enfeeblements)",
+        ProfileBlock.Tooltip => "Tooltip",
         _ => block.ToString()
     };
 
     private static string Key(ProfileBlock block) => block switch
     {
-        ProfileBlock.Auras => "auras",
+        ProfileBlock.Trackers => "trackers",
         ProfileBlock.Placement => "placement",
         ProfileBlock.UnitFrames => "unitFrames",
-        ProfileBlock.CastBars => "castBars",
+        ProfileBlock.ProgressBars => "progressBars",
         ProfileBlock.JobGauges => "jobGauges",
         ProfileBlock.Appearance => "appearance",
+        ProfileBlock.Filters => "filters",
+        ProfileBlock.NamePlates => "namePlates",
+        ProfileBlock.EnmityList => "enmityList",
+        ProfileBlock.StatusEffects => "statusEffects",
+        ProfileBlock.Tooltip => "tooltip",
         _ => block.ToString()
     };
 
@@ -111,16 +126,21 @@ internal sealed class ProfileManager
         {
             data[Key(block)] = block switch
             {
-                ProfileBlock.Auras => new JObject
+                ProfileBlock.Trackers => new JObject
                 {
-                    ["auras"] = JToken.FromObject(config.Auras, Serializer),
-                    ["groups"] = JToken.FromObject(config.AuraGroups, Serializer),
+                    ["trackers"] = JToken.FromObject(config.Trackers, Serializer),
+                    ["groups"] = JToken.FromObject(config.TrackerGroups, Serializer),
                     ["rootOrder"] = JToken.FromObject(config.RootOrder, Serializer)
                 },
                 ProfileBlock.Placement => JToken.FromObject(config.Layouts, Serializer),
                 ProfileBlock.UnitFrames => JToken.FromObject(config.UnitFrames, Serializer),
-                ProfileBlock.CastBars => JToken.FromObject(config.CastBars, Serializer),
+                ProfileBlock.ProgressBars => JToken.FromObject(config.ProgressBars, Serializer),
                 ProfileBlock.JobGauges => JToken.FromObject(config.JobGauges, Serializer),
+                ProfileBlock.Filters => JToken.FromObject(config.Filters, Serializer),
+                ProfileBlock.NamePlates => JToken.FromObject(config.NamePlates, Serializer),
+                ProfileBlock.EnmityList => JToken.FromObject(config.EnmityList, Serializer),
+                ProfileBlock.StatusEffects => JToken.FromObject(config.StatusEffects, Serializer),
+                ProfileBlock.Tooltip => JToken.FromObject(config.Tooltip, Serializer),
                 ProfileBlock.Appearance => new JObject
                 {
                     ["accent"] = JToken.FromObject(config.AccentColor, Serializer),
@@ -190,6 +210,8 @@ internal sealed class ProfileManager
                 json = Encoding.UTF8.GetString(output.ToArray());
             }
 
+            // Codes made before the cast bars were renamed to progress bars.
+            json = ConfigRename.Apply(json);
             var root = JObject.Parse(json);
 
             if ((string?)root["format"] != "NahjaUI")
@@ -231,10 +253,10 @@ internal sealed class ProfileManager
     {
         switch (block)
         {
-            case ProfileBlock.Auras:
-                var auras = (token["auras"] as JArray)?.Count ?? 0;
+            case ProfileBlock.Trackers:
+                var trackers = (token["trackers"] as JArray)?.Count ?? 0;
                 var groups = (token["groups"] as JArray)?.Count ?? 0;
-                return $"{Label(block)}: {auras} aura(s) in {groups} group(s)";
+                return $"{Label(block)}: {trackers} tracker(s) in {groups} group(s)";
 
             case ProfileBlock.Placement:
                 return $"{Label(block)}: {(token as JObject)?.Count ?? 0} element(s)";
@@ -250,7 +272,7 @@ internal sealed class ProfileManager
     /// Applies the chosen parts of a code. The current configuration is saved to a backup file first.
     /// Returns a message for the user and sets <paramref name="ok"/>.
     /// </summary>
-    public string Apply(ProfilePreview preview, ISet<ProfileBlock> chosen, AuraImportMode auraMode, out bool ok)
+    public string Apply(ProfilePreview preview, ISet<ProfileBlock> chosen, TrackerImportMode trackerMode, out bool ok)
     {
         ok = false;
 
@@ -263,19 +285,24 @@ internal sealed class ProfileManager
         try
         {
             // 1. Read everything that was chosen. Nothing is changed until all of it has been read without problems.
-            AuraBlock? auras = null;
+            TrackerBlock? trackers = null;
             Dictionary<string, ElementLayout>? placement = null;
             UnitFramesSettings? unitFrames = null;
-            CastBarsSettings? castBars = null;
+            ProgressBarsSettings? progressBars = null;
             JobGaugesSettings? jobGauges = null;
             JObject? appearance = null;
+            NahjaUI.Modules.Filters.FiltersSettings? filters = null;
+            NahjaUI.Modules.NamePlates.NamePlateSettings? namePlates = null;
+            NahjaUI.Modules.EnmityList.EnmityListSettings? enmityList = null;
+            NahjaUI.Modules.StatusEffects.StatusEffectsSettings? statusEffects = null;
+            NahjaUI.Modules.Tooltip.TooltipSettings? tooltip = null;
 
-            if (chosen.Contains(ProfileBlock.Auras) && blocks[Key(ProfileBlock.Auras)] is JObject auraToken)
+            if (chosen.Contains(ProfileBlock.Trackers) && blocks[Key(ProfileBlock.Trackers)] is JObject trackerToken)
             {
-                auras = new AuraBlock(
-                    auraToken["auras"]?.ToObject<List<AuraDefinition>>(Serializer) ?? new List<AuraDefinition>(),
-                    auraToken["groups"]?.ToObject<List<AuraGroupDefinition>>(Serializer) ?? new List<AuraGroupDefinition>(),
-                    auraToken["rootOrder"]?.ToObject<List<string>>(Serializer) ?? new List<string>());
+                trackers = new TrackerBlock(
+                    trackerToken["trackers"]?.ToObject<List<TrackerDefinition>>(Serializer) ?? new List<TrackerDefinition>(),
+                    trackerToken["groups"]?.ToObject<List<TrackerGroupDefinition>>(Serializer) ?? new List<TrackerGroupDefinition>(),
+                    trackerToken["rootOrder"]?.ToObject<List<string>>(Serializer) ?? new List<string>());
             }
 
             if (chosen.Contains(ProfileBlock.Placement) && blocks[Key(ProfileBlock.Placement)] is JObject placementToken)
@@ -284,14 +311,29 @@ internal sealed class ProfileManager
             if (chosen.Contains(ProfileBlock.UnitFrames) && blocks[Key(ProfileBlock.UnitFrames)] is JToken uf)
                 unitFrames = uf.ToObject<UnitFramesSettings>(Serializer);
 
-            if (chosen.Contains(ProfileBlock.CastBars) && blocks[Key(ProfileBlock.CastBars)] is JToken cb)
-                castBars = cb.ToObject<CastBarsSettings>(Serializer);
+            if (chosen.Contains(ProfileBlock.ProgressBars) && blocks[Key(ProfileBlock.ProgressBars)] is JToken cb)
+                progressBars = cb.ToObject<ProgressBarsSettings>(Serializer);
 
             if (chosen.Contains(ProfileBlock.JobGauges) && blocks[Key(ProfileBlock.JobGauges)] is JToken jg)
                 jobGauges = jg.ToObject<JobGaugesSettings>(Serializer);
 
             if (chosen.Contains(ProfileBlock.Appearance) && blocks[Key(ProfileBlock.Appearance)] is JObject ap)
                 appearance = ap;
+
+            if (chosen.Contains(ProfileBlock.Filters) && blocks[Key(ProfileBlock.Filters)] is JToken fl)
+                filters = fl.ToObject<NahjaUI.Modules.Filters.FiltersSettings>(Serializer);
+
+            if (chosen.Contains(ProfileBlock.NamePlates) && blocks[Key(ProfileBlock.NamePlates)] is JToken np)
+                namePlates = np.ToObject<NahjaUI.Modules.NamePlates.NamePlateSettings>(Serializer);
+
+            if (chosen.Contains(ProfileBlock.EnmityList) && blocks[Key(ProfileBlock.EnmityList)] is JToken el)
+                enmityList = el.ToObject<NahjaUI.Modules.EnmityList.EnmityListSettings>(Serializer);
+
+            if (chosen.Contains(ProfileBlock.StatusEffects) && blocks[Key(ProfileBlock.StatusEffects)] is JToken se)
+                statusEffects = se.ToObject<NahjaUI.Modules.StatusEffects.StatusEffectsSettings>(Serializer);
+
+            if (chosen.Contains(ProfileBlock.Tooltip) && blocks[Key(ProfileBlock.Tooltip)] is JToken tt)
+                tooltip = tt.ToObject<NahjaUI.Modules.Tooltip.TooltipSettings>(Serializer);
 
             // 2. Save what there is now, so any import can be undone.
             var backupPath = SaveToFile(BackupDirectory, "backup", Export(Enum.GetValues<ProfileBlock>()));
@@ -301,11 +343,26 @@ internal sealed class ProfileManager
             if (unitFrames is not null)
                 config.UnitFrames = unitFrames;
 
-            if (castBars is not null)
-                config.CastBars = castBars;
+            if (progressBars is not null)
+                config.ProgressBars = progressBars;
 
             if (jobGauges is not null)
                 config.JobGauges = jobGauges;
+
+            if (filters is not null)
+                config.Filters = filters;
+
+            if (namePlates is not null)
+                config.NamePlates = namePlates;
+
+            if (enmityList is not null)
+                config.EnmityList = enmityList;
+
+            if (statusEffects is not null)
+                config.StatusEffects = statusEffects;
+
+            if (tooltip is not null)
+                config.Tooltip = tooltip;
 
             if (appearance is not null)
             {
@@ -324,23 +381,23 @@ internal sealed class ProfileManager
                     config.WindowRoundingPx = Math.Clamp(rounding.Value, 0, 30);
             }
 
-            // 4. Auras.
-            if (auras is not null)
+            // 4. Trackers.
+            if (trackers is not null)
             {
-                if (auraMode == AuraImportMode.Replace)
-                    ReplaceAuras(auras);
+                if (trackerMode == TrackerImportMode.Replace)
+                    ReplaceTrackers(trackers);
                 else
-                    AddAuras(auras);
+                    AddTrackers(trackers);
             }
 
             // 5. Positions. Elements that already exist are updated in place, because the modules hold on to them.
             if (placement is not null)
             {
-                var skipAuraKeys = auras is not null && auraMode == AuraImportMode.Add;
+                var skipTrackerKeys = trackers is not null && trackerMode == TrackerImportMode.Add;
 
                 foreach (var (id, imported) in placement)
                 {
-                    if (skipAuraKeys && IsAuraElementId(id))
+                    if (skipTrackerKeys && IsTrackerElementId(id))
                         continue;
 
                     if (config.Layouts.TryGetValue(id, out var existing))
@@ -356,8 +413,8 @@ internal sealed class ProfileManager
             }
 
             // 6. Rebuild what is drawn from the new configuration.
-            if (auras is not null)
-                plugin.AuraSystem.ReloadFromConfiguration();
+            if (trackers is not null)
+                plugin.TrackerSystem.ReloadFromConfiguration();
 
             plugin.Layout.SelectedId = null;
             plugin.SaveNow();
@@ -372,34 +429,34 @@ internal sealed class ProfileManager
         }
     }
 
-    private sealed record AuraBlock(List<AuraDefinition> Auras, List<AuraGroupDefinition> Groups, List<string> RootOrder);
+    private sealed record TrackerBlock(List<TrackerDefinition> Trackers, List<TrackerGroupDefinition> Groups, List<string> RootOrder);
 
-    private static bool IsAuraElementId(string id) =>
-        id.StartsWith("aura.", StringComparison.Ordinal) || id.StartsWith("aura-group.", StringComparison.Ordinal);
+    private static bool IsTrackerElementId(string id) =>
+        id.StartsWith("tracker.", StringComparison.Ordinal) || id.StartsWith("tracker-group.", StringComparison.Ordinal);
 
-    // A full restore: the imported auras take the place of mine and keep their ids, so their positions match.
-    private void ReplaceAuras(AuraBlock block)
+    // A full restore: the imported trackers take the place of mine and keep their ids, so their positions match.
+    private void ReplaceTrackers(TrackerBlock block)
     {
         var config = plugin.Configuration;
 
-        config.Auras = block.Auras;
-        config.AuraGroups = block.Groups;
+        config.Trackers = block.Trackers;
+        config.TrackerGroups = block.Groups;
         config.RootOrder = block.RootOrder;
 
-        // Forget the positions of auras and groups that no longer exist.
+        // Forget the positions of trackers and groups that no longer exist.
         var valid = new HashSet<string>();
-        foreach (var aura in block.Auras)
-            valid.Add($"aura.{aura.Id}");
+        foreach (var tracker in block.Trackers)
+            valid.Add($"tracker.{tracker.Id}");
         foreach (var group in block.Groups)
-            valid.Add($"aura-group.{group.Id}");
+            valid.Add($"tracker-group.{group.Id}");
 
-        foreach (var key in config.Layouts.Keys.Where(k => IsAuraElementId(k) && !valid.Contains(k)).ToList())
+        foreach (var key in config.Layouts.Keys.Where(k => IsTrackerElementId(k) && !valid.Contains(k)).ToList())
             config.Layouts.Remove(key);
     }
 
-    // Shared auras: they are added after mine, with new ids so they can never clash with mine. They have no position,
+    // Shared trackers: they are added after mine, with new ids so they can never clash with mine. They have no position,
     // so each one starts in the default place and the user puts it where they like.
-    private void AddAuras(AuraBlock block)
+    private void AddTrackers(TrackerBlock block)
     {
         var config = plugin.Configuration;
 
@@ -409,18 +466,18 @@ internal sealed class ProfileManager
             var oldId = group.Id;
             group.Id = Guid.NewGuid().ToString("N");
             groupIds[oldId] = group.Id;
-            config.AuraGroups.Add(group);
+            config.TrackerGroups.Add(group);
         }
 
-        var auraIds = new Dictionary<string, string>();
-        foreach (var aura in block.Auras)
+        var trackerIds = new Dictionary<string, string>();
+        foreach (var tracker in block.Trackers)
         {
-            var oldId = aura.Id;
-            aura.Id = Guid.NewGuid().ToString("N");
-            auraIds[oldId] = aura.Id;
+            var oldId = tracker.Id;
+            tracker.Id = Guid.NewGuid().ToString("N");
+            trackerIds[oldId] = tracker.Id;
 
-            aura.GroupId = aura.GroupId is not null && groupIds.TryGetValue(aura.GroupId, out var newGroup) ? newGroup : null;
-            config.Auras.Add(aura);
+            tracker.GroupId = tracker.GroupId is not null && groupIds.TryGetValue(tracker.GroupId, out var newGroup) ? newGroup : null;
+            config.Trackers.Add(tracker);
         }
 
         // The order of the explorer list: the imported entries go after mine.
@@ -428,8 +485,8 @@ internal sealed class ProfileManager
         {
             if (key.StartsWith("group:", StringComparison.Ordinal) && groupIds.TryGetValue(key["group:".Length..], out var g))
                 config.RootOrder.Add($"group:{g}");
-            else if (key.StartsWith("aura:", StringComparison.Ordinal) && auraIds.TryGetValue(key["aura:".Length..], out var a))
-                config.RootOrder.Add($"aura:{a}");
+            else if (key.StartsWith("tracker:", StringComparison.Ordinal) && trackerIds.TryGetValue(key["tracker:".Length..], out var a))
+                config.RootOrder.Add($"tracker:{a}");
         }
     }
 
