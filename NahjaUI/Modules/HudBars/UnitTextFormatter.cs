@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace NahjaUI.Modules.UnitFrames;
+namespace NahjaUI.Modules.HudBars;
 
 /// <summary>Turns names, HP and numbers into the text a frame shows, following the user's settings.</summary>
 internal static class UnitTextFormatter

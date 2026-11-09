@@ -1,0 +1,66 @@
+name: Release
+
+# Push a tag like v0.1.0.0 to build NahjaUI, publish latest.zip as a GitHub release
+# and update repo.json (the file that Dalamud reads) with the new version.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Install .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Download Dalamud
+      run: |
+        Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
+        Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+        Remove-Item latest.zip
+
+    - name: Build
+      shell: pwsh
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        dotnet build --configuration Release -p:Version=$version
+
+    - name: Find the package
+      id: package
+      shell: pwsh
+      run: |
+        $zip = Get-ChildItem -Path . -Recurse -Filter latest.zip | Where-Object { $_.FullName -like '*Release*NahjaUI*' } | Select-Object -First 1
+        if (-not $zip) { throw 'latest.zip was not produced by the build.' }
+        "path=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+
+    - name: Publish the release
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create "${{ github.ref_name }}" "${{ steps.package.outputs.path }}" --title "NahjaUI ${{ github.ref_name }}" --generate-notes
+
+    - name: Update repo.json
+      shell: pwsh
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        $repo = @(Get-Content repo.json -Raw | ConvertFrom-Json)
+        $repo[0].AssemblyVersion = $version
+        $repo[0].LastUpdate = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        ConvertTo-Json -InputObject $repo -Depth 6 | Set-Content repo.json -Encoding utf8
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add repo.json
+        git commit -m "Update repo.json for ${{ github.ref_name }}"
+        git push origin HEAD:master

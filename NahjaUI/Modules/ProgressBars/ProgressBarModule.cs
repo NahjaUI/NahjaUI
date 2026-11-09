@@ -83,6 +83,7 @@ internal sealed class ProgressBarModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);
+        hider.ShowAll();
     }
 
     // ---------------------------------------------------------------- hiding the game's bars
@@ -166,7 +167,7 @@ internal sealed class ProgressBarModule : IDisposable
         var scale = ImGuiHelpers.GlobalScale;
         var (pos, size) = LayoutManager.GetRect(GcdElement.Layout);
         var max = pos + size;
-        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), size.Y / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), size.Y / 2f);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var drawList = ImGui.GetBackgroundDrawList();
 
@@ -205,7 +206,6 @@ internal sealed class ProgressBarModule : IDisposable
         if (!settings.Enabled)
             return;
 
-        settings.EnsureTexts();
 
         // The bar selected in the Layout page shows a sample, so it can be placed even when nothing is being cast.
         preview |= plugin.Layout.IsPreviewing(element.Id);
@@ -240,7 +240,7 @@ internal sealed class ProgressBarModule : IDisposable
         var barColor = isTarget && !view.Interruptible ? settings.UninterruptibleColor : settings.BarColor;
 
         // The corners are rounded like the rest of the interface (never more than half the height).
-        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), size.Y / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), size.Y / 2f);
 
         // Background
         drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.BackgroundColor), rounding, ImDrawFlags.RoundCornersAll);
@@ -333,7 +333,7 @@ internal sealed class ProgressBarModule : IDisposable
         var timeRoom = 0f;
         if (settings.Time.Enabled && settings.Time.Anchor.Fraction().X >= 0.5f)
         {
-            using (var face = plugin.Fonts.PushCap(settings.Time.Font, settings.Time.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Time.TextSize))
                 timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
         }
 
@@ -343,14 +343,14 @@ internal sealed class ProgressBarModule : IDisposable
         if (settings.Name.Enabled)
         {
             string name;
-            using (var face = plugin.Fonts.PushCap(settings.Name.Font, settings.Name.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Name.TextSize))
                 name = Fit(face, view.Name, boxSize.X - timeRoom - MathF.Round(12f * scale));
 
-            plugin.UnitFrameSystem.DrawText(drawList, name, settings.Name, boxPos, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, name, settings.Name, boxPos, boxSize);
         }
 
         if (settings.Time.Enabled)
-            plugin.UnitFrameSystem.DrawText(drawList, timeText, settings.Time, boxPos, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, timeText, settings.Time, boxPos, boxSize);
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.

@@ -16,8 +16,8 @@ using NahjaUI.Modules.Filters;
 using NahjaUI.Modules.NamePlates;
 using NahjaUI.Modules.StatusEffects;
 using NahjaUI.Modules.Tooltip;
-using NahjaUI.Modules.PartyFrames;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.HudBars;
 using NahjaUI.Windows;
 
 namespace NahjaUI;
@@ -67,12 +67,12 @@ public sealed class Plugin : IDalamudPlugin
     internal ProgressBarEditor ProgressBarEditorPage { get; init; }
     internal JobGaugeModule JobGaugeSystem { get; init; }
     internal JobGaugeEditor JobGaugeEditorPage { get; init; }
-    internal UnitFrameModule UnitFrameSystem { get; init; }
-    internal UnitFrameEditor UnitFrameEditorPage { get; init; }
+    internal HudBarModule HudBarSystem { get; init; }
+    internal HudBarEditor HudBarEditorPage { get; init; }
     internal StatusEffectsModule StatusEffectsSystem { get; init; }
     internal StatusEffectsEditor StatusEffectsEditorPage { get; init; }
     internal FiltersEditor FiltersEditorPage { get; init; }
-    internal PartyFrameModule PartyFrameSystem { get; init; }
+    internal PartyListModule PartyListSystem { get; init; }
     internal NamePlateModule NamePlateSystem { get; init; }
     internal NamePlateEditor NamePlateEditorPage { get; init; }
     internal TooltipEditor TooltipEditorPage { get; init; }
@@ -89,7 +89,6 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
-        NahjaUI.Core.Profiles.ConfigRename.ConvertConfigFile();
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         // A plain copy of the saved file when the plugin was updated (or the format must be converted), then the conversion itself.
@@ -107,8 +106,8 @@ public sealed class Plugin : IDalamudPlugin
 
         GameData = new GameDataProvider();
 
-        Configuration.UnitFrames.Player.MigrateMpLists();
-        Configuration.UnitFrames.Player.MigrateParameterBar();
+        // The shared colors of the Appearance page are read from the configuration (also after a profile is applied).
+        NahjaUI.Core.Ui.GlobalColors.Source = () => Configuration.Colors ??= new NahjaUI.Core.Ui.GlobalColors();
 
         Layout = new LayoutManager(Configuration);
         Fonts = new OverlayFonts();
@@ -139,12 +138,12 @@ public sealed class Plugin : IDalamudPlugin
         ProgressBarEditorPage = new ProgressBarEditor(this);
         JobGaugeSystem = new JobGaugeModule(this);
         JobGaugeEditorPage = new JobGaugeEditor(this);
-        UnitFrameSystem = new UnitFrameModule(this);
-        UnitFrameEditorPage = new UnitFrameEditor(this);
+        HudBarSystem = new HudBarModule(this);
+        HudBarEditorPage = new HudBarEditor(this);
         StatusEffectsSystem = new StatusEffectsModule(this);
         StatusEffectsEditorPage = new StatusEffectsEditor(this);
         FiltersEditorPage = new FiltersEditor(this);
-        PartyFrameSystem = new PartyFrameModule(this);
+        PartyListSystem = new PartyListModule(this);
         NamePlateSystem = new NamePlateModule(this);
         NamePlateEditorPage = new NamePlateEditor(this);
         TooltipEditorPage = new TooltipEditor(this);
@@ -160,7 +159,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open or close the NahjaUI window. Use \"/nui unlock\" to move elements."
+            HelpMessage = "Open or close the NahjaUI window.\n/nui unlock \u2192 move the elements of the interface wherever you want; use it again to lock them."
         });
 
         PluginInterface.UiBuilder.Draw += Draw;
@@ -180,58 +179,106 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
 
-        ServerInfoBar.Dispose();
-        WindowSystem.RemoveAllWindows();
-        MainWindow.Dispose();
-        MiniBar.Dispose();
-        ProgressBarSystem.Dispose();
-        JobGaugeSystem.Dispose();
-        UnitFrameSystem.Dispose();
-        StatusEffectsSystem.Dispose();
-        PartyFrameSystem.Dispose();
-        NamePlateSystem.Dispose();
-        EnmityListSystem.Dispose();
-        GameData.Dispose();
-        Fonts.Dispose();
+        // Each part is closed on its own: if one fails, the others still run (above all the ones that give back the game's windows).
+        Safely(() => ServerInfoBar.Dispose());
+        Safely(() => WindowSystem.RemoveAllWindows());
+        Safely(() => MainWindow.Dispose());
+        Safely(() => MiniBar.Dispose());
+        Safely(() => ProgressBarSystem.Dispose());
+        Safely(() => JobGaugeSystem.Dispose());
+        Safely(() => HudBarSystem.Dispose());
+        Safely(() => StatusEffectsSystem.Dispose());
+        Safely(() => PartyListSystem.Dispose());
+        Safely(() => NamePlateSystem.Dispose());
+        Safely(() => EnmityListSystem.Dispose());
+        Safely(() => GameData.Dispose());
+        Safely(() => Fonts.Dispose());
 
-        CommandManager.RemoveHandler(CommandName);
-
-        SaveNow();
+        Safely(() => CommandManager.RemoveHandler(CommandName));
+        Safely(SaveNow);
     }
 
     // Everything that is drawn each frame goes through here, in this order.
     private void Draw()
     {
-        // Keep the accent colour in sync even if the main window is closed.
-        Theme.Accent = Configuration.AccentColor;
-
-        FollowUnlockMode();
-        ContextMenuCapture.Update();
+        Guard("unlock mode", FollowUnlockMode);
 
         // The elements that have a position for each job show the one of the job being played.
-        var currentSnapshot = GameData.Current;
-        Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u);
+        Guard("layout", () =>
+        {
+            var currentSnapshot = GameData.Current;
+            Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u);
+        });
 
         // Which game windows cover the screen right now (the frames are not drawn over them).
-        GameCover.Update(Configuration);
+        Guard("window cover", () => GameCover.Update(Configuration));
         StreamerMode.Enabled = Configuration.StreamerMode;
 
-        WindowSystem.Draw();
+        Guard("windows", WindowSystem.Draw);
 
         // Drawn first, so the nameplates stay under every frame (the player's, the target's, the enemies', the party's).
-        NamePlateSystem.Draw();
-        UnitFrameSystem.Draw();
-        StatusEffectsSystem.Draw();
-        PartyFrameSystem.Draw();
-        EnmityListSystem.Draw();
-        TrackerSystem.Draw();
-        ProgressBarSystem.Draw();
-        JobGaugeSystem.Draw();
-        UnlockOverlay.Draw();
+        Guard("nameplates", NamePlateSystem.Draw);
+        Guard("HUD bars", HudBarSystem.Draw);
+        Guard("status effects", StatusEffectsSystem.Draw);
+        Guard("party list", PartyListSystem.Draw);
+        Guard("enmity list", EnmityListSystem.Draw);
+        Guard("trackers", TrackerSystem.Draw);
+        Guard("progress bars", ProgressBarSystem.Draw);
+        Guard("job gauges", JobGaugeSystem.Draw);
+        Guard("unlock overlay", UnlockOverlay.Draw);
 
-        UnitFrameSystem.UpdateCursor();
+        Guard("cursor", HudBarSystem.UpdateCursor);
 
         FlushSave();
+    }
+
+    // ---- Safety: a failure in one part never takes the others (or the game) down. ----
+
+    private sealed class GuardState
+    {
+        public int Failures;
+        public System.DateTime PausedUntil;
+    }
+
+    private readonly System.Collections.Generic.Dictionary<string, GuardState> guards = new();
+
+    // Runs one part of the frame. An error is written to the log (once per pause, not once per frame); after 3 failures in a row the
+    // part rests for 10 seconds and then tries again, so a broken part costs nothing and a temporary problem fixes itself.
+    private void Guard(string name, System.Action action)
+    {
+        if (!guards.TryGetValue(name, out var state))
+            guards[name] = state = new GuardState();
+
+        if (state.PausedUntil > System.DateTime.UtcNow)
+            return;
+
+        try
+        {
+            action();
+            state.Failures = 0;
+        }
+        catch (System.Exception ex)
+        {
+            state.Failures++;
+            if (state.Failures >= 3)
+            {
+                state.Failures = 0;
+                state.PausedUntil = System.DateTime.UtcNow.AddSeconds(10);
+                Log.Error(ex, "NahjaUI: {Name} failed several times in a row and rests for 10 seconds.", name);
+            }
+        }
+    }
+
+    private static void Safely(System.Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (System.Exception ex)
+        {
+            Log.Warning(ex, "NahjaUI: a part could not be closed cleanly.");
+        }
     }
 
     // When unlock mode starts, the main window gets out of the way (if it was open), so the whole screen can be used.
@@ -272,17 +319,6 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (args.Trim().ToLowerInvariant() == "debug")
-        {
-            MainWindow.ShowDebug();
-            if (MiniBar.IsOpen)
-                ExpandMainWindow();
-            else
-                MainWindow.IsOpen = true;
-
-            return;
-        }
-
         ToggleMainUi();
     }
 
@@ -319,43 +355,6 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>Call after changing any setting. The file is written later, not on every frame.</summary>
     public void RequestSave() => saveRequested = true;
-
-    /// <summary>Sets the font of every tracker, tracker group template and progress bar to the NahjaUI font (Saira).</summary>
-    public void UseNahjaFontEverywhere()
-    {
-        foreach (var tracker in Configuration.Trackers)
-            tracker.Font = OverlayFont.NahjaDisplayBold;
-
-        foreach (var group in Configuration.TrackerGroups)
-        {
-            if (group.Template is not null)
-                group.Template.Font = OverlayFont.NahjaDisplayBold;
-        }
-
-        Configuration.ProgressBars.Player.Font = OverlayFont.NahjaDisplay;
-        Configuration.ProgressBars.Target.Font = OverlayFont.NahjaDisplay;
-        Configuration.JobGauges.WhiteMage.Font = OverlayFont.NahjaDisplayBold;
-        Configuration.JobGauges.Warrior.Font = OverlayFont.NahjaDisplayBold;
-        Configuration.JobGauges.Paladin.Font = OverlayFont.NahjaDisplayBold;
-        Configuration.JobGauges.DarkKnight.Font = OverlayFont.NahjaDisplayBold;
-        Configuration.JobGauges.RedMage.Font = OverlayFont.NahjaDisplayBold;
-        Configuration.JobGauges.LimitBreak.Font = OverlayFont.NahjaDisplayBold;
-        Configuration.JobGauges.Frontline.Font = OverlayFont.NahjaDisplayBold;
-        foreach (var frame in new[]
-                 {
-                     Configuration.UnitFrames.Player,
-                     Configuration.UnitFrames.Target,
-                     Configuration.UnitFrames.TargetOfTarget,
-                     Configuration.UnitFrames.Focus,
-                     Configuration.UnitFrames.Party.Look
-                 })
-        {
-            frame.Name.Font = OverlayFont.NahjaDisplay;
-            frame.Hp.Font = OverlayFont.NahjaDisplay;
-        }
-
-        RequestSave();
-    }
 
     /// <summary>Writes the configuration right now.</summary>
     public void SaveNow()

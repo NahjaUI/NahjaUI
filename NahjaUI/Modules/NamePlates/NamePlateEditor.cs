@@ -5,7 +5,7 @@ using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.NamePlates;
 
@@ -132,13 +132,6 @@ internal sealed class NamePlateEditor
 
             settings.WidthPx = Number("Width (px)", settings.WidthPx, 1, 4000, 2, 10);
             settings.HeightPx = Number("Height (px)", settings.HeightPx, 1, 1000, 2, 10);
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ColorRow("Background color", settings.BarBackgroundColor, false, v => settings.BarBackgroundColor = v);
             ColorRow("Border color", settings.BarBorderColor, true, v => settings.BarBorderColor = v);
             ImGui.TextColored(Theme.TextMuted, "The color of the HP is the game's own (set in the game).");
@@ -171,13 +164,6 @@ internal sealed class NamePlateEditor
                 }
 
                 ImGui.EndCombo();
-            }
-
-            var nameFont = settings.NameFont;
-            if (EnumCombo("Text font", ref nameFont, FontLabel))
-            {
-                settings.NameFont = nameFont;
-                plugin.RequestSave();
             }
 
             var nameColor = settings.NameColor;
@@ -291,7 +277,7 @@ internal sealed class NamePlateEditor
             if (Check("Show the action name", settings.ProgressBarName.Enabled, out var showName))
                 settings.ProgressBarName.Enabled = showName;
 
-            if (UnitFrameEditor.TextControls(settings.ProgressBarName))
+            if (HudBarEditor.TextControls(settings.ProgressBarName))
                 plugin.RequestSave();
         });
 
@@ -309,7 +295,7 @@ internal sealed class NamePlateEditor
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.TextControls(settings.ProgressBarTime))
+            if (HudBarEditor.TextControls(settings.ProgressBarTime))
                 plugin.RequestSave();
         });
 
@@ -318,8 +304,8 @@ internal sealed class NamePlateEditor
 
         if (kind != NamePlateRelation.Other && ImGui.BeginTabItem("Status icons"))
         {
-        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_np_enhancements", "Enhancements", settings.Enhancements, true, canDispel: !kind.IsEnemy());
-        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_np_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: !kind.IsEnemy());
+        plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enhancements", "Enhancements", settings.Enhancements, true, canDispel: !kind.IsEnemy());
+        plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: !kind.IsEnemy());
 
             ImGui.EndTabItem();
         }
@@ -344,18 +330,6 @@ internal sealed class NamePlateEditor
         NamePlateLevelMode.NumberOnly => "Only the number (100)",
         NamePlateLevelMode.WithPrefix => "With the prefix (Lv 100)",
         _ => mode.ToString()
-    };
-
-    private static string FontLabel(OverlayFont font) => font switch
-    {
-        OverlayFont.GameNumbers => "Game numbers (Meidinger)",
-        OverlayFont.GameUi => "Game interface (Axis)",
-        OverlayFont.GameUiBold => "Game interface, bold (Axis)",
-        OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI Display",
-        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
-        OverlayFont.NahjaText => "NahjaUI Text",
-        _ => font.ToString()
     };
 
     private bool Check(string label, bool current, out bool value)

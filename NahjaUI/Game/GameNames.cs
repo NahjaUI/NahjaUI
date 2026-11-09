@@ -204,6 +204,22 @@ internal static class GameNames
         return level;
     }
 
+    private static readonly Dictionary<uint, bool> RoleActions = new();
+
+    /// <summary>
+    /// True for a role action (Rescue, Swiftcast, Lucid Dreaming, Feint...). Once learned, the game keeps them when the level is synced down
+    /// (a FATE, a dungeon), so their level must not hide them.
+    /// </summary>
+    public static bool IsRoleAction(uint actionId)
+    {
+        if (RoleActions.TryGetValue(actionId, out var cached))
+            return cached;
+
+        var isRole = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) && (row.IsRoleAction || (row.ClassJob.RowId == 0 && row.ClassJobLevel > 0 && row.IsPlayerAction));
+        RoleActions[actionId] = isRole;
+        return isRole;
+    }
+
     /// <summary>The action that must be used right before this one for the combo to continue, or 0 if it is not a combo step.</summary>
     public static uint ComboParent(uint actionId)
     {

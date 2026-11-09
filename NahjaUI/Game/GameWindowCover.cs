@@ -29,16 +29,12 @@ internal sealed unsafe class GameWindowCover
     private static readonly HashSet<string> NeverCut = new() { "Balloon", "_Balloon", "BalloonText", "_BalloonText" };
 
     private readonly List<(Vector2 Min, Vector2 Max)> rects = new();
-    private readonly List<string> names = new();
     private int nodesSeen;
-
-    /// <summary>The names of the windows cut around right now, one per line (for the Debug page).</summary>
-    public string NamesAsText() => string.Join("\n", names);
 
     /// <summary>True while at least one covering window is on the screen.</summary>
     public bool Any => rects.Count > 0;
 
-    /// <summary>How many areas are cut right now (for the Debug page).</summary>
+    /// <summary>How many areas are cut right now.</summary>
     public int Count => rects.Count;
 
     /// <summary>
@@ -48,10 +44,6 @@ internal sealed unsafe class GameWindowCover
     public void Update(Configuration configuration)
     {
         rects.Clear();
-        names.Clear();
-
-        if (!configuration.GameWindowsOnTop)
-            return;
 
         try
         {
@@ -128,24 +120,12 @@ internal sealed unsafe class GameWindowCover
                     continue;
 
                 rects.Add((box.Min, box.Max));
-                names.Add($"{name}  alpha={unit->Alpha} rootAlpha2={unit->RootNode->Alpha_2} showHide={unit->ShowHideFlags} visFlags={unit->VisibilityFlags} layer={unit->DepthLayer} painted={box.Painted} nodeAlpha2={box.MaxAlpha2} nodeColorA={box.MaxColorA} size={(int)(box.Max.X - box.Min.X)}x{(int)(box.Max.Y - box.Min.Y)}");
             }
         }
         catch
         {
             // If the windows cannot be read, nothing is cut.
             rects.Clear();
-            names.Clear();
-        }
-
-        if (configuration.OutlineCoverAreas)
-        {
-            var drawList = ImGui.GetForegroundDrawList();
-            for (var i = 0; i < rects.Count; i++)
-            {
-                drawList.AddRect(rects[i].Min, rects[i].Max, 0xFF0000FFu);
-                drawList.AddText(rects[i].Min + new Vector2(2f, 2f), 0xFF0000FFu, names[i].Split(' ')[0]);
-            }
         }
     }
 

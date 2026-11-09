@@ -8,7 +8,7 @@ namespace NahjaUI.Modules.Filters;
 
 /// <summary>
 /// The "Filters" page: named lists of enhancements and enfeeblements. A filter is made once here and used from the rows of icons next to the
-/// bars (unit frames, party frames, nameplates) and from the triggers of the trackers.
+/// bars (HUD bars, party list, nameplates) and from the triggers of the trackers.
 /// </summary>
 internal sealed class FiltersEditor
 {

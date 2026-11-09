@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace NahjaUI.Modules.UnitFrames;
+namespace NahjaUI.Modules.HudBars;
 
 /// <summary>The role of a job, as the game groups them: tank, healer, damage. Crafters, gatherers and unknown jobs have none.</summary>
 internal enum JobRole
@@ -40,7 +40,7 @@ internal static class JobRoles
     }
 
     /// <summary>The colour of the role of a job; crafters and gatherers have their own grey; the fallback is only for an unknown job (0).</summary>
-    public static Vector4 Color(UnitFramesSettings frames, uint jobId, Vector4 fallback) => RoleOf(jobId) switch
+    public static Vector4 Color(HudBarsSettings frames, uint jobId, Vector4 fallback) => RoleOf(jobId) switch
     {
         // Carpenter to Culinarian (8 to 15) and Miner, Botanist, Fisher (16 to 18).
         JobRole.None when jobId >= 8 && jobId <= 15 => frames.CrafterColor,

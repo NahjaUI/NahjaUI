@@ -11,16 +11,16 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 
-namespace NahjaUI.Modules.UnitFrames;
+namespace NahjaUI.Modules.HudBars;
 
 /// <summary>
-/// Draws the unit frames: yours, your target's, the target of your target and your focus. Each is a HP bar with the
+/// Draws the HUD bars: yours, your target's, the target of your target and your focus. Each is a HP bar with the
 /// name and the HP text drawn over it where the user wants them and a shield on top of the HP. Yours can also have a
 /// MP bar. It also hides the game's own player bar. It only reads the game snapshot.
 /// </summary>
-internal sealed class UnitFrameModule : IDisposable
+internal sealed class HudBarModule : IDisposable
 {
-    // The game's own bars, found in game with the Debug page: yours (HP and MP), the main part of the target info
+    // The game's own bars: yours (HP and MP), the main part of the target info
     // (it includes the target of target) and the focus. The target's statuses (_TargetInfoBuffDebuff) are hidden only while
     // our own enhancement or enfeeblement rows of the target frame are on. The target cursor (_TargetCursor) is left alone. This needs the target info set to separate parts in the game's HUD layout.
     private const string NativePlayerBar = "_ParameterWidget";
@@ -47,11 +47,11 @@ internal sealed class UnitFrameModule : IDisposable
     private readonly Plugin plugin;
     private readonly NativeWindowHider hider = new();
 
-    public UnitFrameModule(Plugin plugin)
+    public HudBarModule(Plugin plugin)
     {
         this.plugin = plugin;
 
-        PlayerElement = plugin.Layout.Register("unitframe.player", "Player frame", new ElementLayout
+        PlayerElement = plugin.Layout.Register("hudbar.player", "Player frame", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -62,7 +62,7 @@ internal sealed class UnitFrameModule : IDisposable
         });
 
         // The MP bar can live in its own box, for example next to the job gauge.
-        MpElement = plugin.Layout.Register("unitframe.player.mp", "Player MP bar", new ElementLayout
+        MpElement = plugin.Layout.Register("hudbar.player.mp", "Player MP bar", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -73,7 +73,7 @@ internal sealed class UnitFrameModule : IDisposable
         });
 
         // The target takes the mirrored place of the player's frame. The small ones sit under and over it, at its right.
-        TargetElement = plugin.Layout.Register("unitframe.target", "Target frame", new ElementLayout
+        TargetElement = plugin.Layout.Register("hudbar.target", "Target frame", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -83,7 +83,7 @@ internal sealed class UnitFrameModule : IDisposable
             Height = 26
         });
 
-        TargetOfTargetElement = plugin.Layout.Register("unitframe.targetoftarget", "Target of target frame", new ElementLayout
+        TargetOfTargetElement = plugin.Layout.Register("hudbar.targetoftarget", "Target of target frame", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -93,7 +93,7 @@ internal sealed class UnitFrameModule : IDisposable
             Height = 18
         });
 
-        FocusElement = plugin.Layout.Register("unitframe.focus", "Focus frame", new ElementLayout
+        FocusElement = plugin.Layout.Register("hudbar.focus", "Focus frame", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
@@ -128,6 +128,7 @@ internal sealed class UnitFrameModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);
+        hider.ShowAll();
         RestoreCursor();
         ClearMouseOver();
     }
@@ -245,7 +246,7 @@ internal sealed class UnitFrameModule : IDisposable
     // Does this module want the game's window hidden right now?
     private bool HidesNative(string windowName)
     {
-        var frames = plugin.Configuration.UnitFrames;
+        var frames = plugin.Configuration.HudBars;
 
         switch (windowName)
         {
@@ -280,13 +281,13 @@ internal sealed class UnitFrameModule : IDisposable
         PreviewRequested = false;
         PreviewActive = preview;
 
-        var frames = plugin.Configuration.UnitFrames;
+        var frames = plugin.Configuration.HudBars;
 
         // The HP bar and the MP bar are two things: each one is on or off for the job you play. A box that is off
         // cannot be moved in unlock mode.
         var player = snapshot.IsLoggedIn ? snapshot.Player : null;
-        var hpOn = frames.Player.Enabled && frames.Player.ShowHp && (player is null || frames.Player.IsHpOn(player.JobId));
-        var mpOn = frames.Player.Enabled && frames.Player.ShowMp && (player is null || frames.Player.IsMpOn(player.JobId));
+        var hpOn = frames.Player.Enabled && (player is null || frames.Player.IsHpOn(player.JobId));
+        var mpOn = frames.Player.Enabled && (player is null || frames.Player.IsMpOn(player.JobId));
 
         PlayerElement.IsHidden = player is not null && !hpOn;
         MpElement.IsHidden = player is not null && !mpOn;
@@ -303,7 +304,7 @@ internal sealed class UnitFrameModule : IDisposable
     }
 
     // One frame: the real unit when there is one, a sample while the settings are open or in unlock mode, else nothing.
-    private void DrawUnit(UnitFrameSettings settings, LayoutElement element, UnitSnapshot? unit, UnitSnapshot sample, bool isPlayerFrame, bool preview)
+    private void DrawUnit(HudBarSettings settings, LayoutElement element, UnitSnapshot? unit, UnitSnapshot sample, bool isPlayerFrame, bool preview)
     {
         if (!settings.Enabled)
             return;
@@ -325,14 +326,14 @@ internal sealed class UnitFrameModule : IDisposable
             DrawFrame(settings, element, unit, isPlayerFrame);
 
             // Enhancements and enfeeblements: not on the target of target (only a small frame) nor on the player (its own page, "Status effects").
-            if (!isPlayerFrame && unit.Kind != UnitKind.Object && !ReferenceEquals(settings, plugin.Configuration.UnitFrames.TargetOfTarget))
+            if (!isPlayerFrame && unit.Kind != UnitKind.Object && !ReferenceEquals(settings, plugin.Configuration.HudBars.TargetOfTarget))
             {
                 var drawList = ImGui.GetBackgroundDrawList();
                 var playerId = plugin.GameData.Current.Player?.EntityId ?? 0;
                 var enhancements = isReal ? unit.Statuses : StatusRowRenderer.PreviewEnhancements;
                 var enfeeblements = isReal ? unit.Statuses : StatusRowRenderer.PreviewEnfeeblements;
 
-                var frames = plugin.Configuration.UnitFrames;
+                var frames = plugin.Configuration.HudBars;
                 var place = ReferenceEquals(settings, frames.Player) ? "player" : ReferenceEquals(settings, frames.Focus) ? "focus" : "target";
 
                 plugin.StatusRows.DrawRows(drawList, settings.Enhancements, settings.Enfeeblements, enhancements, enfeeblements, !isReal, playerId, barPos, barSize, place, !unit.IsHostile);
@@ -342,7 +343,7 @@ internal sealed class UnitFrameModule : IDisposable
         // Clicks only make sense on a real unit, and not while the boxes are being moved (they use the same place).
         // The target of target only selects with the left click: the game gives it no menu.
         if (isReal && !plugin.Layout.UnlockMode)
-            HandleClicks(element, unit, !ReferenceEquals(settings, plugin.Configuration.UnitFrames.TargetOfTarget));
+            HandleClicks(element, unit, !ReferenceEquals(settings, plugin.Configuration.HudBars.TargetOfTarget));
     }
 
     // ---------------------------------------------------------------- clicks
@@ -355,7 +356,7 @@ internal sealed class UnitFrameModule : IDisposable
         HandleClicks(element.Id, pos, size, unit, contextMenu);
     }
 
-    // The same, for a box that is not a layout element of its own (the bars of the party frames).
+    // The same, for a box that is not a layout element of its own (the bars of the party list).
     internal void HandleClicks(string id, Vector2 pos, Vector2 size, UnitSnapshot unit, bool contextMenu = true)
     {
         if (size.X < 1f || size.Y < 1f)
@@ -405,7 +406,7 @@ internal sealed class UnitFrameModule : IDisposable
     }
 
     // The MP bar of the player (CP for crafters, GP for gatherers): its own bar, in its own box of the Layout.
-    private void DrawPlayerMp(UnitFrameSettings settings, UnitSnapshot? unit, bool preview)
+    private void DrawPlayerMp(HudBarSettings settings, UnitSnapshot? unit, bool preview)
     {
         float fraction;
         uint mp, maxMp;
@@ -442,14 +443,14 @@ internal sealed class UnitFrameModule : IDisposable
         });
     }
 
-    private void DrawFrame(UnitFrameSettings settings, LayoutElement element, UnitSnapshot unit, bool isPlayerFrame)
+    private void DrawFrame(HudBarSettings settings, LayoutElement element, UnitSnapshot unit, bool isPlayerFrame)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var max = pos + size;
         var drawList = ImGui.GetBackgroundDrawList();
 
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         // Something without HP (an object, a shopkeeper) is a full bar in its colour.
@@ -458,7 +459,7 @@ internal sealed class UnitFrameModule : IDisposable
         var fillColor = HpColor(settings, unit, isPlayerFrame);
 
         // The target of target can be shown as just its name (no bar): the box stays only as the place of the text and the click.
-        var barShown = !ReferenceEquals(settings, plugin.Configuration.UnitFrames.TargetOfTarget) || settings.ShowFrame;
+        var barShown = !ReferenceEquals(settings, plugin.Configuration.HudBars.TargetOfTarget) || settings.ShowFrame;
 
         // Background, then the HP. The right end of the fill is straight, cut with a clip rectangle.
         if (barShown)
@@ -474,7 +475,7 @@ internal sealed class UnitFrameModule : IDisposable
             drawList.PopClipRect();
         }
 
-        if (barShown && settings.ShowShield && unit.ShieldPercent > 0)
+        if (barShown && unit.ShieldPercent > 0)
             DrawShield(drawList, settings, pos, size, fraction, rounding, unit.ShieldPercent);
 
         if (barShown)
@@ -496,7 +497,7 @@ internal sealed class UnitFrameModule : IDisposable
     // If it fits, it goes right after the HP. If HP and shield together are more than the bar, the shield is drawn from the
     // right end of the bar over the HP (the more shield, the further left it reaches), so there is always a visible block.
     // It is translucent: the HP and the background show through it, so where it covers the HP you still see it.
-    internal static void DrawShield(ImDrawListPtr drawList, UnitFrameSettings settings, Vector2 pos, Vector2 size, float fraction, float rounding, byte shieldPercent)
+    internal static void DrawShield(ImDrawListPtr drawList, HudBarSettings settings, Vector2 pos, Vector2 size, float fraction, float rounding, byte shieldPercent)
     {
         var max = pos + size;
         var shieldFraction = Math.Min(shieldPercent / 100f, 1f);
@@ -544,33 +545,33 @@ internal sealed class UnitFrameModule : IDisposable
         return color;
     }
 
-    internal Vector4 HpColor(UnitFrameSettings settings, UnitSnapshot unit, bool isPlayerFrame)
+    internal Vector4 HpColor(HudBarSettings settings, UnitSnapshot unit, bool isPlayerFrame)
     {
         if (unit.IsCompanion)
             return ChocoboColor();
 
         if (unit.Kind == UnitKind.Object)
-            return settings.ObjectColor;
+            return GlobalColors.Current.ObjectColor;
 
         if (unit.Kind == UnitKind.Pet)
-            return settings.PetColor;
+            return GlobalColors.Current.PetMinion;
 
         var isPlayer = isPlayerFrame || unit.IsPlayer;
 
         if (!isPlayer && unit.IsHostile)
-            return settings.HostileColor;
+            return GlobalColors.Current.EnemyHp;
 
         if (isPlayer)
-            return JobRoles.Color(plugin.Configuration.UnitFrames, unit.JobId, settings.FriendlyColor);
+            return JobRoles.Color(plugin.Configuration.HudBars, unit.JobId, GlobalColors.Current.FriendlyNpc);
 
-        return settings.FriendlyColor;
+        return GlobalColors.Current.FriendlyNpc;
     }
 
     // A MP bar between two corners, filled to <fraction>.
-    private static void DrawMpBar(ImDrawListPtr drawList, UnitFrameSettings settings, Vector2 min, Vector2 max, float fraction, float scale, float thickness)
+    private static void DrawMpBar(ImDrawListPtr drawList, HudBarSettings settings, Vector2 min, Vector2 max, float fraction, float scale, float thickness)
     {
         var width = max.X - min.X;
-        var rounding = MathF.Min(MathF.Round(settings.MpRoundingPx * scale), (max.Y - min.Y) / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), (max.Y - min.Y) / 2f);
 
         drawList.AddRectFilled(min, max, ImGui.GetColorU32(settings.MpBackgroundColor), rounding);
 
@@ -587,7 +588,7 @@ internal sealed class UnitFrameModule : IDisposable
 
     // Draws a text attached to a point of the bar: the same point of the text is placed on it, then the offset moves it.
     // White (or the chosen colour) with a black outline, readable over any bar colour and over the game behind it.
-    internal void DrawText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize)
+    internal void DrawText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize, OverlayFont font = OverlayFont.NahjaDisplay)
     {
         if (!settings.Enabled || string.IsNullOrEmpty(text))
             return;
@@ -596,7 +597,7 @@ internal sealed class UnitFrameModule : IDisposable
 
         // The size is in logical pixels: the fonts are already built scaled by the UI scale.
         // The size is the height of the letters (not of the font's line box).
-        using (var face = plugin.Fonts.PushCap(settings.Font, settings.TextSize))
+        using (var face = plugin.Fonts.PushCap(font, settings.TextSize))
         {
             var textSize = face.Measure(text);
             var fraction = settings.Anchor.Fraction();

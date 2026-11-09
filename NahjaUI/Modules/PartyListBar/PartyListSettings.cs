@@ -4,9 +4,9 @@ using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Modules.Trackers;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
-namespace NahjaUI.Modules.PartyFrames;
+namespace NahjaUI.Modules.PartyListBar;
 
 /// <summary>Which party members get a MP bar.</summary>
 public enum PartyMpMode
@@ -110,7 +110,10 @@ public class StatusRowSettings
     /// <summary>A border on the enfeeblements that a cleanse (Esuna and the like) can remove. The game's data says which ones.</summary>
     public bool DispelBorder { get; set; }
 
-    public Vector4 DispelColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
+    /// <summary>A light blue, between the blue of the game's frame and the white of the Esuna icon.</summary>
+    public static readonly Vector4 DefaultDispelColor = new(0.62f, 0.84f, 1f, 1f);
+
+    public Vector4 DispelColor { get; set; } = DefaultDispelColor;
 
     /// <summary>
     /// Statuses that are always shown, whoever applied them (a raid enfeeblement you want to see even if it is not yours).
@@ -138,12 +141,6 @@ public class StatusRowSettings
     public int IconWidth { get; set; } = 32;
 
     public int IconHeight { get; set; } = 24;
-
-    /// <summary>Which empty margins of the game's icon are cut away, as in the trackers (the icon is never stretched).</summary>
-    public IconTrim Trim { get; set; } = IconTrim.AllAround;
-
-    /// <summary>Corner rounding of the icons, in pixels, like the bars. 0 = square.</summary>
-    public int CornerRadiusPx { get; set; } = 6;
 
     /// <summary>The order of the icons: by the time left.</summary>
     public StatusOrder Order { get; set; } = StatusOrder.Ascending;
@@ -178,27 +175,12 @@ public class StatusRowSettings
     /// <summary>Font size of the time left, in pixels (one of the sizes in OverlayFonts.AvailableSizes).</summary>
     public int TimerSize { get; set; } = 8;
 
-    /// <summary>Font of the time left (it used to be the font of the stack count too: see StacksFont).</summary>
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
+    // The colors of these two texts come from Appearance (the same for every icon row).
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 TimerColor => NahjaUI.Core.Ui.GlobalColors.Current.TimerText;
 
-    /// <summary>Font of the stack count. Starts as the old shared font (see EnsureTexts).</summary>
-    public OverlayFont StacksFont { get; set; } = OverlayFont.NahjaDisplayBold;
-
-    public Vector4 TimerColor { get; set; } = new(1f, 1f, 1f, 1f);
-
-    public Vector4 StacksColor { get; set; } = new(1f, 1f, 1f, 1f);
-
-    public bool StacksFontMigrated { get; set; }
-
-    /// <summary>The stack count gets its own font: it starts as the font the two texts shared.</summary>
-    public void EnsureTexts()
-    {
-        if (StacksFontMigrated)
-            return;
-
-        StacksFont = Font;
-        StacksFontMigrated = true;
-    }
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 StacksColor => NahjaUI.Core.Ui.GlobalColors.Current.StacksText;
 
     // Where the texts sit on the icon. The anchor is a point of the icon: the same point of the text is attached to it, so a
     // right anchor right-justifies the text and a centre anchor centres it. The offset moves it from there, in pixels.
@@ -210,7 +192,7 @@ public class StatusRowSettings
 
     public bool ShowStacks { get; set; } = true;
 
-    /// <summary>Size of the stack count, in pixels (the height of its letters). 0 in old saved settings counts as 8.</summary>
+    /// <summary>Size of the stack count, in pixels (the height of its letters).</summary>
     public int StackTextSize { get; set; } = 8;
 
     public AnchorPoint StacksAnchor { get; set; } = AnchorPoint.BottomRight;
@@ -257,15 +239,15 @@ public class StatusRowSettings
 }
 
 /// <summary>
-/// The party frames: one bar per member, one under the other. The look of each bar (colours, shield, name and HP text,
-/// size of the first bar's box) is a normal <see cref="UnitFrameSettings"/>, so it is edited with the same controls as
-/// the other unit frames. What is only about the party is here.
+/// The party list: one bar per member, one under the other. The look of each bar (colours, shield, name and HP text,
+/// size of the first bar's box) is a normal <see cref="HudBarSettings"/>, so it is edited with the same controls as
+/// the other HUD bars. What is only about the party is here.
 /// </summary>
 [Serializable]
-public class PartyFrameSettings
+public class PartyListSettings
 {
-    /// <summary>The look of one member's bar. Its size and position belong to the layout element of the party frames.</summary>
-    public UnitFrameSettings Look { get; set; } = CreateLook();
+    /// <summary>The look of one member's bar. Its size and position belong to the layout element of the party list.</summary>
+    public HudBarSettings Look { get; set; } = CreateLook();
 
     /// <summary>Space between two bars, in pixels.</summary>
     public int RowSpacingPx { get; set; } = 6;
@@ -319,14 +301,12 @@ public class PartyFrameSettings
     public StatusRowSettings Enfeeblements { get; set; } = StatusRowSettings.CreateEnfeeblements();
 
     /// <summary>The look the party bars start with: role colours, the name at the left and the percentage at the right.</summary>
-    public static UnitFrameSettings CreateLook() => new()
+    public static HudBarSettings CreateLook() => new()
     {
-        RoundingPx = 6,
-        ShowMp = false,
         MpHeightPx = 5,
         HpColorMode = HpColorMode.Role,
         HpPreset = HpTextPreset.Percent,
-        Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 10, OffsetY = 0, TextSize = 15, Font = OverlayFont.NahjaDisplayBold },
-        Hp = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -8, OffsetY = 0, TextSize = 14, Font = OverlayFont.NahjaDisplayBold }
+        Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 10, OffsetY = 0, TextSize = 15 },
+        Hp = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -8, OffsetY = 0, TextSize = 14 }
     };
 }

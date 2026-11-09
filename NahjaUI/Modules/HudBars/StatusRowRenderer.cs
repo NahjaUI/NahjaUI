@@ -9,12 +9,12 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 using NahjaUI.Modules.Trackers;
-using NahjaUI.Modules.PartyFrames;
+using NahjaUI.Modules.PartyListBar;
 
-namespace NahjaUI.Modules.UnitFrames;
+namespace NahjaUI.Modules.HudBars;
 
 /// <summary>
-/// Draws one row of status icons (enhancements or enfeeblements) attached to a bar. The party frames and the player, target and focus
+/// Draws one row of status icons (enhancements or enfeeblements) attached to a bar. The party list and the player, target and focus
 /// frames all use it, so every row looks and is set up the same way.
 /// </summary>
 internal sealed class StatusRowRenderer
@@ -242,7 +242,7 @@ internal sealed class StatusRowRenderer
 
         ImGui.PushStyleColor(ImGuiCol.PopupBg, look.BackgroundColor);
         ImGui.PushStyleColor(ImGuiCol.Border, look.BorderColor);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, MathF.Round(look.RoundingPx * scale));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, MathF.Round(GlobalColors.Current.Rounding * scale));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, MathF.Max(1f, MathF.Round(scale)));
 
         ImGui.BeginTooltip();
@@ -318,18 +318,14 @@ internal sealed class StatusRowRenderer
         var iconId = GameNames.StatusIconId(status.Id);
 
         // Rounded corners, like the bars. They can never be more than half of the shorter side.
-        var rounding = MathF.Min(MathF.Round(Math.Clamp(row.CornerRadiusPx, 0, 24) * scale), MathF.Min(size.X, size.Y) / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), MathF.Min(size.X, size.Y) / 2f);
 
         if (iconId != 0)
         {
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
-            // The same trim as the trackers: the empty margins of the game's icon, measured for each icon.
-            var margins = row.Trim == IconTrim.None ? (0f, 0f, 0f, 0f) : IconMargins.Get(iconId);
-            var cutSides = row.Trim is IconTrim.Sides or IconTrim.AllAround;
-            var cutVertical = row.Trim is IconTrim.TopAndBottom or IconTrim.AllAround;
-            var (uv0, uv1) = TrackerEngine.IconUv(size, TrackerEngine.StatusIconAspect,
-                cutSides ? margins.Item1 : 0f, cutVertical ? margins.Item2 : 0f,
-                cutSides ? margins.Item3 : 0f, cutVertical ? margins.Item4 : 0f);
+            // The same trim as the trackers: the empty margins of the game's icon, measured for each icon and always cut.
+            var margins = IconMargins.Get(iconId);
+            var (uv0, uv1) = TrackerEngine.IconUv(size, TrackerEngine.StatusIconAspect, margins.Item1, margins.Item2, margins.Item3, margins.Item4);
 
             drawList.AddImageRounded(texture.Handle, pos, pos + size, uv0, uv1, ImGui.GetColorU32(Vector4.One), rounding, ImDrawFlags.RoundCornersAll);
         }
@@ -346,18 +342,17 @@ internal sealed class StatusRowRenderer
             drawList.AddRect(pos, pos + size, ImGui.GetColorU32(row.DispelColor), rounding, ImDrawFlags.None, thickness * 2f);
 
         // The text size is in logical pixels (the fonts are already built scaled).
-        row.EnsureTexts();
         var timerPx = Math.Clamp(row.TimerSize, 4, 64);
         var stackPx = Math.Clamp(row.StackTextSize > 0 ? row.StackTextSize : 8, 4, 64);
 
         if (row.ShowTimer && status.RemainingTime > 0f)
-            plugin.TrackerSystem.DrawOverlayText(drawList, TrackerEngine.FormatTime(status.RemainingTime), timerPx, row.Font,
+            plugin.TrackerSystem.DrawOverlayText(drawList, TrackerEngine.FormatTime(status.RemainingTime), timerPx, OverlayFont.NahjaDisplayBold,
                 pos, size, row.TimerAnchor, new Vector2(row.TimerOffsetX, row.TimerOffsetY), row.TimerColor);
 
         // Only statuses that really stack show a number.
         var maxStacks = GameNames.MaxStacks(status.Id);
         if (row.ShowStacks && maxStacks > 1 && status.Param > 1 && status.Param <= maxStacks)
-            plugin.TrackerSystem.DrawOverlayText(drawList, status.Param.ToString(), stackPx, row.StacksFont,
+            plugin.TrackerSystem.DrawOverlayText(drawList, status.Param.ToString(), stackPx, OverlayFont.NahjaDisplayBold,
                 pos, size, row.StacksAnchor, new Vector2(row.StacksOffsetX, row.StacksOffsetY), row.StacksColor);
     }
 }

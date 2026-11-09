@@ -2,8 +2,8 @@ using System;
 using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.PartyFrames;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.EnmityList;
 
@@ -22,7 +22,7 @@ public class EnmityListSettings
     public bool Enabled { get; set; } = false;
 
     public int HeightPx { get; set; } = 18;
-    public int RoundingPx { get; set; } = 6;
+
     public int SpacingPx { get; set; } = 6;
 
     public Vector4 HpColor { get; set; } = new(0.79f, 0.29f, 0.27f, 1f);
@@ -36,8 +36,7 @@ public class EnmityListSettings
         Anchor = AnchorPoint.Left,
         OffsetX = 0,
         OffsetY = 0,
-        TextSize = 14,
-        Font = OverlayFont.NahjaDisplayBold
+        TextSize = 14
     };
 
     public FrameTextSettings Hp { get; set; } = new()
@@ -45,8 +44,7 @@ public class EnmityListSettings
         Anchor = AnchorPoint.Right,
         OffsetX = -6,
         OffsetY = 0,
-        TextSize = 14,
-        Font = OverlayFont.NahjaDisplayBold
+        TextSize = 14
     };
 
     /// <summary>A dot at the left of each bar: one color if the enemy is attacking you, another if it is attacking someone else.</summary>
@@ -123,8 +121,7 @@ public class EnmityListSettings
         Anchor = AnchorPoint.Center,
         OffsetX = 0,
         OffsetY = -1,
-        TextSize = 12,
-        Font = OverlayFont.NahjaDisplayBold
+        TextSize = 12
     };
 
     /// <summary>How the time of a cast is written (same choice as the progress bars).</summary>
@@ -135,7 +132,6 @@ public class EnmityListSettings
         Anchor = AnchorPoint.Right,
         OffsetX = -6,
         OffsetY = -1,
-        TextSize = 12,
-        Font = OverlayFont.NahjaDisplayBold
+        TextSize = 12
     };
 }

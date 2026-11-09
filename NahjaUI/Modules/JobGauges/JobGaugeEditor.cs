@@ -4,7 +4,7 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Modules.JobGauges;
@@ -160,18 +160,10 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ImGui.Spacing();
 
-            settings.EnsureText();
             ImGui.PushID("gaugeText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -248,18 +240,10 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt($"Corner rounding (px)##{id}", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ImGui.Spacing();
 
-            settings.EnsureText();
             ImGui.PushID("gaugeText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -339,11 +323,9 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
             Slider("Space between pips (px)##sch", settings.GapPx, 20, v => settings.GapPx = v);
-            Slider("Corner rounding (px)##sch", settings.RoundingPx, 12, v => settings.RoundingPx = v);
-
             ImGui.Spacing();
             ImGui.PushID("schText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -372,8 +354,6 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
             Slider("Space between cards (px)##ast", settings.GapPx, 20, v => settings.GapPx = v);
-            Slider("Corner rounding (px)##ast", settings.RoundingPx, 12, v => settings.RoundingPx = v);
-
             ImGui.Spacing();
             Color("Astral Draw color##ast", settings.AstralColor, false, v => settings.AstralColor = v);
             Color("Umbral Draw color##ast", settings.UmbralColor, false, v => settings.UmbralColor = v);
@@ -417,11 +397,9 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
             Slider($"Space between pips (px)##{id}", settings.GapPx, 20, v => settings.GapPx = v);
-            Slider($"Corner rounding (px)##{id}", settings.RoundingPx, 12, v => settings.RoundingPx = v);
-
             ImGui.Spacing();
             ImGui.PushID($"{id}Text");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -449,11 +427,9 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
             Slider("Space between pips (px)##sge", settings.GapPx, 20, v => settings.GapPx = v);
-            Slider("Corner rounding (px)##sge", settings.RoundingPx, 12, v => settings.RoundingPx = v);
-
             ImGui.Spacing();
             ImGui.PushID("sgeText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -490,13 +466,6 @@ internal sealed class JobGaugeEditor
             if (ImGui.SliderInt($"Space between cartridges (px)##{id}", ref gap, 0, 20))
             {
                 settings.GapPx = gap;
-                plugin.RequestSave();
-            }
-
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt($"Corner rounding (px)##{id}", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
                 plugin.RequestSave();
             }
 
@@ -567,18 +536,10 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt($"Corner rounding (px)##{id}", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ImGui.Spacing();
 
-            settings.EnsureText();
             ImGui.PushID("gaugeText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -587,7 +548,7 @@ internal sealed class JobGaugeEditor
                 ImGui.Spacing();
                 ImGui.TextColored(Theme.TextMuted, "Living Shadow seconds");
                 ImGui.PushID("livingShadowText");
-                if (UnitFrameEditor.TextControls(settings.LivingShadowText))
+                if (HudBarEditor.TextControls(settings.LivingShadowText))
                     plugin.RequestSave();
                 ImGui.PopID();
             }
@@ -651,18 +612,10 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt($"Corner rounding (px)##{id}", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ImGui.Spacing();
 
-            settings.EnsureText();
             ImGui.PushID("gaugeText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -722,18 +675,10 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt($"Corner rounding (px)##{id}", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ImGui.Spacing();
 
-            settings.EnsureText();
             ImGui.PushID("gaugeText");
-            if (UnitFrameEditor.TextControls(settings.Text))
+            if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -799,18 +744,6 @@ internal sealed class JobGaugeEditor
             plugin.RequestSave();
         }
     }
-
-    private static string FontLabel(OverlayFont font) => font switch
-    {
-        OverlayFont.GameNumbers => "Game numbers (Meidinger)",
-        OverlayFont.GameUi => "Game interface (Axis)",
-        OverlayFont.GameUiBold => "Game interface, bold (Axis)",
-        OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI Display",
-        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
-        OverlayFont.NahjaText => "NahjaUI Text",
-        _ => font.ToString()
-    };
 
     // A drop-down list for any enum. Returns true when the user picked a different value.
     private static bool EnumCombo<T>(string label, ref T value, Func<T, string> labeler) where T : struct, Enum

@@ -1,20 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.0.0.1</Version>
+    <Version>0.1.0.0</Version>
     <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
-    <Author>Sandro</Author>
-<Name>NahjaUI</Name>
-<Punchline>Modular interface and aura tracker for FFXIV.</Punchline>
-<Description>A modular interface suite with an aura engine: choose the buffs, debuffs and cooldowns you want to see.
+    <Author>Nahja Stark</Author>
+    <Name>NahjaUI</Name>
+    <RepoUrl>https://github.com/NahjaUI/NahjaUI</RepoUrl>
+    <IconUrl>https://raw.githubusercontent.com/NahjaUI/NahjaUI/master/NahjaUI/images/icon.png</IconUrl>
+    <Punchline>A complete, modular interface for Final Fantasy XIV.</Punchline>
+    <Description>NahjaUI gives the game a clean, consistent interface that you build piece by piece. Switch on only what you want: everything else stays exactly as the game made it.
+
+HUD bars: your parameter bar, target, target of target, focus target and party list.
+Progress bars: your casts and your target's, with a slidecast marker, plus a global cooldown bar that shows the queue and weave windows.
+Job gauges, status effects, nameplates and enmity list, each one with its own style.
+Trackers: pick the enhancements, enfeeblements and cooldowns you want to see. Every job comes with ready-made presets.
+Profiles: save, copy and share your whole setup.
+
 Type /nui to open it.</Description>
-<Tags>ui;auras;hud</Tags>
+    <Tags>ui;hud;trackers;nameplates;party list;job gauges;progress bar;cooldowns</Tags>
   </PropertyGroup>
 
+  <!-- The icon of the plugin list: Dalamud looks for "images\icon.png" next to the .dll. -->
   <ItemGroup>
-    <Content Include="..\Data\goat.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
+    <Content Include="images\icon.png" Link="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The licence of the embedded font (SIL OFL) travels with the plugin. -->
+  <ItemGroup>
+    <Content Include="docs\FONT_LICENSE.txt" Link="FONT_LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CopyPluginIcon" AfterTargets="CopyFilesToOutputDirectory">
+    <Message Importance="high" Text="NahjaUI: copying the icon to $(TargetDir)images" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\images\icon.png" DestinationFolder="$(TargetDir)images" />
+  </Target>
 </Project>

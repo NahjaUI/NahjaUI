@@ -4,8 +4,8 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 using NahjaUI.Modules.Filters;
-using NahjaUI.Modules.PartyFrames;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.NamePlates;
 
@@ -22,16 +22,15 @@ public class NamePlateStyle
     // Size of the HP bar, in logical pixels.
     public int WidthPx { get; set; } = 140;
     public int HeightPx { get; set; } = 14;
-    public int RoundingPx { get; set; } = 6;
+
 
     // The empty part and the outline of the HP bar (the filled part is the game's color).
     public Vector4 BarBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
     public Vector4 BarBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
 
-    // The name sits on the top left of the bar and touches its top edge, like in the unit frames.
+    // The name sits on the top left of the bar and touches its top edge, like in the HUD bars.
     public AnchorPoint NameAnchor { get; set; } = AnchorPoint.TopLeft;
     public int NameSize { get; set; } = 10;
-    public OverlayFont NameFont { get; set; } = OverlayFont.NahjaDisplay;
     public int NameOffsetX { get; set; } = 4;
     public int NameOffsetY { get; set; } = -9;
     // The small icon the game puts at the left of the name (hostile, neutral, hunt rank...). The game decides which plates have one.
@@ -41,9 +40,9 @@ public class NamePlateStyle
 
     // The big icon the game floats above the plate (quest marks and similar). Saved Y counts downward like the rest.
     public bool ShowMarkerIcon { get; set; } = true;
-    public int MarkerIconSizePx { get; set; } = 32;
+    public int MarkerIconSizePx { get; set; } = 72;
     public int MarkerOffsetX { get; set; } = 0;
-    public int MarkerOffsetY { get; set; } = 6; // saved counts downward: the editor shows -6 (Sandro's tested value)
+    public int MarkerOffsetY { get; set; } = 0; // saved counts downward
 
     // The color of the name and the title (the game's color option only colors the bar, so this one is ours).
     public Vector4 NameColor { get; set; } = new(1f, 1f, 1f, 1f);
@@ -81,8 +80,8 @@ public class NamePlateStyle
     public Vector4 ProgressBarBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
     public Vector4 ProgressBarBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
 
-    // The rows of status icons of a plate: enhancements above the bar, enfeeblements under it, placed like the ones of the unit frames.
-    // They are the same rows as next to the unit frames (filters, order, icons, texts); both start off.
+    // The rows of status icons of a plate: enhancements above the bar, enfeeblements under it, placed like the ones of the HUD bars.
+    // They are the same rows as next to the HUD bars (filters, order, icons, texts); both start off.
     public StatusRowSettings Enhancements { get; set; } = CreateRow(AnchorPoint.TopLeft, AnchorPoint.BottomLeft, 0, -14, StatusRowGrowth.Right);
 
     public StatusRowSettings Enfeeblements { get; set; } = CreateEnfeeblements();
@@ -115,8 +114,7 @@ public class NamePlateStyle
         Anchor = AnchorPoint.Left,
         OffsetX = 6,
         OffsetY = 0,
-        TextSize = 8,
-        Font = OverlayFont.NahjaDisplay
+        TextSize = 8
     };
 
     /// <summary>How the time of a cast is written (same choice as the progress bars).</summary>
@@ -127,8 +125,7 @@ public class NamePlateStyle
         Anchor = AnchorPoint.Right,
         OffsetX = -6,
         OffsetY = 0,
-        TextSize = 8,
-        Font = OverlayFont.NahjaDisplay
+        TextSize = 8
     };
 
     /// <summary>The starting values of each kind of plate. Enemies show the level and the progress bar; the others start without them (they can be switched on).</summary>

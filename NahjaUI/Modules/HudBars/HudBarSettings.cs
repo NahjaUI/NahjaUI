@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.PartyFrames;
+using NahjaUI.Modules.PartyListBar;
 
-namespace NahjaUI.Modules.UnitFrames;
+namespace NahjaUI.Modules.HudBars;
 
 /// <summary>How a name is written. Players have a first and a last name; anything else is left as it is when "only players" is on.</summary>
 public enum NameFormat
@@ -100,9 +100,16 @@ public class FrameTextSettings
     /// <summary>Font size in pixels (a fixed step, see OverlayFonts.AvailableSizes).</summary>
     public int TextSize { get; set; } = 11;
 
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplay;
+    // The text color of Appearance, unless "Custom color" is on. What is saved is the color in use.
+    private Vector4 color = GlobalColors.DefaultText;
 
-    public Vector4 Color { get; set; } = new(1f, 1f, 1f, 1f);
+    public bool CustomColor { get; set; }
+
+    public Vector4 Color
+    {
+        get => CustomColor ? color : GlobalColors.Current.Text;
+        set => color = value;
+    }
 }
 
 /// <summary>What the number texts of a bar (HP, MP) need to know to turn a value into text.</summary>
@@ -129,20 +136,20 @@ public class MpTextSettings : IValueTextFormat
     public ThousandsSeparator Thousands { get; set; } = ThousandsSeparator.Comma;
 }
 
-/// <summary>The settings of every unit frame.</summary>
+/// <summary>The settings of every HUD bar.</summary>
 [Serializable]
-public class UnitFramesSettings
+public class HudBarsSettings
 {
-    public UnitFrameSettings Player { get; set; } = new();
+    public HudBarSettings Player { get; set; } = new();
 
-    public UnitFrameSettings Target { get; set; } = UnitFrameSettings.CreateTarget();
+    public HudBarSettings Target { get; set; } = HudBarSettings.CreateTarget();
 
-    public UnitFrameSettings TargetOfTarget { get; set; } = UnitFrameSettings.CreateSmall();
+    public HudBarSettings TargetOfTarget { get; set; } = HudBarSettings.CreateSmall();
 
-    public UnitFrameSettings Focus { get; set; } = UnitFrameSettings.CreateSmall();
+    public HudBarSettings Focus { get; set; } = HudBarSettings.CreateSmall();
 
-    /// <summary>The party frames: one bar per member. Its look is a normal frame look, the rest is only about the party.</summary>
-    public PartyFrameSettings Party { get; set; } = new();
+    /// <summary>The party list: one bar per member. Its look is a normal frame look, the rest is only about the party.</summary>
+    public PartyListSettings Party { get; set; } = new();
 
     /// <summary>The colour of each role, shared by every frame (the HP bars set to the colour of the role, and the stripe of the party).</summary>
     public Vector4 TankColor { get; set; } = new(0.31f, 0.55f, 0.88f, 1f);
@@ -161,27 +168,24 @@ public class UnitFramesSettings
 }
 
 /// <summary>
-/// The settings of one unit frame. Position and size of the HP bar belong to the layout system.
+/// The settings of one HUD bar. Position and size of the HP bar belong to the layout system.
 /// The defaults give the look of: name above the bar at the right, half over its edge; HP text inside the bar at the left, below.
 /// </summary>
 [Serializable]
-public class UnitFrameSettings : IValueTextFormat
+public class HudBarSettings : IValueTextFormat
 {
     public bool Enabled { get; set; } = true;
 
     /// <summary>The target: the player's look, mirrored (name at the top left, HP text at the bottom right), and no MP.</summary>
-    public static UnitFrameSettings CreateTarget() => new()
+    public static HudBarSettings CreateTarget() => new()
     {
-        ShowMp = false,
         Name = new FrameTextSettings { Anchor = AnchorPoint.TopLeft, OffsetX = 4, OffsetY = -9 },
         Hp = new FrameTextSettings { Anchor = AnchorPoint.BottomRight, OffsetX = -4, OffsetY = -2 }
     };
 
     /// <summary>The target of the target and the focus: a thin bar with the name inside at the left and the percentage at the right.</summary>
-    public static UnitFrameSettings CreateSmall() => new()
+    public static HudBarSettings CreateSmall() => new()
     {
-        ShowMp = false,
-        ShowShield = false,
         HpPreset = HpTextPreset.Percent,
         Name = new FrameTextSettings { Anchor = AnchorPoint.Left, OffsetX = 4, OffsetY = 0, TextSize = 14 },
         Hp = new FrameTextSettings { Anchor = AnchorPoint.Right, OffsetX = -4, OffsetY = 0, TextSize = 14 }
@@ -196,30 +200,29 @@ public class UnitFrameSettings : IValueTextFormat
     /// <summary>Only used by the target of target: show its bar (background, HP, border) or just its name.</summary>
     public bool ShowFrame { get; set; } = true;
 
-    /// <summary>Corner rounding of the bar, in pixels.</summary>
-    public int RoundingPx { get; set; } = 6;
 
-    public Vector4 FriendlyColor { get; set; } = new(0.31f, 0.70f, 0.43f, 1f);
 
     /// <summary>Fixed colour for the HP, or the colour of the job.</summary>
     public HpColorMode HpColorMode { get; set; } = HpColorMode.Fixed;
 
-    /// <summary>HP colour of a target that is a pet or a minion.</summary>
-    public Vector4 PetColor { get; set; } = new(0.50f, 0.62f, 0.78f, 1f);
+    // ---- colors: all of them come from Appearance (the same for every bar). They are not saved here.
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 BackgroundColor => GlobalColors.Current.Background;
 
-    /// <summary>Colour of a target that is an object: furniture, chest, aetheryte, event object...</summary>
-    public Vector4 ObjectColor { get; set; } = new(0.55f, 0.57f, 0.62f, 1f);
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 BorderColor => GlobalColors.Current.Border;
 
-    public Vector4 HostileColor { get; set; } = new(0.79f, 0.29f, 0.27f, 1f);
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 ShieldColor => GlobalColors.Current.Shield;
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 MpBackgroundColor => GlobalColors.Current.Background;
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 MpBorderColor => GlobalColors.Current.Border;
 
-    // ---- shield
-    public bool ShowShield { get; set; } = true;
-
-    public Vector4 ShieldColor { get; set; } = new(0.96f, 0.91f, 0.66f, 1f);
+    [Newtonsoft.Json.JsonIgnore]
+    public Vector4 MpColor => GlobalColors.Current.Mp;
 
     /// <summary>How solid the shield is (0 to 1). Below 1 the HP and the background show through it.</summary>
     public float ShieldOpacity { get; set; } = 0.65f;
@@ -275,34 +278,8 @@ public class UnitFrameSettings : IValueTextFormat
             HideHpJobs.Add(jobId);
     }
 
-    /// <summary>Player only: the HP bar is drawn (the master switch of the Parameter bar page is Enabled).</summary>
-    public bool ShowHp { get; set; } = true;
-
-    public bool ParameterBarMigrated { get; set; }
-
-    /// <summary>
-    /// The page "Parameter bar" has one master switch (Enabled: ours is drawn and the game's is hidden) and then HP and MP
-    /// each on or off. Before, Enabled was only the HP bar: someone with the HP bar off and the MP bar on keeps that.
-    /// </summary>
-    public void MigrateParameterBar()
-    {
-        if (ParameterBarMigrated)
-            return;
-
-        if (!Enabled && ShowMp)
-        {
-            Enabled = true;
-            ShowHp = false;
-        }
-
-        ParameterBarMigrated = true;
-    }
-
-    /// <summary>The MP bar as a whole (its own bar, with its own position in the Layout).</summary>
-    public bool ShowMp { get; set; } = true;
-
-    /// <summary>The jobs with the MP bar on. By default the healers and the casters. (Crafters show CP and gatherers GP.)</summary>
-    public List<uint> MpOnJobs { get; set; } = new() { 24, 28, 33, 40, 25, 27, 35, 42, 36 };
+    /// <summary>The jobs with the MP bar on. By default the healers, the casters, the Blue Mage, and all the crafters (8-15) and gatherers (16-18). (Crafters show CP and gatherers GP.)</summary>
+    public List<uint> MpOnJobs { get; set; } = new() { 24, 28, 33, 40, 25, 27, 35, 42, 36, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 };
 
     public bool IsMpOn(uint jobId) => MpOnJobs.Contains(jobId);
 
@@ -313,37 +290,10 @@ public class UnitFrameSettings : IValueTextFormat
             MpOnJobs.Add(jobId);
     }
 
-    // The old lists (MP under the HP bar / in its own box). Only read once to move the choices to MpOnJobs.
-    public List<uint> MpJobs { get; set; } = new() { 24, 28, 33, 40, 25, 27, 35, 42, 36 };
-    public List<uint> MpOwnBoxJobs { get; set; } = new();
-    public bool MpMigrated { get; set; }
-
-    public void MigrateMpLists()
-    {
-        if (MpMigrated)
-            return;
-
-        MpOnJobs = new List<uint>(MpJobs);
-        foreach (var jobId in MpOwnBoxJobs)
-        {
-            if (!MpOnJobs.Contains(jobId))
-                MpOnJobs.Add(jobId);
-        }
-
-        MpMigrated = true;
-    }
-
-    // How the MP bar looks (its size is in the Layout, like its position).
-    public int MpRoundingPx { get; set; } = 6;
-
     /// <summary>The number on the MP bar (off by default).</summary>
     public MpTextSettings MpText { get; set; } = new();
-    public Vector4 MpBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
-    public Vector4 MpBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
 
     public int MpHeightPx { get; set; } = 6;
 
     public int MpGapPx { get; set; } = 2;
-
-    public Vector4 MpColor { get; set; } = new(0.36f, 0.55f, 0.94f, 1f);
 }

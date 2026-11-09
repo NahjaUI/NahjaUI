@@ -31,7 +31,7 @@ public class TooltipSettings
     // How it looks.
     public int TextSize { get; set; } = 14;
     public int MaxWidthPx { get; set; } = 320;
-    public int RoundingPx { get; set; } = 6;
+
 
     /// <summary>The name uses the accent color of the interface unless this is off.</summary>
     public bool NameUsesAccent { get; set; } = true;

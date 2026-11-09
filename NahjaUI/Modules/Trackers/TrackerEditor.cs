@@ -39,6 +39,11 @@ internal sealed class TrackerEditor
     // The tracker or group waiting for a second click on its delete button.
     private string? pendingDeleteId;
     private TrackerRuntime? pendingDuplicate;
+
+    // The name box that opens from the right-click menu of a tracker.
+    private string? renamingTrackerId;
+    private bool openRename;
+    private bool focusRename;
     private TrackerRuntime? pendingRemove;
     private TrackerGroupRuntime? pendingDuplicateGroup;
     private TrackerGroupRuntime? pendingRemoveGroup;
@@ -212,8 +217,6 @@ internal sealed class TrackerEditor
 
         var definition = tracker.Definition;
 
-        DrawGeneral(engine, tracker);
-
         DrawRules(definition, snapshot);
         DrawDisplay(engine, definition, tracker, null);
         DrawLoad(engine, definition, snapshot, null);
@@ -287,6 +290,46 @@ internal sealed class TrackerEditor
             {
                 if (ImGui.Selectable(presetName))
                     presetReport = TrackerPresets.Apply(engine, presetName);
+            }
+
+            ImGui.EndPopup();
+        }
+
+        if (openRename)
+        {
+            ImGui.OpenPopup("##rename_tracker");
+            openRename = false;
+            focusRename = true;
+        }
+
+        if (ImGui.BeginPopup("##rename_tracker"))
+        {
+            var renaming = engine.Trackers.FirstOrDefault(r => r.Definition.Id == renamingTrackerId)?.Definition;
+            if (renaming is null)
+            {
+                ImGui.CloseCurrentPopup();
+            }
+            else
+            {
+                ImGui.TextColored(Theme.TextMuted, "Name of the tracker");
+
+                if (focusRename)
+                {
+                    ImGui.SetKeyboardFocusHere();
+                    focusRename = false;
+                }
+
+                var newName = renaming.Name;
+                ImGui.SetNextItemWidth(240f * scale);
+                if (ImGui.InputText("##rename_input", ref newName, 64))
+                {
+                    renaming.Name = newName;
+                    plugin.RequestSave();
+                }
+
+                // Enter (or clicking away after typing) closes the box.
+                if (ImGui.IsItemDeactivatedAfterEdit())
+                    ImGui.CloseCurrentPopup();
             }
 
             ImGui.EndPopup();
@@ -629,9 +672,18 @@ internal sealed class TrackerEditor
 
         if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
-            // Any point of the row can be grabbed to move the tracker.
-            SelectTracker(definition.Id);
-            StartDrag(key, mouse);
+            if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            {
+                // Double click on the tracker turns it on or off.
+                definition.Enabled = !definition.Enabled;
+                plugin.RequestSave();
+            }
+            else
+            {
+                // Any point of the row can be grabbed to move the tracker.
+                SelectTracker(definition.Id);
+                StartDrag(key, mouse);
+            }
         }
 
         // Right click: the menu of the tracker.
@@ -649,6 +701,12 @@ internal sealed class TrackerEditor
             {
                 definition.Enabled = !definition.Enabled;
                 plugin.RequestSave();
+            }
+
+            if (ImGui.Selectable("Edit name"))
+            {
+                renamingTrackerId = definition.Id;
+                openRename = true;
             }
 
             if (ImGui.Selectable("Duplicate"))
@@ -679,11 +737,12 @@ internal sealed class TrackerEditor
 
         switch (rule.Kind)
         {
-            case ConditionKind.AbilityActivated:
+            case ConditionKind.AbilityHighlighted:
                 return "Activated";
             case ConditionKind.AbilityOnCooldown:
-            case ConditionKind.AbilityReady:
-            case ConditionKind.AbilityAlways:
+            case ConditionKind.AbilityOffCooldown:
+            case ConditionKind.AbilityFull:
+            case ConditionKind.AbilityNotFull:
                 return "Cooldown";
         }
 
@@ -1121,32 +1180,6 @@ internal sealed class TrackerEditor
         ImGui.TextColored(Theme.TextMuted, "Deleting a group deletes all the trackers inside it.");
     }
 
-    // ---------------------------------------------------------------- general
-
-    private void DrawGeneral(TrackerEngine engine, TrackerRuntime runtime)
-    {
-        var definition = runtime.Definition;
-
-        Widgets.Card("##card_tracker_general", 4, () =>
-        {
-            Widgets.SectionLabel("General");
-
-            var enabled = definition.Enabled;
-            if (ImGui.Checkbox("Enabled", ref enabled))
-            {
-                definition.Enabled = enabled;
-                plugin.RequestSave();
-            }
-
-            var name = definition.Name;
-            if (ImGui.InputText("Name", ref name, 64))
-            {
-                definition.Name = name;
-                plugin.RequestSave();
-            }
-        });
-    }
-
     // ---------------------------------------------------------------- icon triggers
 
     // The search boxes of the cards (one per trigger / text source, so cards do not share what is typed).
@@ -1194,72 +1227,29 @@ internal sealed class TrackerEditor
     }
 
     private static readonly ConditionKind[] StatusConditions =
-        { ConditionKind.StatusPresent, ConditionKind.StatusMissing, ConditionKind.StatusAlways };
+        { ConditionKind.StatusPresent, ConditionKind.StatusMissing };
 
     private static readonly ConditionKind[] AbilityConditions =
-        { ConditionKind.AbilityActivated, ConditionKind.AbilityOnCooldown, ConditionKind.AbilityReady, ConditionKind.AbilityAlways };
+        { ConditionKind.AbilityHighlighted, ConditionKind.AbilityOnCooldown, ConditionKind.AbilityOffCooldown, ConditionKind.AbilityFull, ConditionKind.AbilityNotFull };
 
-    // When can an effect be applied, for each kind of trigger.
-    private static EffectWhen[] WhenOptions(ConditionKind kind) => kind switch
+    // An effect of a trigger: a plain checkbox, applied whenever the trigger matches.
+    private bool EffectCheckbox(string label, bool value)
     {
-        ConditionKind.StatusAlways => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.StatusOn, EffectWhen.StatusMissing },
-        ConditionKind.AbilityAlways => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.Usable, EffectWhen.Unavailable, EffectWhen.Ready, EffectWhen.Recharging, EffectWhen.Highlighted },
-        ConditionKind.AbilityOnCooldown => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.Usable, EffectWhen.Unavailable, EffectWhen.Highlighted },
-        ConditionKind.AbilityActivated or ConditionKind.AbilityReady
-            => new[] { EffectWhen.Never, EffectWhen.Always, EffectWhen.Highlighted },
-        _ => new[] { EffectWhen.Never, EffectWhen.Always }
-    };
+        if (ImGui.Checkbox(label, ref value))
+            plugin.RequestSave();
 
-    private static string EffectLabel(EffectWhen when) => when switch
-    {
-        EffectWhen.Never => "Never",
-        EffectWhen.Always => "Always",
-        EffectWhen.StatusOn => "While it is on",
-        EffectWhen.StatusMissing => "While it is missing",
-        EffectWhen.Ready => "While it is full",
-        EffectWhen.Recharging => "While it is not full",
-        EffectWhen.Usable => "While it is ready",
-        EffectWhen.Unavailable => "While it is not ready",
-        _ => "While the game highlights it"
-    };
-
-    // One effect of a trigger: a combo with the situations that make sense for the trigger. Returns the (possibly new) value.
-    private EffectWhen EffectCombo(string label, EffectWhen current, EffectWhen[] options, EffectWhen[] allOptions)
-    {
-        // A value that this kind of trigger cannot use (after changing the trigger) counts as "Never".
-        if (!allOptions.Contains(current))
-            current = EffectWhen.Never;
-
-        // A value saved earlier that is not offered now (single charge ability) stays in the list, so it is not lost.
-        if (!options.Contains(current))
-            options = options.Append(current).ToArray();
-
-        if (ImGui.BeginCombo(label, EffectLabel(current), ImGuiComboFlags.None))
-        {
-            foreach (var option in options)
-            {
-                if (ImGui.Selectable(EffectLabel(option), current == option) && option != current)
-                {
-                    current = option;
-                    plugin.RequestSave();
-                }
-            }
-
-            ImGui.EndCombo();
-        }
-
-        return current;
+        return value;
     }
 
     private static string WhenLabel(ConditionKind kind) => kind switch
     {
         ConditionKind.StatusPresent => "It is on",
         ConditionKind.StatusMissing => "It is missing",
-        ConditionKind.StatusAlways => "Always (on or missing)",
-        ConditionKind.AbilityActivated => "It is activated",
-        ConditionKind.AbilityOnCooldown => "It is recharging",
-        ConditionKind.AbilityReady => "It is ready",
-        _ => "Always (ready or recharging)"
+        ConditionKind.AbilityHighlighted => "When the game highlights it",
+        ConditionKind.AbilityOnCooldown => "On cooldown",
+        ConditionKind.AbilityOffCooldown => "Off cooldown",
+        ConditionKind.AbilityFull => "Full of charges",
+        _ => "Not full of charges"
     };
 
     private void EnsureAbilities(GameSnapshot snapshot)
@@ -1477,7 +1467,7 @@ internal sealed class TrackerEditor
 
                     if (ImGui.Selectable("An ability", tracksAbility) && !tracksAbility)
                     {
-                        rule.Kind = ConditionKind.AbilityAlways;
+                        rule.Kind = ConditionKind.AbilityOffCooldown;
                         pick.Query = string.Empty;
                         pick.Initialized = false;
                         plugin.RequestSave();
@@ -1487,6 +1477,11 @@ internal sealed class TrackerEditor
                 }
 
                 var options = tracksAbility ? AbilityConditions : StatusConditions;
+
+                // An ability with a single charge has no "full" and no "not full": they are offered only when the game says it has
+                // several charges (or while that is not known yet). The saved value always stays visible.
+                if (tracksAbility && snapshot.Cooldowns.TryGetValue(rule.ActionId, out var chargeData) && chargeData.MaxCharges <= 1)
+                    options = options.Where(o => o is not (ConditionKind.AbilityFull or ConditionKind.AbilityNotFull) || o == rule.Kind).ToArray();
                 if (ImGui.BeginCombo("When", WhenLabel(rule.Kind), ImGuiComboFlags.None))
                 {
                     foreach (var option in options)
@@ -1511,25 +1506,10 @@ internal sealed class TrackerEditor
 
                 ImGui.Spacing();
 
-                // Effects: each one can be applied always, or only in one situation of the trigger.
-                // An ability with a single charge has no "full" and no "recharging" (they would be the same as "ready" / "not ready"):
-                // they are offered only when the game says the ability has charges (or while that is not known yet).
-                var singleCharge = rule.IsAbility && snapshot.Cooldowns.TryGetValue(rule.ActionId, out var cooldownData) && cooldownData.MaxCharges <= 1;
-                var allOptions = WhenOptions(rule.Kind);
-                var whenOptions = singleCharge ? allOptions.Where(o => o is not (EffectWhen.Ready or EffectWhen.Recharging)).ToArray() : allOptions;
-                rule.GlowWhen = EffectCombo("Glow", rule.GlowWhen, whenOptions, allOptions);
-                rule.RedWhen = EffectCombo("Red", rule.RedWhen, whenOptions, allOptions);
-                rule.DimWhen = EffectCombo("Dimmed", rule.DimWhen, whenOptions, allOptions);
-
-                if (rule.IsAbility && rule.Kind != ConditionKind.AbilityActivated)
-                {
-                    var ignoreGcd = rule.IgnoreGlobalCooldown;
-                    if (ImGui.Checkbox("Ignore the global cooldown", ref ignoreGcd))
-                    {
-                        rule.IgnoreGlobalCooldown = ignoreGcd;
-                        plugin.RequestSave();
-                    }
-                }
+                // Effects: applied whenever this trigger matches.
+                rule.Glow = EffectCheckbox("Glow", rule.Glow);
+                rule.Red = EffectCheckbox("Red", rule.Red);
+                rule.Dim = EffectCheckbox("Dimmed", rule.Dim);
 
                 ImGui.Spacing();
                 DrawRuleTexts(definition, index, rule);
@@ -1569,42 +1549,7 @@ internal sealed class TrackerEditor
             plugin.RequestSave();
         }
 
-        // One status, or any status of a filter of the Filters page.
-        var allFilters = plugin.Configuration.Filters.Filters;
-        if (allFilters.Count > 0 || rule.UsesFilter)
-        {
-            var current = rule.UsesFilter
-                ? $"Filter: {plugin.Configuration.Filters.Find(rule.FilterId)?.Name ?? "(deleted)"}"
-                : "One status";
-
-            if (ImGui.BeginCombo("Which", current, ImGuiComboFlags.None))
-            {
-                if (ImGui.Selectable("One status", !rule.UsesFilter) && rule.UsesFilter)
-                {
-                    rule.FilterId = string.Empty;
-                    pick.Initialized = false;
-                    plugin.RequestSave();
-                }
-
-                foreach (var filter in allFilters)
-                {
-                    if (ImGui.Selectable($"Filter: {filter.Name}##flt_{filter.Id}", rule.FilterId == filter.Id) && rule.FilterId != filter.Id)
-                    {
-                        rule.FilterId = filter.Id;
-                        plugin.RequestSave();
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
-            if (rule.UsesFilter)
-            {
-                ImGui.TextColored(Theme.TextMuted, "Any status of the filter counts. If several are there, the one that ends first shows.");
-                return;
-            }
-        }
-
+        // A tracker follows ONE status. The filters (lists of statuses) belong to the party list, the nameplates and the other bars.
         if (rule.StatusId == 0)
             ImGui.TextColored(Theme.Warning, "No status selected yet.");
         else
@@ -2014,13 +1959,6 @@ internal sealed class TrackerEditor
             plugin.RequestSave();
         }
 
-        var font = text.Font;
-        if (EnumCombo("Text font", ref font, FontLabel))
-        {
-            text.Font = font;
-            plugin.RequestSave();
-        }
-
         var color = text.Color;
         if (ImGui.ColorEdit4("Text color", ref color, ImGuiColorEditFlags.NoAlpha))
         {
@@ -2228,21 +2166,6 @@ internal sealed class TrackerEditor
                     elementLayout.Height = Math.Clamp(height, 1, 512);
                     plugin.RequestSave();
                 }
-            }
-
-            // The game's icons have an empty margin (and rounded corners) drawn in the image: cut it so the art fills the box.
-            var trim = definition.Trim ?? IconTrim.AllAround;
-            if (EnumCombo("Trim icon margins", ref trim, TrimLabel))
-            {
-                definition.Trim = trim;
-                changed = true;
-            }
-
-            var cornerRadius = definition.CornerRadiusPx;
-            if (ImGui.SliderInt("Corner rounding (px)", ref cornerRadius, 0, 12))
-            {
-                definition.CornerRadiusPx = cornerRadius;
-                changed = true;
             }
 
             if (hasAbility)
@@ -2498,22 +2421,6 @@ internal sealed class TrackerEditor
         _ => unit.ToString()
     };
 
-    internal static string TrimLabel(IconTrim trim) => trim switch
-    {
-        IconTrim.None => "None",
-        IconTrim.Sides => "Sides",
-        IconTrim.TopAndBottom => "Top and bottom",
-        _ => "All around"
-    };
-
-    private static string CooldownLookLabel(CooldownLook look) => look switch
-    {
-        CooldownLook.Normal => "Normal",
-        CooldownLook.Dimmed => "Dimmed",
-        CooldownLook.Red => "Red",
-        _ => look.ToString()
-    };
-
     // The same six words as every "Grow towards" of the interface (the icon rows next to the bars and the player's groups).
     private static readonly GroupGrowth[] GrowthOrder =
     {
@@ -2530,18 +2437,6 @@ internal sealed class TrackerEditor
         GroupGrowth.Up => "Up",
         GroupGrowth.FromCenterVertical => "Centered vertically",
         _ => growth.ToString()
-    };
-
-    private static string FontLabel(OverlayFont font) => font switch
-    {
-        OverlayFont.GameNumbers => "Game numbers (Meidinger)",
-        OverlayFont.GameUi => "Game interface (Axis)",
-        OverlayFont.GameUiBold => "Game interface, bold (Axis)",
-        OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI Display",
-        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
-        OverlayFont.NahjaText => "NahjaUI Text",
-        _ => font.ToString()
     };
 
     private static string PvpLabel(TrackerPvpMode mode) => mode switch

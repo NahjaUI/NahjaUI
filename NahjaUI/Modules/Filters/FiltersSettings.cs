@@ -68,14 +68,8 @@ public class FiltersSettings
         return int.MaxValue;
     }
 
-    /// <summary>Old flag: the four defensive filters were created (kept so older settings are understood).</summary>
+    /// <summary>The starting filters were created (once; if the user deletes one, it does not come back by itself).</summary>
     public bool DefensivesCreated { get; set; }
-
-    /// <summary>The Rotation upkeep filter was created (once; if the user deletes it, it does not come back by itself).</summary>
-    public bool RotationCreated { get; set; }
-
-    /// <summary>0 = nothing created, 1 = the four defensive filters, 2 = also Raise and Movement (and the shorter names).</summary>
-    public int DefensivesVersion { get; set; }
 
     /// <summary>The first time: the filters the interface starts with. Crowd control has the one stun of the game; the others wait for the user to fill them.</summary>
     public void EnsureStarters()

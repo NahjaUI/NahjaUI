@@ -4,7 +4,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.ProgressBars;
 
@@ -109,13 +109,6 @@ internal sealed class ProgressBarEditor
 
             ImGui.Spacing();
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt("Corner rounding (px)##gcd", ref rounding, 0, 6))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             ColorRow("Bar color##gcd", settings.BarColor, c => settings.BarColor = c, true);
             ColorRow("Queue window color", settings.QueueColor, c => settings.QueueColor = c, true);
             ColorRow("Weave limit color", settings.WeaveColor, c => settings.WeaveColor = c, true);
@@ -135,7 +128,6 @@ internal sealed class ProgressBarEditor
 
     private void DrawBar(string title, string cardId, ProgressBarSettings settings, LayoutElement element, bool isTarget)
     {
-        settings.EnsureTexts();
 
         Widgets.Card(cardId, isTarget ? 20 : 22, () =>
         {
@@ -228,13 +220,6 @@ internal sealed class ProgressBarEditor
                 }
             }
 
-            var rounding = settings.RoundingPx;
-            if (ImGui.SliderInt("Corner rounding (px)", ref rounding, 0, 12))
-            {
-                settings.RoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
             var background = settings.BackgroundColor;
             if (ImGui.ColorEdit4("Background color", ref background, ImGuiColorEditFlags.None))
             {
@@ -262,7 +247,7 @@ internal sealed class ProgressBarEditor
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.TextControls(settings.Name))
+            if (HudBarEditor.TextControls(settings.Name))
                 plugin.RequestSave();
         });
 
@@ -284,7 +269,7 @@ internal sealed class ProgressBarEditor
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.TextControls(settings.Time))
+            if (HudBarEditor.TextControls(settings.Time))
                 plugin.RequestSave();
         });
     }
@@ -294,18 +279,6 @@ internal sealed class ProgressBarEditor
         ProgressBarTimeMode.Remaining => "Time left (1.4)",
         ProgressBarTimeMode.ElapsedOverTotal => "Done over total (0.6 / 2.0)",
         _ => mode.ToString()
-    };
-
-    private static string FontLabel(OverlayFont font) => font switch
-    {
-        OverlayFont.GameNumbers => "Game numbers (Meidinger)",
-        OverlayFont.GameUi => "Game interface (Axis)",
-        OverlayFont.GameUiBold => "Game interface, bold (Axis)",
-        OverlayFont.Condensed => "Condensed (Trump Gothic)",
-        OverlayFont.NahjaDisplay => "NahjaUI Display",
-        OverlayFont.NahjaDisplayBold => "NahjaUI Numbers",
-        OverlayFont.NahjaText => "NahjaUI Text",
-        _ => font.ToString()
     };
 
     // A drop-down list for any enum. Returns true when the user picked a different value.

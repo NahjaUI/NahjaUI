@@ -76,45 +76,31 @@ internal static class DefensiveFilters
         })
     };
 
-    // The order of the filters on the party frame: a dead player with a Raise on first, movement last.
+    // The order of the filters on the party list: a dead player with a Raise on first, movement last.
     private static readonly string[] RowOrder = { RaiseId, InvulnerabilitiesId, MitigationId, ShieldsId, HealingId, DancePartnerId, MovementId };
 
     /// <summary>The names the last build did not find (shown on the Filters page).</summary>
     public static IReadOnlyList<string> LastMissing { get; private set; } = Array.Empty<string>();
 
-    /// <summary>Creates the filters once, and puts them on the party frame (the first time, or the new ones when they were added later).</summary>
+    /// <summary>Creates the starting filters once, and puts them on the party list.</summary>
     public static void EnsureCreated(Configuration configuration)
     {
         var filters = configuration.Filters;
-        var version = filters.DefensivesVersion;
-        if (version == 0 && filters.DefensivesCreated)
-            version = 1;
-
-        if (version >= 4)
-        {
-            EnsureRotation(filters);
+        if (filters.DefensivesCreated)
             return;
-        }
 
-        filters.DefensivesVersion = 4;
         filters.DefensivesCreated = true;
 
         var ids = BuildIds();
         var missing = new List<string>();
         foreach (var definition in All)
         {
-            var filter = filters.Find(definition.Id);
-            if (filter is null)
-            {
-                filter = new StatusFilter { Id = definition.Id, Name = definition.Name };
-                filters.Filters.Add(filter);
-                Fill(filter, definition, ids, missing);
-            }
-            else
-            {
-                // The shorter names (Shields, HoTs). The statuses the user already has in the filter stay.
-                filter.Name = definition.Name;
-            }
+            if (filters.Find(definition.Id) is not null)
+                continue;
+
+            var filter = new StatusFilter { Id = definition.Id, Name = definition.Name };
+            filters.Filters.Add(filter);
+            Fill(filter, definition, ids, missing);
         }
 
         // The partner carries "Dance Partner", not "Closed Position" (that one is the Dancer's own).
@@ -129,69 +115,24 @@ internal static class DefensiveFilters
         }
 
         LastMissing = missing;
-        filters.RotationCreated = true;
 
-        var party = configuration.UnitFrames.Party;
+        var party = configuration.HudBars.Party;
         var enhancements = party.Enhancements;
 
-        if (version == 0)
-        {
-            // The enhancements row shows only these filters, in this order; the enfeeblements row shows all of them with a border on the
-            // ones a cleanse can remove.
-            enhancements.Filter = NahjaUI.Modules.PartyFrames.StatusRowFilter.OnlyListed;
-            enhancements.StatusIds.Clear();
-            enhancements.OnlyMine = false;
-            enhancements.MaxIcons = 6;
-            enhancements.PriorityByFilter = true;
-            enhancements.FilterIds = new List<string>(RowOrder);
-            enhancements.OnlyMineFilterIds = new List<string> { HealingId, DancePartnerId };
+        // The enhancements row shows only these filters, in this order; the enfeeblements row shows all of them with a border on the
+        // ones a cleanse can remove.
+        enhancements.Filter = NahjaUI.Modules.PartyListBar.StatusRowFilter.OnlyListed;
+        enhancements.StatusIds.Clear();
+        enhancements.OnlyMine = false;
+        enhancements.MaxIcons = 6;
+        enhancements.PriorityByFilter = true;
+        enhancements.FilterIds = new List<string>(RowOrder);
+        enhancements.OnlyMineFilterIds = new List<string> { HealingId, DancePartnerId };
 
-            var enfeeblements = party.Enfeeblements;
-            enfeeblements.Filter = NahjaUI.Modules.PartyFrames.StatusRowFilter.All;
-            enfeeblements.OnlyMine = false;
-            enfeeblements.DispelBorder = true;
-        }
-        else
-        {
-            // Older versions: Raise goes first, the Dance Partner before Movement, and Movement last.
-            if (!enhancements.FilterIds.Contains(RaiseId))
-                enhancements.FilterIds.Insert(0, RaiseId);
-
-            if (!enhancements.FilterIds.Contains(DancePartnerId))
-            {
-                var movement = enhancements.FilterIds.IndexOf(MovementId);
-                if (movement >= 0)
-                    enhancements.FilterIds.Insert(movement, DancePartnerId);
-                else
-                    enhancements.FilterIds.Add(DancePartnerId);
-            }
-
-            if (!enhancements.FilterIds.Contains(MovementId))
-                enhancements.FilterIds.Add(MovementId);
-
-            // Only your own partner matters (another Dancer's partner would only be noise).
-            if (!enhancements.OnlyMineFilterIds.Contains(DancePartnerId))
-                enhancements.OnlyMineFilterIds.Add(DancePartnerId);
-        }
-    }
-
-    /// <summary>The Rotation upkeep filter was added after the others: it is created once for the configurations that already had them.</summary>
-    private static void EnsureRotation(FiltersSettings filters)
-    {
-        if (filters.RotationCreated)
-            return;
-
-        filters.RotationCreated = true;
-        if (filters.Find(RotationId) is not null)
-            return;
-
-        var definition = Array.Find(All, d => d.Id == RotationId)!;
-        var filter = new StatusFilter { Id = definition.Id, Name = definition.Name };
-        filters.Filters.Add(filter);
-
-        var missing = new List<string>();
-        Fill(filter, definition, BuildIds(), missing);
-        LastMissing = missing;
+        var enfeeblements = party.Enfeeblements;
+        enfeeblements.Filter = NahjaUI.Modules.PartyListBar.StatusRowFilter.All;
+        enfeeblements.OnlyMine = false;
+        enfeeblements.DispelBorder = true;
     }
 
     /// <summary>Recreates the default filters that are missing (same ids, so what uses them finds them again). The ones that exist are not touched.</summary>

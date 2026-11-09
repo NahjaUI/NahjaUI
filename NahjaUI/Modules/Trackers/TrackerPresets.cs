@@ -90,8 +90,6 @@ internal static class TrackerPresets
             definition.IconHeight = 24;
 
             var template = definition.Template ??= new TrackerDefinition();
-            template.CornerRadiusPx = 6;
-            template.Trim = IconTrim.AllAround;
             template.ShowCooldownSweep = sweep;
             template.Load.JobIds = new List<uint>(jobIds);
             template.Load.Where = Where;
@@ -103,9 +101,10 @@ internal static class TrackerPresets
         }
 
         // A short enhancement or a ready action: shown only while it is on you, with its time (and stacks) and a glow.
-        public void Enhancement(TrackerGroupRuntime group, string statusName, bool stacks = false)
+        // iconAbility: show the icon of this ability instead of the icon of the status (the game's status icon can carry its own stack count).
+        public void Enhancement(TrackerGroupRuntime group, string statusName, bool stacks = false, string? iconAbility = null)
         {
-            StatusTracker(group, statusName, glow: true, stacks: stacks);
+            StatusTracker(group, statusName, glow: true, stacks: stacks, iconAbility: iconAbility);
         }
 
         // An enfeeblement that is yours on the target and must always be up (a DoT, the Bard's poisons): always shown, with its time, red and dimmed while it
@@ -126,11 +125,11 @@ internal static class TrackerPresets
             if (id == 0)
                 Missing.Add($"ability \"{abilityName}\"");
 
-            tracker.Rules.Add(new TrackerRule { Kind = ConditionKind.AbilityActivated, ActionId = id, GlowWhen = EffectWhen.Highlighted, EffectsMigrated = true });
+            tracker.Rules.Add(new TrackerRule { Kind = ConditionKind.AbilityHighlighted, ActionId = id, Glow = true });
         }
 
         // The stance of a tank (Iron Will, Defiance, Grit, Royal Guard): shown only while it is off (red and dimmed), no text.
-        public void Stance(TrackerGroupRuntime group, string statusName, string? filterId = null)
+        public void Stance(TrackerGroupRuntime group, string statusName)
         {
             var tracker = NewTracker(group, statusName);
             var id = FindStatus(statusName, Pvp);
@@ -143,10 +142,8 @@ internal static class TrackerPresets
                 Kind = ConditionKind.StatusMissing,
                 Unit = TrackerUnit.Player,
                 StatusId = id,
-                FilterId = filterId ?? string.Empty,
-                RedWhen = EffectWhen.Always,
-                DimWhen = EffectWhen.Always,
-                EffectsMigrated = true
+                Red = true,
+                Dim = true,
             });
         }
 
@@ -178,17 +175,19 @@ internal static class TrackerPresets
                     Unit = unit,
                     StatusId = id,
                     OnlyMine = unit == TrackerUnit.Target,
-                    EffectsMigrated = true
                 };
             }
 
             if (ids.Length == 1)
             {
-                var only = Make(ConditionKind.StatusAlways, ids[0]);
-                only.RedWhen = EffectWhen.StatusMissing;
-                only.DimWhen = EffectWhen.StatusMissing;
-                only.Texts.Add(TimeText());
-                tracker.Rules.Add(only);
+                var onlyPresent = Make(ConditionKind.StatusPresent, ids[0]);
+                onlyPresent.Texts.Add(TimeText());
+                tracker.Rules.Add(onlyPresent);
+
+                var onlyMissing = Make(ConditionKind.StatusMissing, ids[0]);
+                onlyMissing.Red = true;
+                onlyMissing.Dim = true;
+                tracker.Rules.Add(onlyMissing);
                 return;
             }
 
@@ -200,20 +199,25 @@ internal static class TrackerPresets
             }
 
             var missing = Make(ConditionKind.StatusMissing, ids[0]);
-            missing.RedWhen = EffectWhen.StatusMissing;
-            missing.DimWhen = EffectWhen.StatusMissing;
+            missing.Red = true;
+            missing.Dim = true;
             tracker.Rules.Add(missing);
         }
 
         // An ability: while its effect is on you, the time of the effect; otherwise its cooldown (dimmed while it cannot be used).
         // Alternative names (an ability that is replaced at a higher level) go newest first: the engine skips the ones not learned.
-        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false)
+        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false)
         {
             var tracker = NewTracker(group, trackerName);
 
             foreach (var effect in effects ?? Array.Empty<string>())
             {
                 var effectRule = StatusRule(effect, glow: false);
+
+                // abilityIcon: while the effect is on, the icon is the one of the ability (not the one of the status).
+                if (abilityIcon)
+                    UseAbilityIcon(effectRule, abilities[0]);
+
                 effectRule.Texts.Add(TimeText());
 
                 if (effectStacks)
@@ -234,17 +238,52 @@ internal static class TrackerPresets
 
             foreach (var abilityName in chosen)
             {
-                var rule = AbilityRule(abilityName);
-                rule.DimWhen = charges ? EffectWhen.Unavailable : EffectWhen.Recharging;
-                // By default every ability glows when the game makes it glow (a ready action, a combo that opens it).
-                rule.GlowWhen = glow ? EffectWhen.Highlighted : EffectWhen.Never;
-                rule.Texts.Add(TimeText());
+                // Newest version first; for each one: highlighted by the game (glow), on cooldown (dimmed), off cooldown.
+                if (glow)
+                {
+                    var highlighted = AbilityRule(abilityName, ConditionKind.AbilityHighlighted);
+                    highlighted.Glow = true;
+                    AddCooldownTexts(highlighted, charges);
+                    tracker.Rules.Add(highlighted);
+                }
 
-                if (charges)
-                    rule.Texts.Add(StacksText());
+                var onCooldown = AbilityRule(abilityName, ConditionKind.AbilityOnCooldown);
+                onCooldown.Dim = true;
+                AddCooldownTexts(onCooldown, charges);
+                tracker.Rules.Add(onCooldown);
 
-                tracker.Rules.Add(rule);
+                var offCooldown = AbilityRule(abilityName, ConditionKind.AbilityOffCooldown);
+                AddCooldownTexts(offCooldown, charges);
+                tracker.Rules.Add(offCooldown);
             }
+        }
+
+        private static void AddCooldownTexts(TrackerRule rule, bool charges)
+        {
+            rule.Texts.Add(TimeText());
+
+            if (charges)
+                rule.Texts.Add(StacksText());
+        }
+
+        // A spell of the Blue Mage's spellbook: it is shown ONLY while its effect is on you or while it recharges, and it is hidden the rest of
+        // the time (a spell that is not in the active set never recharges and never gives an effect, so it never appears).
+        // The global cooldown does not count as a recharge.
+        public void Spell(TrackerGroupRuntime group, string spellName, string? effectName = null)
+        {
+            var tracker = NewTracker(group, spellName);
+
+            if (effectName is not null)
+            {
+                var effectRule = StatusRule(effectName, glow: false);
+                effectRule.Texts.Add(TimeText());
+                tracker.Rules.Add(effectRule);
+            }
+
+            var rule = AbilityRule(spellName, ConditionKind.AbilityOnCooldown);
+            rule.Dim = true;
+            rule.Texts.Add(TimeText());
+            tracker.Rules.Add(rule);
         }
 
         // A group that was created and turned out to be empty (and was deleted) is not styled at the end.
@@ -264,16 +303,25 @@ internal static class TrackerPresets
         public List<string> Missing { get; } = new();
 
         // An enhancement or a ready action: shown only while the status is on you. Text: its time (and, optionally, its stacks).
-        public void StatusTracker(TrackerGroupRuntime group, string statusName, bool glow = false, bool stacks = false)
+        public void StatusTracker(TrackerGroupRuntime group, string statusName, bool glow = false, bool stacks = false, string? iconAbility = null)
         {
             var tracker = NewTracker(group, statusName);
             var rule = StatusRule(statusName, glow);
+            UseAbilityIcon(rule, iconAbility);
             rule.Texts.Add(TimeText());
 
             if (stacks)
                 rule.Texts.Add(StacksText());
 
             tracker.Rules.Add(rule);
+        }
+
+        // A status that only needs to be seen: shown while it is up, no text and it never glows (Jog: the game gives it when Sprint ends and
+        // takes it away in combat or when the area changes).
+        public void PlainStatus(TrackerGroupRuntime group, string statusName)
+        {
+            var tracker = NewTracker(group, statusName);
+            tracker.Rules.Add(StatusRule(statusName, false));
         }
 
         // The look of the groups is copied into every tracker once they all exist.
@@ -289,9 +337,6 @@ internal static class TrackerPresets
             var definition = runtime.Definition;
             definition.Name = name;
             definition.Rules.Clear();
-            definition.Texts.Clear();
-            definition.CornerRadiusPx = 6;
-            definition.Trim = IconTrim.AllAround;
             definition.Load.JobIds = new List<uint>(jobIds);
             definition.Load.Where = Where;
             Count++;
@@ -309,12 +354,28 @@ internal static class TrackerPresets
                 Kind = ConditionKind.StatusPresent,
                 Unit = TrackerUnit.Player,
                 StatusId = id,
-                GlowWhen = glow ? EffectWhen.Always : EffectWhen.Never,
-                EffectsMigrated = true
+                Glow = glow,
             };
         }
 
-        private TrackerRule AbilityRule(string abilityName)
+        // The rule shows the icon of an ability, whatever it tracks.
+        private void UseAbilityIcon(TrackerRule rule, string? abilityName)
+        {
+            if (abilityName is null)
+                return;
+
+            var id = FindAction(abilityName, jobId, Pvp);
+            if (id == 0)
+            {
+                Missing.Add($"ability \"{abilityName}\" (for an icon)");
+                return;
+            }
+
+            rule.Icon = IconSource.Ability;
+            rule.IconActionId = id;
+        }
+
+        private TrackerRule AbilityRule(string abilityName, ConditionKind kind)
         {
             var id = FindAction(abilityName, jobId, Pvp);
             if (id == 0)
@@ -324,10 +385,8 @@ internal static class TrackerPresets
 
             return new TrackerRule
             {
-                Kind = ConditionKind.AbilityAlways,
+                Kind = kind,
                 ActionId = id,
-                DimWhen = EffectWhen.Unavailable,
-                EffectsMigrated = true
             };
         }
 
@@ -374,7 +433,7 @@ internal static class TrackerPresets
 
     // The status with exactly this name. Several statuses can share a name (PvP, old versions): the lowest id is taken.
     // For PvP the highest id is taken instead: the PvP version of a status is made after the PvE one of the same name.
-    private static uint FindStatus(string name, bool pvp = false)
+    internal static uint FindStatus(string name, bool pvp = false)
     {
         uint found = 0;
         // The names of the presets are English: they are looked up in the English table whatever the language of the game, and the tracker keeps the id.

@@ -427,52 +427,6 @@ internal sealed class GameDataProvider : IDisposable
     }
 
     // The combo of the game: the last action of the chain you used and the time left to continue it.
-    /// <summary>
-    /// Debug: what the game flags right now among the actions of a job. Highlighted = the game makes it glow (glowing actions, follow-ups);
-    /// Form = the action turns into another one (Confiteor into Blade of Faith). Only meant for the Debug page.
-    /// </summary>
-    public static unsafe List<string> ReadActionFlags(uint jobId)
-    {
-        var lines = new List<string>();
-        var actionManager = ActionManager.Instance();
-        if (actionManager == null || jobId == 0)
-            return lines;
-
-        uint parentId = 0;
-        if (Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().TryGetRow(jobId, out var jobRow))
-            parentId = jobRow.ClassJobParent.RowId;
-
-        foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>())
-        {
-            var owner = row.ClassJob.RowId;
-            if (row.IsPvP || row.ClassJobLevel == 0 || (owner != jobId && (parentId == 0 || owner != parentId)))
-                continue;
-
-            var name = row.Name.ToString();
-            if (string.IsNullOrEmpty(name))
-                continue;
-
-            var adjusted = actionManager->GetAdjustedActionId(row.RowId);
-            var glowing = actionManager->IsActionHighlighted(ActionType.Action, row.RowId);
-            var glowingForm = adjusted != row.RowId && actionManager->IsActionHighlighted(ActionType.Action, adjusted);
-
-            if (!glowing && !glowingForm && adjusted == row.RowId)
-                continue;
-
-            var text = $"{name} ({row.RowId})";
-            if (adjusted != row.RowId)
-                text += $"  form: {GameNames.ActionName(adjusted)} ({adjusted})";
-
-            text += $"  glow: {(glowing ? "yes" : "no")}";
-            if (adjusted != row.RowId)
-                text += $", form glow: {(glowingForm ? "yes" : "no")}";
-
-            lines.Add(text);
-        }
-
-        return lines;
-    }
-
     private static unsafe ComboSnapshot BuildCombo()
     {
         var actionManager = ActionManager.Instance();
@@ -483,8 +437,8 @@ internal sealed class GameDataProvider : IDisposable
         return combo.Timer > 0f ? new ComboSnapshot(combo.Action, combo.Timer) : ComboSnapshot.None;
     }
 
-    // The gauge of the game's Frontline window (PvP). Read from the values the game gives that window (checked with the Debug card
-    // "What a game window holds": value 3 is the number on the gauge, value 4 its maximum). The window's visibility is NOT used: when ours
+    // The gauge of the game's Frontline window (PvP). Read from the values the game gives that window (value 3 is the number on
+    // the gauge, value 4 its maximum). The window's visibility is NOT used: when ours
     // is drawn the game's window is switched off, and the values are still there.
     private static unsafe FrontlineGaugeSnapshot? BuildFrontlineGauge(ContextSnapshot context)
     {
@@ -502,54 +456,6 @@ internal sealed class GameDataProvider : IDisposable
         var value = addon->AtkValues[3].UInt;
         var max = addon->AtkValues[4].UInt;
         return new FrontlineGaugeSnapshot(value, max == 0 ? 100u : max);
-    }
-
-    /// <summary>For the Debug page: what the game says about the limit break, the raw memory of its controller and the state of its own gauge window (to find out how many bars the content really has).</summary>
-    public static unsafe string LimitBreakDebug()
-    {
-        var controller = FFXIVClientStructs.FFXIV.Client.Game.UI.LimitBreakController.Instance();
-        var text = controller == null
-            ? "controller: none"
-            : $"BarCount={controller->BarCount} CurrentUnits={controller->CurrentUnits} BarUnits={controller->BarUnits} IsPvP={controller->IsPvP}";
-
-        var pointer = Plugin.GameGui.GetAddonByName("_LimitBreak");
-        if (pointer.IsNull)
-            return text + "\n_LimitBreak window: not loaded";
-
-        var addon = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)pointer.Address;
-        text += $"\n_LimitBreak window: visible={addon->IsVisible} visibilityFlags={addon->VisibilityFlags} alpha={addon->Alpha}";
-
-        var values = string.Empty;
-        for (var i = 0; i < addon->AtkValuesCount; i++)
-            values += $"[{i}] {addon->AtkValues[i].Type}={addon->AtkValues[i].UInt}  ";
-
-        text += $"\nvalues ({addon->AtkValuesCount}): {values}";
-
-        return text + "\nnodes (id type visible WxH, inside each component):\n" + DumpNodes(&addon->UldManager, 0);
-    }
-
-    // Every node of a window (and, inside the component nodes, their own nodes): id, type, visible or not, size.
-    private static unsafe string DumpNodes(FFXIVClientStructs.FFXIV.Component.GUI.AtkUldManager* manager, int depth)
-    {
-        var text = string.Empty;
-        for (var i = 0; i < manager->NodeListCount; i++)
-        {
-            var node = manager->NodeList[i];
-            if (node == null)
-                continue;
-
-            var on = (node->NodeFlags & FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible) != 0;
-            text += $"{new string(' ', depth * 2)}{node->NodeId} t{(int)node->Type} {(on ? "on" : "off")} {node->Width}x{node->Height}\n";
-
-            if ((int)node->Type >= 1000 && depth < 2)
-            {
-                var component = ((FFXIVClientStructs.FFXIV.Component.GUI.AtkComponentNode*)node)->Component;
-                if (component != null)
-                    text += DumpNodes(&component->UldManager, depth + 1);
-            }
-        }
-
-        return text;
     }
 
     // How many bars the game's own Limit Break window shows (0 when it cannot be read). The window may be hidden: its nodes are still kept up to date.

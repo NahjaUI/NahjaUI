@@ -10,7 +10,7 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Modules.Trackers;
 using NahjaUI.Modules.ProgressBars;
 using NahjaUI.Modules.JobGauges;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Core.Profiles;
 
@@ -19,7 +19,7 @@ internal enum ProfileBlock
 {
     Trackers,
     Placement,
-    UnitFrames,
+    HudBars,
     ProgressBars,
     JobGauges,
     Appearance,
@@ -86,10 +86,10 @@ internal sealed class ProfileManager
     {
         ProfileBlock.Trackers => "Trackers and groups",
         ProfileBlock.Placement => "Position and size of every element",
-        ProfileBlock.UnitFrames => "Unit frames",
+        ProfileBlock.HudBars => "HUD bars",
         ProfileBlock.ProgressBars => "Progress bars",
         ProfileBlock.JobGauges => "Job gauges",
-        ProfileBlock.Appearance => "Appearance (accent color, target ring color, menu text size)",
+        ProfileBlock.Appearance => "Appearance (target ring color, shared colors, menu text size)",
         ProfileBlock.Filters => "Filters (the named lists of statuses)",
         ProfileBlock.NamePlates => "Nameplates",
         ProfileBlock.EnmityList => "Enmity list",
@@ -102,7 +102,7 @@ internal sealed class ProfileManager
     {
         ProfileBlock.Trackers => "trackers",
         ProfileBlock.Placement => "placement",
-        ProfileBlock.UnitFrames => "unitFrames",
+        ProfileBlock.HudBars => "hudBars",
         ProfileBlock.ProgressBars => "progressBars",
         ProfileBlock.JobGauges => "jobGauges",
         ProfileBlock.Appearance => "appearance",
@@ -133,7 +133,7 @@ internal sealed class ProfileManager
                     ["rootOrder"] = JToken.FromObject(config.RootOrder, Serializer)
                 },
                 ProfileBlock.Placement => JToken.FromObject(config.Layouts, Serializer),
-                ProfileBlock.UnitFrames => JToken.FromObject(config.UnitFrames, Serializer),
+                ProfileBlock.HudBars => JToken.FromObject(config.HudBars, Serializer),
                 ProfileBlock.ProgressBars => JToken.FromObject(config.ProgressBars, Serializer),
                 ProfileBlock.JobGauges => JToken.FromObject(config.JobGauges, Serializer),
                 ProfileBlock.Filters => JToken.FromObject(config.Filters, Serializer),
@@ -143,10 +143,9 @@ internal sealed class ProfileManager
                 ProfileBlock.Tooltip => JToken.FromObject(config.Tooltip, Serializer),
                 ProfileBlock.Appearance => new JObject
                 {
-                    ["accent"] = JToken.FromObject(config.AccentColor, Serializer),
                     ["targetRing"] = JToken.FromObject(config.TargetRingColor, Serializer),
-                    ["menuTextSize"] = config.MenuTextSize,
-                    ["windowRounding"] = config.WindowRoundingPx
+                    ["colors"] = JToken.FromObject(config.Colors, Serializer),
+                    ["menuTextSize"] = config.MenuTextSize
                 },
                 _ => JValue.CreateNull()
             };
@@ -210,8 +209,6 @@ internal sealed class ProfileManager
                 json = Encoding.UTF8.GetString(output.ToArray());
             }
 
-            // Codes made before the cast bars were renamed to progress bars.
-            json = ConfigRename.Apply(json);
             var root = JObject.Parse(json);
 
             if ((string?)root["format"] != "NahjaUI")
@@ -287,7 +284,7 @@ internal sealed class ProfileManager
             // 1. Read everything that was chosen. Nothing is changed until all of it has been read without problems.
             TrackerBlock? trackers = null;
             Dictionary<string, ElementLayout>? placement = null;
-            UnitFramesSettings? unitFrames = null;
+            HudBarsSettings? hudBars = null;
             ProgressBarsSettings? progressBars = null;
             JobGaugesSettings? jobGauges = null;
             JObject? appearance = null;
@@ -308,8 +305,8 @@ internal sealed class ProfileManager
             if (chosen.Contains(ProfileBlock.Placement) && blocks[Key(ProfileBlock.Placement)] is JObject placementToken)
                 placement = placementToken.ToObject<Dictionary<string, ElementLayout>>(Serializer);
 
-            if (chosen.Contains(ProfileBlock.UnitFrames) && blocks[Key(ProfileBlock.UnitFrames)] is JToken uf)
-                unitFrames = uf.ToObject<UnitFramesSettings>(Serializer);
+            if (chosen.Contains(ProfileBlock.HudBars) && blocks[Key(ProfileBlock.HudBars)] is JToken uf)
+                hudBars = uf.ToObject<HudBarsSettings>(Serializer);
 
             if (chosen.Contains(ProfileBlock.ProgressBars) && blocks[Key(ProfileBlock.ProgressBars)] is JToken cb)
                 progressBars = cb.ToObject<ProgressBarsSettings>(Serializer);
@@ -340,8 +337,8 @@ internal sealed class ProfileManager
             TrimBackups();
 
             // 3. Settings blocks: they are read from the configuration every frame, so replacing them is enough.
-            if (unitFrames is not null)
-                config.UnitFrames = unitFrames;
+            if (hudBars is not null)
+                config.HudBars = hudBars;
 
             if (progressBars is not null)
                 config.ProgressBars = progressBars;
@@ -366,19 +363,15 @@ internal sealed class ProfileManager
 
             if (appearance is not null)
             {
-                if (appearance["accent"] is JToken accent && accent.ToObject<System.Numerics.Vector4>(Serializer) is var color)
-                    config.AccentColor = new System.Numerics.Vector4(color.X, color.Y, color.Z, 1f);
-
                 if (appearance["targetRing"] is JToken ring && ring.ToObject<System.Numerics.Vector4>(Serializer) is var ringColor)
                     config.TargetRingColor = new System.Numerics.Vector4(ringColor.X, ringColor.Y, ringColor.Z, 1f);
+
+                if (appearance["colors"] is JToken shared && shared.ToObject<NahjaUI.Core.Ui.GlobalColors>(Serializer) is { } sharedColors)
+                    config.Colors = sharedColors;
 
                 var size = (int?)appearance["menuTextSize"];
                 if (size is not null)
                     config.MenuTextSize = Math.Clamp(size.Value, 8, 40);
-
-                var rounding = (int?)appearance["windowRounding"];
-                if (rounding is not null)
-                    config.WindowRoundingPx = Math.Clamp(rounding.Value, 0, 30);
             }
 
             // 4. Trackers.

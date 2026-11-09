@@ -60,8 +60,6 @@ internal sealed class TooltipEditor
 
             Slider("Text size (px)", s.TextSize, 10, 24, v => s.TextSize = v);
             Slider("Maximum width (px)", s.MaxWidthPx, 160, 600, v => s.MaxWidthPx = v);
-            Slider("Corner rounding (px)", s.RoundingPx, 0, 12, v => s.RoundingPx = v);
-
             Check("The name uses the accent color", s.NameUsesAccent, v => s.NameUsesAccent = v);
             if (!s.NameUsesAccent)
                 Color("Name color", s.NameColor, false, v => s.NameColor = v);
@@ -76,7 +74,6 @@ internal sealed class TooltipEditor
                 var fresh = new TooltipSettings();
                 s.TextSize = fresh.TextSize;
                 s.MaxWidthPx = fresh.MaxWidthPx;
-                s.RoundingPx = fresh.RoundingPx;
                 s.NameUsesAccent = fresh.NameUsesAccent;
                 s.NameColor = fresh.NameColor;
                 s.DescriptionColor = fresh.DescriptionColor;

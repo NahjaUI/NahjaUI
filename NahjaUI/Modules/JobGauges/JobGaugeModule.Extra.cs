@@ -129,7 +129,7 @@ internal sealed partial class JobGaugeModule
     private void DrawExtraBar(ImDrawListPtr drawList, ExtraGaugeJobSettings settings, GaugePartDef def, GaugePartSnapshot part, Vector2 pos, Vector2 size)
     {
         var scale = ImGuiHelpers.GlobalScale;
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;
 
@@ -157,7 +157,7 @@ internal sealed partial class JobGaugeModule
         drawList.AddRect(pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (!string.IsNullOrEmpty(part.Text))
-            plugin.UnitFrameSystem.DrawText(drawList, part.Text, settings.Text, pos, size);
+            plugin.HudBarSystem.DrawText(drawList, part.Text, settings.Text, pos, size, OverlayFont.NahjaDisplayBold);
     }
 
     // Slots side by side. Each slot colour is an index into the row's colours (-1 is an empty slot). In a row of pips the next slot after
@@ -169,7 +169,7 @@ internal sealed partial class JobGaugeModule
 
         var scale = ImGuiHelpers.GlobalScale;
         var gap = MathF.Round(settings.GapPx * scale);
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         var width = MathF.Floor((size.X - gap * (slots.Length - 1)) / slots.Length);
@@ -203,6 +203,6 @@ internal sealed partial class JobGaugeModule
         }
 
         if (!string.IsNullOrEmpty(text))
-            plugin.UnitFrameSystem.DrawText(drawList, text, settings.Text, pos, size);
+            plugin.HudBarSystem.DrawText(drawList, text, settings.Text, pos, size, OverlayFont.NahjaDisplayBold);
     }
 }

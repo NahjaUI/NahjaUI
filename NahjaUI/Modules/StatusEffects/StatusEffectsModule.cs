@@ -10,8 +10,8 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NahjaUI.Core.Layout;
 using NahjaUI.Game;
-using NahjaUI.Modules.PartyFrames;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.StatusEffects;
 
@@ -22,7 +22,7 @@ namespace NahjaUI.Modules.StatusEffects;
 /// </summary>
 internal sealed class StatusEffectsModule : IDisposable
 {
-    // The game's own status windows, as guessed from its structures: they are checked with the Debug page ("Statuses: game windows").
+    // The game's own status windows, as guessed from its structures.
     private static readonly string[] NativeWindows =
     {
         "_Status", "_StatusCustom0", "_StatusCustom1", "_StatusCustom2", "_StatusCustom3"
@@ -59,6 +59,7 @@ internal sealed class StatusEffectsModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeWindows, OnNativePreDraw);
+        hider.ShowAll();
     }
 
     public LayoutElement ElementOf(StatusGroupKind kind) => elements[(int)kind];
@@ -226,12 +227,12 @@ internal sealed class StatusEffectsModule : IDisposable
 
             plugin.StatusRows.ShowTooltip(status, GameNames.StatusCategory(status.Id) != 2, "player");
 
-            if (!plugin.UnitFrameSystem.MayCapture())
+            if (!plugin.HudBarSystem.MayCapture())
                 continue;
 
             // The mouse is ours while it is over an icon (so the game does not take the click) and the game's cursor stays.
             ImGui.SetNextFrameWantCaptureMouse(true);
-            plugin.UnitFrameSystem.KeepGameCursor();
+            plugin.HudBarSystem.KeepGameCursor();
 
             // Right click on a status: the game cancels it if it can be canceled (Sprint, Peloton...), and does nothing otherwise.
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))

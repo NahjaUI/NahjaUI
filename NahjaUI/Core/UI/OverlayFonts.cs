@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.GameFonts;
 using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Utility;
 
@@ -12,18 +11,6 @@ namespace NahjaUI.Core.Ui;
 /// <summary>The fonts the interface and the overlays can use.</summary>
 public enum OverlayFont
 {
-    /// <summary>The game's bold number font (Meidinger). Digits all have the same width.</summary>
-    GameNumbers,
-
-    /// <summary>The game's normal interface font (Axis). Clean and neutral.</summary>
-    GameUi,
-
-    /// <summary>The game's interface font in bold.</summary>
-    GameUiBold,
-
-    /// <summary>A narrow, bold font (Trump Gothic). Fits more text in a small icon.</summary>
-    Condensed,
-
     /// <summary>NahjaUI display font: Saira Condensed SemiBold. For names and progress bar texts.</summary>
     NahjaDisplay,
 
@@ -35,7 +22,7 @@ public enum OverlayFont
 }
 
 /// <summary>
-/// The fonts of NahjaUI (Saira, stored inside the plugin) and the game's own fonts, at a few fixed sizes.
+/// The fonts of NahjaUI (Saira, stored inside the plugin), at a few fixed sizes. There are only these three: names and words use Display, small numbers use Numbers, menus use Text.
 /// Every size is a real font built by Dalamud, never a stretched one, so text is always sharp.
 /// A font family is prepared the first time something asks for it (they load in the background);
 /// until it is ready, the default NahjaUI font is used instead.
@@ -168,48 +155,22 @@ internal sealed class OverlayFonts : IDisposable
         var atlas = Plugin.PluginInterface.UiBuilder.FontAtlas;
         IFontHandle[] created;
 
-        if (font is OverlayFont.NahjaDisplay or OverlayFont.NahjaDisplayBold or OverlayFont.NahjaText)
+        // The font file is stored inside the plugin (see EmbeddedFonts).
+        var data = font switch
         {
-            // The font file is stored inside the plugin (see EmbeddedFonts).
-            var data = font switch
+            OverlayFont.NahjaDisplay => EmbeddedFonts.DisplaySemiBold(),
+            OverlayFont.NahjaDisplayBold => EmbeddedFonts.DisplayBold(),
+            _ => EmbeddedFonts.TextRegular()
+        };
+
+        created = Sizes
+            .Select(size => atlas.NewDelegateFontHandle(toolkit => toolkit.OnPreBuild(preBuild =>
             {
-                OverlayFont.NahjaDisplay => EmbeddedFonts.DisplaySemiBold(),
-                OverlayFont.NahjaDisplayBold => EmbeddedFonts.DisplayBold(),
-                OverlayFont.NahjaText => EmbeddedFonts.TextRegular(),
-                _ => EmbeddedFonts.TextRegular()
-            };
-
-            created = Sizes
-                .Select(size => atlas.NewDelegateFontHandle(toolkit => toolkit.OnPreBuild(preBuild =>
-                {
-                    // The size is logical: Dalamud multiplies it by the UI scale while building.
-                    var config = new SafeFontConfig { SizePx = size, GlyphRanges = LatinRanges };
-                    preBuild.AddFontFromMemory(data, config, $"NahjaUI {font} {size}px");
-                })))
-                .ToArray();
-        }
-        else
-        {
-            var family = font switch
-            {
-                OverlayFont.GameUi or OverlayFont.GameUiBold => GameFontFamily.Axis,
-                OverlayFont.Condensed => GameFontFamily.TrumpGothic,
-                _ => GameFontFamily.MiedingerMid
-            };
-
-            var bold = font == OverlayFont.GameUiBold;
-
-            created = Sizes
-                .Select(size =>
-                {
-                    var style = new GameFontStyle(family, size);
-                    if (bold)
-                        style.Bold = true;
-
-                    return atlas.NewGameFontHandle(style);
-                })
-                .ToArray();
-        }
+                // The size is logical: Dalamud multiplies it by the UI scale while building.
+                var config = new SafeFontConfig { SizePx = size, GlyphRanges = LatinRanges };
+                preBuild.AddFontFromMemory(data, config, $"NahjaUI {font} {size}px");
+            })))
+            .ToArray();
 
         sets[font] = created;
         return created;

@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.JobGauges;
 
@@ -56,28 +56,10 @@ public class WhiteMageGaugeSettings
     /// <summary>Space between two pips, in pixels.</summary>
     public int GapPx { get; set; } = 3;
 
-    /// <summary>How round the corners of a pip are, in pixels.</summary>
-    public int RoundingPx { get; set; } = 6;
 
-    /// <summary>Font size of the timer, in pixels (a fixed step, see OverlayFonts.AvailableSizes).</summary>
-    public int TextSize { get; set; } = 8;
 
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
-
-    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text). TextSize and Font above are the old settings, read once to fill this.</summary>
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8, Font = OverlayFont.NahjaDisplayBold };
-
-    public bool TextMigrated { get; set; }
-
-    public void EnsureText()
-    {
-        if (TextMigrated)
-            return;
-
-        Text.TextSize = TextSize;
-        Text.Font = Font;
-        TextMigrated = true;
-    }
+    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text).</summary>
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
 
     public Vector4 LilyColor { get; set; } = new(0.62f, 0.86f, 1f, 1f);
 
@@ -108,27 +90,10 @@ public class BarGaugeSettings
     /// <summary>Change colour while there is enough gauge (50 or more) for a spender.</summary>
     public bool HighlightWhenReady { get; set; } = true;
 
-    /// <summary>How round the corners of the bar are, in pixels.</summary>
-    public int RoundingPx { get; set; } = 6;
 
-    public int TextSize { get; set; } = 9;
 
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
-
-    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text). TextSize and Font above are the old settings, read once to fill this.</summary>
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9, Font = OverlayFont.NahjaDisplayBold };
-
-    public bool TextMigrated { get; set; }
-
-    public void EnsureText()
-    {
-        if (TextMigrated)
-            return;
-
-        Text.TextSize = TextSize;
-        Text.Font = Font;
-        TextMigrated = true;
-    }
+    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text).</summary>
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9 };
 
     public Vector4 BarColor { get; set; } = new(0.85f, 0.25f, 0.22f, 1f);
 
@@ -181,7 +146,7 @@ public class DarkKnightGaugeSettings : BarGaugeSettings
     public bool ShowLivingShadow { get; set; } = true;
 
     /// <summary>The Living Shadow seconds: placed on the right of the Darkside bar by default.</summary>
-    public FrameTextSettings LivingShadowText { get; set; } = new() { Anchor = AnchorPoint.Right, OffsetX = -6, TextSize = 9, Font = OverlayFont.NahjaDisplayBold, Color = new Vector4(0.90f, 0.55f, 1f, 1f) };
+    public FrameTextSettings LivingShadowText { get; set; } = new() { Anchor = AnchorPoint.Right, OffsetX = -6, TextSize = 9, Color = new Vector4(0.90f, 0.55f, 1f, 1f) };
 
     /// <summary>Frame the Darkside bar while Dark Arts is active.</summary>
     public bool ShowDarkArts { get; set; } = true;
@@ -199,7 +164,7 @@ public class GunbreakerGaugeSettings
 
     public int GapPx { get; set; } = 3;
 
-    public int RoundingPx { get; set; } = 6;
+
 
     public Vector4 CartridgeColor { get; set; } = new(0.95f, 0.62f, 0.20f, 1f);
 
@@ -219,9 +184,9 @@ public class ScholarGaugeSettings
 
     public int GapPx { get; set; } = 3;
 
-    public int RoundingPx { get; set; } = 6;
 
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9, Font = OverlayFont.NahjaDisplayBold };
+
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9 };
 
     public Vector4 AetherflowColor { get; set; } = new(0.45f, 0.85f, 0.55f, 1f);
 
@@ -245,7 +210,7 @@ public class AstrologianGaugeSettings
 
     public int GapPx { get; set; } = 3;
 
-    public int RoundingPx { get; set; } = 6;
+
 
     public Vector4 AstralColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
 
@@ -273,9 +238,9 @@ public class SageGaugeSettings
 
     public int GapPx { get; set; } = 3;
 
-    public int RoundingPx { get; set; } = 6;
 
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9, Font = OverlayFont.NahjaDisplayBold };
+
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9 };
 
     public Vector4 AddersgallColor { get; set; } = new(0.40f, 0.85f, 0.75f, 1f);
 
@@ -309,26 +274,10 @@ public class RedMageGaugeSettings
 
     public int GapPx { get; set; } = 3;
 
-    public int RoundingPx { get; set; } = 6;
 
-    public int TextSize { get; set; } = 8;
 
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
-
-    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text). TextSize and Font above are the old settings, read once to fill this.</summary>
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8, Font = OverlayFont.NahjaDisplayBold };
-
-    public bool TextMigrated { get; set; }
-
-    public void EnsureText()
-    {
-        if (TextMigrated)
-            return;
-
-        Text.TextSize = TextSize;
-        Text.Font = Font;
-        TextMigrated = true;
-    }
+    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text).</summary>
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
 
     public Vector4 WhiteColor { get; set; } = new(0.93f, 0.86f, 0.80f, 1f);
 
@@ -359,26 +308,10 @@ public class LimitBreakGaugeSettings
 
     public int GapPx { get; set; } = 3;
 
-    public int RoundingPx { get; set; } = 6;
 
-    public int TextSize { get; set; } = 8;
 
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplayBold;
-
-    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text). TextSize and Font above are the old settings, read once to fill this.</summary>
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8, Font = OverlayFont.NahjaDisplayBold };
-
-    public bool TextMigrated { get; set; }
-
-    public void EnsureText()
-    {
-        if (TextMigrated)
-            return;
-
-        Text.TextSize = TextSize;
-        Text.Font = Font;
-        TextMigrated = true;
-    }
+    /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text).</summary>
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
 
     /// <summary>The bar that is filling up.</summary>
     public Vector4 FillColor { get; set; } = new(0.95f, 0.55f, 0.20f, 1f);
@@ -441,11 +374,10 @@ public class ExtraGaugeJobSettings
     /// <summary>Space between two pips or slots, in pixels.</summary>
     public int GapPx { get; set; } = 3;
 
-    /// <summary>How round the corners are, in pixels.</summary>
-    public int RoundingPx { get; set; } = 6;
+
 
     /// <summary>The numbers and seconds written on the rows: place, offsets, size, font and colour (same controls as every other text).</summary>
-    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8, Font = OverlayFont.NahjaDisplayBold };
+    public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
 
     public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
 

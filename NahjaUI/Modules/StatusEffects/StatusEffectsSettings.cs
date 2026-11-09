@@ -1,5 +1,5 @@
 using System;
-using NahjaUI.Modules.PartyFrames;
+using NahjaUI.Modules.PartyListBar;
 
 namespace NahjaUI.Modules.StatusEffects;
 
@@ -36,7 +36,7 @@ public class StatusGroupSettings
             IconsPerLine = perLine,
 
             // Left: the icons are added from the right edge of the box.
-            Growth = NahjaUI.Modules.PartyFrames.StatusRowGrowth.Left
+            Growth = NahjaUI.Modules.PartyListBar.StatusRowGrowth.Left
         }
     };
 }

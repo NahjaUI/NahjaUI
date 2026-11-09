@@ -12,7 +12,7 @@ using NahjaUI.Modules.Filters;
 using NahjaUI.Modules.NamePlates;
 using NahjaUI.Modules.StatusEffects;
 using NahjaUI.Modules.Tooltip;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI;
 
@@ -40,38 +40,20 @@ public class Configuration : IPluginConfiguration
     [Newtonsoft.Json.JsonIgnore]
     public string ServerBarIconNow => "Tank";
 
-    /// <summary>The interface is cut around every game window, so the game's windows are always over it.</summary>
-    public bool GameWindowsOnTop { get; set; } = true;
-
-    /// <summary>Done once: every stacks/charges text of the trackers was set to size 9, bottom right, no offset.</summary>
-    public bool StackTextsNormalized { get; set; }
-
-    /// <summary>Done once: stacks texts of trackers whose status or ability can never have stacks or charges were removed.</summary>
-    public bool UselessStackTextsRemoved { get; set; }
-
     /// <summary>Streamer mode: the names of player characters are replaced by "Player 1", "Player 2"... in everything NahjaUI draws.</summary>
     public bool StreamerMode { get; set; }
-
-    /// <summary>Debug: draws a red outline around each area that is cut.</summary>
-    public bool OutlineCoverAreas { get; set; }
 
     // Page selected in the sidebar of the main window.
     public string SelectedPage { get; set; } = "General";
 
-    // The single accent colour of the theme.
-    public Vector4 AccentColor { get; set; } = Theme.DefaultAccent;
-
-    // The ring that marks your target on the enmity list, the nameplates and the party frames (one color for all of them).
-    /// <summary>Corner rounding of the NahjaUI windows, in logical pixels.</summary>
-    public int WindowRoundingPx { get; set; } = 10;
-
+    // The ring that marks your target on the enmity list, the nameplates and the party list (one color for all of them).
     public Vector4 TargetRingColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    /// <summary>The colors shared by the whole interface (background, border, text, shield, MP). Places with a "Custom color" turned on keep their own.</summary>
+    public GlobalColors Colors { get; set; } = new();
 
     // Ids of the cards of the menu that the user has folded (only the title shows).
     public List<string> CollapsedCards { get; set; } = new();
-
-    // Timers (trackers, icons next to the bars) show tenths of a second only below this many seconds. 0 = never.
-    public int TimerDecimalsBelowSeconds { get; set; } = 3;
 
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
@@ -95,8 +77,8 @@ public class Configuration : IPluginConfiguration
     // The job gauges (White Mage for now).
     public JobGaugesSettings JobGauges { get; set; } = new();
 
-    // The unit frames (the player's for now).
-    public UnitFramesSettings UnitFrames { get; set; } = new();
+    // The HUD bars (the player's for now).
+    public HudBarsSettings HudBars { get; set; } = new();
 
     // The enhancements and enfeeblements of the player.
     public StatusEffectsSettings StatusEffects { get; set; } = new();

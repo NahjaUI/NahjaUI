@@ -12,7 +12,7 @@ using NahjaUI.Modules.Trackers;
 using Dalamud.Interface.Utility;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 using NahjaUI.Game;
 
 namespace NahjaUI.Modules.NamePlates;
@@ -50,6 +50,7 @@ internal sealed class NamePlateModule : IDisposable
     private readonly Dictionary<ulong, int> gameFlags = new();
     private readonly Dictionary<ulong, (uint Text, uint Edge)> gameColors = new();
     private readonly Dictionary<ulong, int> gameNameIcons = new();
+    private readonly NativeWindowHider hider = new();
     private readonly Dictionary<ulong, int> gameMarkerIcons = new();
     private readonly object gameFlagsLock = new();
 
@@ -68,6 +69,7 @@ internal sealed class NamePlateModule : IDisposable
         Plugin.NamePlateGui.OnDataUpdate -= OnDataUpdate;
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeProgressBars, OnNativeProgressBarPreDraw);
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeTargetCursor, OnNativeTargetCursorPreDraw);
+        hider.ShowAll();
         Plugin.NamePlateGui.RequestRedraw();
     }
 
@@ -98,7 +100,7 @@ internal sealed class NamePlateModule : IDisposable
                     if (flags != 0 || (kind != EnemyKind && kind != PlayerKind && handler.IsUpdating))
                         gameFlags[gameObject.GameObjectId] = flags;
 
-                    // The colors the game gives this plate (its category: engaged, claimed, party, role...). Test: only shown.
+                    // The colors the game gives this plate (its category: engaged, claimed, party, role...)..
                     gameColors[gameObject.GameObjectId] = (handler.TextColor, handler.EdgeColor);
 
                     // The small icon the game puts at the left of the name (hostile, neutral, hunt ranks...). -1: none.
@@ -109,11 +111,6 @@ internal sealed class NamePlateModule : IDisposable
                     // only counts when the game just refreshed this plate.
                     if (handler.IsUpdating || handler.MarkerIconId != 0)
                     {
-                        // Test log: every change of this icon with the moment it was seen, to compare with what happens on screen.
-                        gameMarkerIcons.TryGetValue(gameObject.GameObjectId, out var before);
-                        if (before != handler.MarkerIconId)
-                            Plugin.Log.Information($"[icons] {handler.Name.TextValue}: {before} -> {handler.MarkerIconId} (game refreshed it: {handler.IsUpdating})");
-
                         gameMarkerIcons[gameObject.GameObjectId] = handler.MarkerIconId;
                     }
                 }
@@ -171,11 +168,7 @@ internal sealed class NamePlateModule : IDisposable
         if (!settings.Enabled || !replaced)
             return;
 
-        args.PreventOriginal();
-
-        var addon = args.GetAddonPointer<AtkUnitBase>();
-        if (addon != null)
-            addon->IsVisible = false;
+        hider.Hide(args);
     }
 
     // The game's big target arrow is always hidden while the plates are on (our plate's accent ring marks the target).
@@ -185,15 +178,27 @@ internal sealed class NamePlateModule : IDisposable
         if (!settings.Enabled)
             return;
 
-        args.PreventOriginal();
+        hider.Hide(args);
+    }
 
-        var addon = args.GetAddonPointer<AtkUnitBase>();
-        if (addon != null)
-            addon->IsVisible = false;
+    // Does the module want one of the game's windows hidden right now?
+    private bool HidesNative(string windowName)
+    {
+        var settings = plugin.Configuration.NamePlates;
+        if (!settings.Enabled)
+            return false;
+
+        if (windowName != NativeTargetCursor[0])
+        {
+            return settings.EnemyNpcs.Active && settings.EnemyNpcs.ShowProgressBar || settings.EnemyPlayers.Active && settings.EnemyPlayers.ShowProgressBar;
+        }
+
+        return true;
     }
 
     public void Draw()
     {
+        hider.ShowAgain(HidesNative);
         var settings = plugin.Configuration.NamePlates;
 
         // Tell the provider whether to read the plates at all (it costs nothing while this is off).
@@ -323,7 +328,7 @@ internal sealed class NamePlateModule : IDisposable
 
         var width = MathF.Round(style.WidthPx * scale);
         var height = MathF.Round(style.HeightPx * scale);
-        var rounding = MathF.Min(MathF.Round(style.RoundingPx * scale), height / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), height / 2f);
 
         // The game's point is in the range -1 to 1 with y going up: turn it into pixels of the screen.
         var size = ImGuiHelpers.MainViewport.Size;
@@ -370,7 +375,7 @@ internal sealed class NamePlateModule : IDisposable
             var levelText = style.LevelMode == NamePlateLevelMode.WithPrefix ? $"Lv {plate.Level}" : plate.Level.ToString();
             var text = showLevel ? $"{displayName}  {levelText}" : displayName;
             // The size is the height of the letters; a line is that tall, and the next one starts a gap below.
-            using (var face = plugin.Fonts.PushCap(style.NameFont, style.NameSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, style.NameSize))
             {
                 // Name and title are ONE block of text (title in the line above or under the name, as the game puts it).
                 // The same point of the block is placed on the chosen point of the bar, then the offset moves it.
@@ -537,7 +542,7 @@ internal sealed class NamePlateModule : IDisposable
     private void DrawProgressBar(ImDrawListPtr drawList, float scale, NamePlateStyle settings, CastSnapshot cast, float left, float top, float width)
     {
         var height = MathF.Round(settings.ProgressBarHeightPx * scale);
-        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), height / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), height / 2f);
         var min = new Vector2(left, top);
         var max = min + new Vector2(width, height);
         var color = cast.Interruptible ? settings.ProgressBarColor : settings.ProgressBarUninterruptibleColor;
@@ -564,7 +569,7 @@ internal sealed class NamePlateModule : IDisposable
         var timeRoom = 0f;
         if (settings.ProgressBarTime.Enabled && settings.ProgressBarTime.Anchor.Fraction().X >= 0.5f)
         {
-            using (var face = plugin.Fonts.PushCap(settings.ProgressBarTime.Font, settings.ProgressBarTime.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarTime.TextSize))
                 timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
         }
 
@@ -572,14 +577,14 @@ internal sealed class NamePlateModule : IDisposable
         if (settings.ProgressBarName.Enabled)
         {
             string name;
-            using (var face = plugin.Fonts.PushCap(settings.ProgressBarName.Font, settings.ProgressBarName.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarName.TextSize))
                 name = Fit(face, GameNames.CastName(cast.ActionType, cast.ActionId), width - timeRoom - MathF.Round(12f * scale));
 
-            plugin.UnitFrameSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
         }
 
         if (settings.ProgressBarTime.Enabled)
-            plugin.UnitFrameSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.

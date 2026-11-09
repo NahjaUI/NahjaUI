@@ -136,305 +136,8 @@ internal sealed class TrackerEngine
         LoadFromConfiguration();
     }
 
-    // Cooldown trackers used to have an "effect while active". Now the time of that status is a text of the tracker.
-    private static void MigrateEffect(TrackerDefinition tracker)
-    {
-        if (tracker.Trigger == TrackerTriggerType.Cooldown && tracker.StatusId != 0)
-        {
-            tracker.Texts.Add(new TrackerTextDefinition
-            {
-                Source = TextSource.StatusTime,
-                StatusId = tracker.StatusId,
-                Anchor = AnchorPoint.TopRight
-            });
-        }
-
-        if (tracker.Trigger == TrackerTriggerType.Cooldown)
-        {
-            tracker.StatusId = 0;
-            tracker.ExtraEffectIds.Clear();
-        }
-    }
-
-    // Trackers saved before the text list existed: their timer and stack texts become texts of their own.
-    private static void MigrateTexts(TrackerDefinition tracker)
-    {
-        if (tracker.TextsMigrated)
-            return;
-
-        tracker.TextsMigrated = true;
-        tracker.Texts.Clear();
-
-        if (tracker.ShowTimer)
-        {
-            tracker.Texts.Add(new TrackerTextDefinition
-            {
-                Source = TextSource.OwnTime,
-                Font = tracker.Font,
-                Size = tracker.TextSize,
-                Anchor = tracker.TimerAnchor,
-                OffsetX = tracker.TimerOffsetX,
-                OffsetY = tracker.TimerOffsetY
-            });
-        }
-
-        if (tracker.ShowStacks)
-        {
-            tracker.Texts.Add(new TrackerTextDefinition
-            {
-                Source = TextSource.OwnStacks,
-                Font = tracker.Font,
-                Size = tracker.StackTextSize > 0 ? tracker.StackTextSize : 9,
-                Anchor = tracker.StacksAnchor,
-                OffsetX = tracker.StacksOffsetX,
-                OffsetY = tracker.StacksOffsetY
-            });
-        }
-    }
-
-    // The stacks (or charges) of a tracker are always written at the bottom right, size 9, with no offset. Done once for the trackers saved before.
-    private void NormalizeStackTexts()
-    {
-        if (plugin.Configuration.StackTextsNormalized)
-            return;
-
-        static void Fix(TrackerTextDefinition text)
-        {
-            var isStacks = text.Sources.Count > 0
-                ? text.Sources.Any(s => s.Source is TextSource.OwnStacks or TextSource.StatusStacks or TextSource.AbilityCharges)
-                : text.Source is TextSource.OwnStacks or TextSource.StatusStacks or TextSource.AbilityCharges;
-
-            if (!isStacks)
-                return;
-
-            text.Size = 9;
-            text.Anchor = AnchorPoint.BottomRight;
-            text.OffsetX = 0;
-            text.OffsetY = 0;
-        }
-
-        static void FixTracker(TrackerDefinition tracker)
-        {
-            foreach (var text in tracker.Texts)
-                Fix(text);
-
-            foreach (var rule in tracker.Rules)
-            {
-                foreach (var text in rule.Texts)
-                    Fix(text);
-            }
-
-            tracker.StackTextSize = 9;
-            tracker.StacksAnchor = AnchorPoint.BottomRight;
-            tracker.StacksOffsetX = 0;
-            tracker.StacksOffsetY = 0;
-        }
-
-        foreach (var tracker in plugin.Configuration.Trackers)
-            FixTracker(tracker);
-
-        foreach (var group in plugin.Configuration.TrackerGroups)
-        {
-            if (group.Template is { } template)
-                FixTracker(template);
-        }
-
-        plugin.Configuration.StackTextsNormalized = true;
-        plugin.RequestSave();
-    }
-
-    // A text of stacks (or charges) only makes sense where the game can give them: a status that can stack, an ability with charges.
-    // The ones on trackers that can never have any (an enhancement with one use, a cooldown with one charge) are removed once.
-    private void RemoveUselessStackTexts()
-    {
-        if (plugin.Configuration.UselessStackTextsRemoved)
-            return;
-
-        var statuses = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>();
-
-        bool CanHaveStacks(TrackerRule rule)
-        {
-            if (rule.UsesFilter)
-                return true;
-
-            if (rule.Kind is ConditionKind.StatusPresent or ConditionKind.StatusMissing or ConditionKind.StatusAlways)
-                return rule.StatusId == 0 || !statuses.TryGetRow(rule.StatusId, out var status) || status.MaxStacks > 1;
-
-            // The most charges the ability can have at the top level (traits add charges).
-            return rule.ActionId == 0 || FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetMaxCharges(rule.ActionId, 100) > 1;
-        }
-
-        foreach (var tracker in plugin.Configuration.Trackers)
-        {
-            foreach (var rule in tracker.Rules)
-            {
-                if (CanHaveStacks(rule))
-                    continue;
-
-                rule.Texts.RemoveAll(text => text.Sources.Count > 0 && text.Sources.All(source => source.Source == TextSource.OwnStacks));
-            }
-        }
-
-        plugin.Configuration.UselessStackTextsRemoved = true;
-        plugin.RequestSave();
-    }
-
-    // Trackers saved before the trigger list: what they watched becomes one trigger, and each text gets its first source.
-    private static void MigrateRules(TrackerDefinition tracker)
-    {
-        foreach (var text in tracker.Texts)
-        {
-            if (text.Sources.Count == 0)
-                text.Sources.Add(new TrackerTextSource { Source = text.Source, StatusId = text.StatusId, ActionId = text.ActionId });
-        }
-
-        if (!tracker.RulesMigrated)
-            BuildRules(tracker);
-
-        foreach (var rule in tracker.Rules)
-            MigrateEffects(tracker, rule);
-
-        MigrateRuleTexts(tracker);
-    }
-
-    // Trackers saved before every trigger had its own texts: each trigger gets a copy of the texts of the tracker (so nothing changes
-    // on screen), and the tracker's own list is emptied.
-    private static void MigrateRuleTexts(TrackerDefinition tracker)
-    {
-        if (tracker.RuleTextsMigrated)
-            return;
-
-        tracker.RuleTextsMigrated = true;
-
-        foreach (var rule in tracker.Rules)
-        {
-            rule.Texts.Clear();
-
-            foreach (var text in tracker.Texts)
-            {
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(text);
-                var copy = Newtonsoft.Json.JsonConvert.DeserializeObject<TrackerTextDefinition>(json);
-                if (copy is not null)
-                    rule.Texts.Add(copy);
-            }
-        }
-
-        tracker.Texts.Clear();
-    }
-
-    // The old glow flags and the tracker's recharge look become the effects of the trigger.
-    private static void MigrateEffects(TrackerDefinition tracker, TrackerRule rule)
-    {
-        if (rule.EffectsMigrated)
-            return;
-
-        rule.EffectsMigrated = true;
-
-        rule.GlowWhen = rule.Glow ? EffectWhen.Always
-            : rule.GlowWhenMissing ? EffectWhen.StatusMissing
-            : rule.GlowWhenReady ? EffectWhen.Ready
-            : rule.GlowWhenHighlighted ? EffectWhen.Highlighted
-            : EffectWhen.Never;
-
-        // What used to be automatic: a missing status was reddish; a recharging ability was red, dimmed or normal.
-        switch (rule.Kind)
-        {
-            case ConditionKind.StatusMissing:
-                rule.RedWhen = EffectWhen.Always;
-                break;
-
-            case ConditionKind.StatusAlways:
-                rule.RedWhen = EffectWhen.StatusMissing;
-                break;
-
-            case ConditionKind.AbilityOnCooldown:
-            case ConditionKind.AbilityAlways:
-                var when = rule.Kind == ConditionKind.AbilityOnCooldown ? EffectWhen.Always : EffectWhen.Recharging;
-                if (tracker.CooldownLook == CooldownLook.Red)
-                    rule.RedWhen = when;
-                else if (tracker.CooldownLook == CooldownLook.Dimmed)
-                    rule.DimWhen = when;
-
-                break;
-        }
-    }
-
-    private static void BuildRules(TrackerDefinition tracker)
-    {
-        tracker.RulesMigrated = true;
-        tracker.Rules.Clear();
-
-        var rule = new TrackerRule
-        {
-            Icon = tracker.Icon,
-            IconStatusId = tracker.IconStatusId,
-            IconActionId = tracker.IconActionId
-        };
-
-        switch (tracker.Trigger)
-        {
-            case TrackerTriggerType.Cooldown:
-                rule.Kind = tracker.CooldownShow switch
-                {
-                    CooldownShowMode.OnlyOnCooldown => ConditionKind.AbilityOnCooldown,
-                    CooldownShowMode.OnlyWhenReady => ConditionKind.AbilityReady,
-                    _ => ConditionKind.AbilityAlways
-                };
-                rule.ActionId = tracker.ActionId;
-                rule.IgnoreGlobalCooldown = tracker.IgnoreGlobalCooldown;
-                rule.GlowWhenReady = tracker.GlowWhenReady;
-                rule.GlowWhenHighlighted = tracker.GlowWhenHighlighted;
-                break;
-
-            case TrackerTriggerType.Activated:
-                rule.Kind = ConditionKind.AbilityActivated;
-                rule.ActionId = tracker.ActionId;
-                rule.Glow = tracker.GlowWhenActive;
-                rule.GlowWhenHighlighted = tracker.GlowWhenHighlighted;
-                break;
-
-            default:
-                rule.Kind = tracker.ShowMode == TrackerShowMode.WhenMissing ? ConditionKind.StatusMissing : ConditionKind.StatusPresent;
-                rule.Unit = tracker.Unit;
-                rule.StatusId = tracker.StatusId;
-                rule.OnlyMine = tracker.OnlyMine;
-                rule.Glow = tracker.GlowWhenActive;
-                break;
-        }
-
-        tracker.Rules.Add(rule);
-    }
-
     private void LoadFromConfiguration()
     {
-        // Trackers and group templates saved before the icon trim: "Fill the width" becomes Sides, off becomes None.
-        foreach (var old in plugin.Configuration.Trackers)
-            old.Trim ??= old.FillWidth ? IconTrim.Sides : IconTrim.None;
-
-        foreach (var group in plugin.Configuration.TrackerGroups)
-        {
-            if (group.Template is { } groupTemplate)
-                groupTemplate.Trim ??= groupTemplate.FillWidth ? IconTrim.Sides : IconTrim.None;
-        }
-
-        // Older trackers that were "only as a combo step" are now activated-ability trackers.
-        foreach (var old in plugin.Configuration.Trackers)
-        {
-            MigrateTexts(old);
-            MigrateEffect(old);
-
-            if (old.Trigger == TrackerTriggerType.Cooldown && old.OnlyAsComboStep)
-            {
-                old.Trigger = TrackerTriggerType.Activated;
-                old.OnlyAsComboStep = false;
-            }
-
-            MigrateRules(old);
-        }
-
-        NormalizeStackTexts();
-        RemoveUselessStackTexts();
-
         foreach (var definition in plugin.Configuration.TrackerGroups)
             RegisterGroup(definition);
 
@@ -445,27 +148,6 @@ internal sealed class TrackerEngine
                 definition.GroupId = null;
 
             Register(definition);
-        }
-
-        // Groups made before group sizes and group styles existed take them from their first tracker.
-        foreach (var group in groups)
-        {
-            var definition = group.Definition;
-            var first = MembersOf(group).FirstOrDefault();
-
-            if (definition.IconWidth <= 0 || definition.IconHeight <= 0)
-            {
-                definition.IconWidth = first?.Element.Layout.Width ?? 44;
-                definition.IconHeight = first?.Element.Layout.Height ?? 44;
-            }
-
-            if (definition.Template is null)
-            {
-                definition.Template = new TrackerDefinition();
-
-                if (first is not null)
-                    definition.Template.CopyStyleFrom(first.Definition);
-            }
         }
 
         ReconcileRootOrder();
@@ -488,7 +170,7 @@ internal sealed class TrackerEngine
     /// </summary>
     public TrackerRuntime AddNew(TrackerGroupRuntime? intoGroup = null)
     {
-        var definition = new TrackerDefinition { TextsMigrated = true, RulesMigrated = true, RuleTextsMigrated = true, Trim = IconTrim.AllAround };
+        var definition = new TrackerDefinition();
         definition.Rules.Add(NewRule());
         plugin.Configuration.Trackers.Add(definition);
 
@@ -506,7 +188,6 @@ internal sealed class TrackerEngine
     /// <summary>A new trigger: it tracks nothing yet and has one text, the time.</summary>
     public static TrackerRule NewRule() => new()
     {
-        EffectsMigrated = true,
         Texts = { new TrackerTextDefinition { Sources = { new TrackerTextSource() } } }
     };
 
@@ -553,7 +234,7 @@ internal sealed class TrackerEngine
 
     public TrackerGroupRuntime AddGroup()
     {
-        var definition = new TrackerGroupDefinition { IconWidth = 44, IconHeight = 44, Template = new TrackerDefinition { Trim = IconTrim.AllAround } };
+        var definition = new TrackerGroupDefinition { IconWidth = 44, IconHeight = 44, Template = new TrackerDefinition() };
         plugin.Configuration.TrackerGroups.Add(definition);
         plugin.Configuration.RootOrder.Add(GroupKey(definition));
 
@@ -847,8 +528,6 @@ internal sealed class TrackerEngine
         frameSnapshot = snapshot;
         var unlock = plugin.Layout.UnlockMode;
 
-        DecimalsBelowSeconds = plugin.Configuration.TimerDecimalsBelowSeconds;
-
         // Tell the game data layer which ability cooldowns are needed. They arrive in the next snapshot.
         watchedActions.Clear();
         foreach (var runtime in runtimes)
@@ -866,7 +545,7 @@ internal sealed class TrackerEngine
 
                 // A step that is not a button of its own (Blade of Faith) is shown by the game as another form of the first
                 // action of its chain (Confiteor): that one is watched too.
-                if (rule.Kind == ConditionKind.AbilityActivated && GameNames.ComboRoot(rule.ActionId) is var root && root != 0)
+                if (rule.Kind == ConditionKind.AbilityHighlighted && GameNames.ComboRoot(rule.ActionId) is var root && root != 0)
                     watchedActions.Add(root);
             }
 
@@ -919,7 +598,6 @@ internal sealed class TrackerEngine
             // One broken tracker must never break the others.
             try
             {
-                CurrentFilters = plugin.Configuration.Filters;
                 runtime.State = Evaluate(definition, snapshot);
             }
             catch (Exception ex)
@@ -1105,7 +783,8 @@ internal sealed class TrackerEngine
         {
             // An ability not learned yet (level too low, or the level is synced down in a dungeon or FATE) never matches.
             // The player's level is the one the game uses, so it already includes the sync.
-            if (rule.IsAbility && rule.ActionId != 0 && GameNames.ActionLevel(rule.ActionId) > player.Level)
+            // The role actions are the exception: once learned, the game keeps them when the level is synced down.
+            if (rule.IsAbility && rule.ActionId != 0 && GameNames.ActionLevel(rule.ActionId) > player.Level && !GameNames.IsRoleAction(rule.ActionId))
                 continue;
 
             var state = Match(rule, snapshot, player);
@@ -1118,8 +797,8 @@ internal sealed class TrackerEngine
 
     private static TrackerState Match(TrackerRule rule, GameSnapshot snapshot, UnitSnapshot player) => rule.Kind switch
     {
-        ConditionKind.StatusPresent or ConditionKind.StatusMissing or ConditionKind.StatusAlways => MatchStatus(rule, snapshot, player),
-        ConditionKind.AbilityActivated => MatchActivated(rule, snapshot),
+        ConditionKind.StatusPresent or ConditionKind.StatusMissing => MatchStatus(rule, snapshot, player),
+        ConditionKind.AbilityHighlighted => MatchActivated(rule, snapshot),
         _ => MatchCooldown(rule, snapshot)
     };
 
@@ -1160,7 +839,7 @@ internal sealed class TrackerEngine
 
     private static TrackerState MatchStatus(TrackerRule rule, GameSnapshot snapshot, UnitSnapshot player)
     {
-        if (rule.StatusId == 0 && !rule.UsesFilter)
+        if (rule.StatusId == 0)
             return TrackerState.Hidden;
 
         // Nobody to look at (for example no target): nothing matches, not even a "missing" reminder.
@@ -1170,7 +849,7 @@ internal sealed class TrackerEngine
         var present = found is not null;
         var wantPresent = rule.Kind == ConditionKind.StatusPresent;
 
-        if (rule.Kind != ConditionKind.StatusAlways && present != wantPresent)
+        if (present != wantPresent)
             return TrackerState.Hidden;
 
         return new TrackerState(true, present, found?.RemainingTime ?? 0f, found?.Param ?? 0, Rule: rule, FoundStatusId: found?.Id ?? 0);
@@ -1185,24 +864,30 @@ internal sealed class TrackerEngine
         var onCooldown = cooldown.IsOnCooldown;
         var remaining = cooldown.Remaining;
 
-        // The global cooldown is not a real cooldown: abilities used with it count as ready.
-        if (rule.IgnoreGlobalCooldown && cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds)
+        // The global cooldown is not a real cooldown: abilities used with it count as off cooldown.
+        if (cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds)
         {
             onCooldown = false;
             remaining = 0f;
         }
 
-        var phase = onCooldown ? TrackerPhase.Cooling : TrackerPhase.Ready;
+        // An ability with several charges where some are recharging: not full (it can still be used).
+        var recharging = cooldown.MaxCharges > 1 && cooldown.Charges < cooldown.MaxCharges;
 
         var matches = rule.Kind switch
         {
-            ConditionKind.AbilityOnCooldown => phase == TrackerPhase.Cooling,
-            ConditionKind.AbilityReady => phase == TrackerPhase.Ready,
-            _ => true
+            ConditionKind.AbilityOnCooldown => onCooldown,
+            ConditionKind.AbilityOffCooldown => !onCooldown,
+            ConditionKind.AbilityFull => !onCooldown && !recharging,
+            ConditionKind.AbilityNotFull => recharging,
+            _ => false
         };
 
         if (!matches)
             return TrackerState.Hidden;
+
+        // Cooling: the sweep and the time are shown while something is recharging.
+        var phase = onCooldown || recharging ? TrackerPhase.Cooling : TrackerPhase.Ready;
 
         return new TrackerState(true, false, remaining, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
             cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
@@ -1210,16 +895,6 @@ internal sealed class TrackerEngine
 
     // Looks for the status of the trigger on the unit it watches.
     // Returns false when there is nobody to look at; "found" is null when the unit does not have the status.
-    /// <summary>The filters of the Filters page, set before the trackers are evaluated each frame.</summary>
-    private static NahjaUI.Modules.Filters.FiltersSettings? CurrentFilters;
-
-    // A status with time left ends before a permanent one; between two with time, the one with less.
-    private static bool Earlier(StatusSnapshot candidate, StatusSnapshot current)
-    {
-        static float TimeLeft(StatusSnapshot status) => status.RemainingTime > 0f ? status.RemainingTime : float.MaxValue;
-        return TimeLeft(candidate) < TimeLeft(current);
-    }
-
     private static bool TryFindStatus(TrackerRule rule, GameSnapshot snapshot, UnitSnapshot player, out StatusSnapshot? found)
     {
         found = null;
@@ -1238,22 +913,14 @@ internal sealed class TrackerEngine
 
         foreach (var status in unit.Statuses)
         {
-            var matches = rule.UsesFilter
-                ? CurrentFilters?.Find(rule.FilterId)?.StatusIds.Contains(status.Id) == true
-                : status.Id == rule.StatusId;
-
-            if (!matches)
+            if (status.Id != rule.StatusId)
                 continue;
 
             if (rule.OnlyMine && status.SourceId != player.EntityId)
                 continue;
 
-            // With a filter, the status with the least time left is the one that shows (the one that will end first).
-            if (found is null || (rule.UsesFilter && Earlier(status, found)))
-                found = status;
-
-            if (!rule.UsesFilter)
-                break;
+            found = status;
+            break;
         }
 
         return true;
@@ -1309,13 +976,13 @@ internal sealed class TrackerEngine
 
         var isCooldown = state.AbilityBased || (state.Rule ?? definition.Rules.FirstOrDefault())?.IsAbility == true;
 
-        // Rounded corners, like the unit frames. They can never be more than half of the shorter side.
-        var rounding = MathF.Min(MathF.Round(Math.Clamp(definition.CornerRadiusPx, 0, 24) * scale), MathF.Min(size.X, size.Y) / 2f);
+        // Rounded corners, like the HUD bars. They can never be more than half of the shorter side.
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), MathF.Min(size.X, size.Y) / 2f);
 
         var cooling = !ghost && isCooldown && state.Phase == TrackerPhase.Cooling;
         var activeRule = state.Rule;
-        var red = !ghost && activeRule is not null && EffectActive(activeRule.RedWhen, state);
-        var dim = !ghost && activeRule is not null && EffectActive(activeRule.DimWhen, state);
+        var red = !ghost && activeRule is not null && activeRule.Red;
+        var dim = !ghost && activeRule is not null && activeRule.Dim;
 
         // Cooldown trackers show the ability's own icon, status trackers the icon of the status.
         var iconId = ResolveIcon(state.Rule ?? definition.Rules.FirstOrDefault(), state.IconActionId, out var iconIsStatus, state.FoundStatusId);
@@ -1325,13 +992,9 @@ internal sealed class TrackerEngine
             var texture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(iconId)).GetWrapOrEmpty();
 
             // The icon is cropped (never stretched) to the shape of the box.
-            var trim = definition.Trim ?? IconTrim.AllAround;
-            var margins = trim == IconTrim.None ? (0f, 0f, 0f, 0f) : IconMargins.Get(iconId);
-            var cutSides = trim is IconTrim.Sides or IconTrim.AllAround;
-            var cutVertical = trim is IconTrim.TopAndBottom or IconTrim.AllAround;
-            var (uv0, uv1) = IconUv(size, iconIsStatus ? StatusIconAspect : 1f,
-                cutSides ? margins.Item1 : 0f, cutVertical ? margins.Item2 : 0f,
-                cutSides ? margins.Item3 : 0f, cutVertical ? margins.Item4 : 0f);
+            // The empty margins of the game's icon are always cut so the art fills the box.
+            var margins = IconMargins.Get(iconId);
+            var (uv0, uv1) = IconUv(size, iconIsStatus ? StatusIconAspect : 1f, margins.Item1, margins.Item2, margins.Item3, margins.Item4);
 
             // A ghost is transparent. The effects of the trigger that decides: a red mask and/or darkened.
             var tint = Vector4.One;
@@ -1371,7 +1034,7 @@ internal sealed class TrackerEngine
 
         // Glow around the icon, as the trigger that decides asks for.
         var rule = state.Rule;
-        if (rule is not null && EffectActive(rule.GlowWhen, state))
+        if (rule is not null && rule.Glow)
         {
             DrawGlow(drawList, pos, size, rounding);
         }
@@ -1392,28 +1055,10 @@ internal sealed class TrackerEngine
             if (value is null)
                 continue;
 
-            DrawOverlayText(drawList, value, Math.Clamp(text.Size, 4, 64), text.Font, pos, size,
+            DrawOverlayText(drawList, value, Math.Clamp(text.Size, 4, 64), OverlayFont.NahjaDisplayBold, pos, size,
                 text.Anchor, new Vector2(text.OffsetX, text.OffsetY), text.Color);
         }
     }
-
-    // An ability that cannot be used: recharging with no charge left (an ability with several charges can be used while one is left).
-    private static bool IsUnavailable(TrackerState state) =>
-        state.AbilityBased && state.Phase == TrackerPhase.Cooling && (state.MaxCharges <= 1 || state.Charges <= 0);
-
-    // Is an effect of the trigger that decides applied right now?
-    private static bool EffectActive(EffectWhen when, TrackerState state) => when switch
-    {
-        EffectWhen.Always => true,
-        EffectWhen.StatusOn => state.StatusPresent,
-        EffectWhen.StatusMissing => !state.StatusPresent,
-        EffectWhen.Ready => state.Phase == TrackerPhase.Ready,
-        EffectWhen.Recharging => state.Phase == TrackerPhase.Cooling,
-        EffectWhen.Highlighted => state.Highlighted,
-        EffectWhen.Unavailable => IsUnavailable(state),
-        EffectWhen.Usable => state.AbilityBased && !IsUnavailable(state),
-        _ => false
-    };
 
     // What one source of a text gives right now, or null when it has nothing to show (no time left, no stacks...).
     private string? SourceValue(TrackerTextSource text, TrackerState state)
@@ -1432,7 +1077,7 @@ internal sealed class TrackerEngine
 
                 // Only statuses that really stack show a number. (For other statuses the game stores something else
                 // there, for example the +30 % of Sprint.)
-                return state.StatusPresent ? StackText(state.Rule is { UsesFilter: true } ? state.FoundStatusId : state.Rule?.StatusId ?? 0, state.Stacks) : null;
+                return state.StatusPresent ? StackText(state.Rule?.StatusId ?? 0, state.Stacks) : null;
 
             case TextSource.ComboTime:
                 return snapshot?.Combo is { Timer: > 0f } combo ? FormatTime(combo.Timer) : null;
@@ -1502,7 +1147,7 @@ internal sealed class TrackerEngine
         isStatusIcon = !rule.IsAbility;
         return rule.IsAbility
             ? GameNames.ActionIconId(currentForm != 0 ? currentForm : rule.ActionId)
-            : GameNames.StatusIconId(rule.UsesFilter ? foundStatusId : rule.StatusId);
+            : GameNames.StatusIconId(rule.StatusId);
     }
 
     // A dark wedge over the part of the icon that is still recharging, like the game's own hotbar:
@@ -1733,17 +1378,11 @@ internal sealed class TrackerEngine
         return (new Vector2(u0, v0), new Vector2(u1, v1));
     }
 
-    /// <summary>Below this many seconds the timers show tenths. Copied from the settings every frame. 0 = never.</summary>
-    internal static int DecimalsBelowSeconds { get; private set; } = 3;
-
-    // The timer as a single plain text: "17m", "28" or "2.5" (tenths only in the last seconds). No spacing tricks.
+    // The timer as a single plain text: "17m" or "28" (whole seconds, rounded up). No spacing tricks.
     internal static string FormatTime(float seconds)
     {
         if (seconds >= 60f)
             return $"{(int)(seconds / 60f)}m";
-
-        if (seconds < DecimalsBelowSeconds)
-            return seconds.ToString("0.0");
 
         return ((int)MathF.Ceiling(seconds)).ToString();
     }

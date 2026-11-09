@@ -11,19 +11,19 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 using NahjaUI.Modules.Trackers;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
-namespace NahjaUI.Modules.PartyFrames;
+namespace NahjaUI.Modules.PartyListBar;
 
 /// <summary>
-/// Draws the party frames: one HP bar per member, one under the other, with the name and the HP text, a shield, a
+/// Draws the party list: one HP bar per member, one under the other, with the name and the HP text, a shield, a
 /// stripe for the role, a MP bar for the members you choose, and a ring and an arrow on the member you have targeted.
 /// It also hides the game's own party list. It only reads the game snapshot.
 /// Enhancements and enfeeblements next to the bars come in a later step.
 /// </summary>
-internal sealed class PartyFrameModule : IDisposable
+internal sealed class PartyListModule : IDisposable
 {
-    // The game's own party list, found in game with the Debug page.
+    // The game's own party list.
     private const string NativePartyList = "_PartyList";
 
     private static readonly string[] NativeLists = { NativePartyList };
@@ -56,12 +56,12 @@ internal sealed class PartyFrameModule : IDisposable
     private readonly Plugin plugin;
     private readonly NativeWindowHider hider = new();
 
-    public PartyFrameModule(Plugin plugin)
+    public PartyListModule(Plugin plugin)
     {
         this.plugin = plugin;
 
         // The box of the list: its size is one row; the rows are placed one after another inside a box of 9 rows, from the top or (option) from the bottom.
-        PartyElement = plugin.Layout.Register("unitframe.party", "Party frames", new ElementLayout
+        PartyElement = plugin.Layout.Register("hudbar.party", "Party list", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.TopLeft,
             SelfAnchor = AnchorPoint.TopLeft,
@@ -74,7 +74,7 @@ internal sealed class PartyFrameModule : IDisposable
         // Shown in the panel of unlock mode, under X and Y.
         PartyElement.DrawOptions = () =>
         {
-            var settings = plugin.Configuration.UnitFrames.Party;
+            var settings = plugin.Configuration.HudBars.Party;
             var fromBottom = settings.StartFromBottom;
             if (ImGui.Checkbox("Start drawing from the bottom", ref fromBottom))
             {
@@ -94,6 +94,7 @@ internal sealed class PartyFrameModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeLists, OnNativePreDraw);
+        hider.ShowAll();
     }
 
     // The chocobo companion in the preview.
@@ -108,7 +109,7 @@ internal sealed class PartyFrameModule : IDisposable
     }
 
     // The bars to draw: the party in the chosen order, then your chocobo if wanted.
-    private static List<UnitSnapshot> BuildMembers(GameSnapshot snapshot, PartyFrameSettings settings)
+    private static List<UnitSnapshot> BuildMembers(GameSnapshot snapshot, PartyListSettings settings)
     {
         var party = snapshot.Party;
         var result = new List<UnitSnapshot>(party.Count + 1);
@@ -141,7 +142,7 @@ internal sealed class PartyFrameModule : IDisposable
 
     private unsafe void OnNativePreDraw(AddonEvent type, AddonArgs args)
     {
-        var look = plugin.Configuration.UnitFrames.Party.Look;
+        var look = plugin.Configuration.HudBars.Party.Look;
         if (!look.Enabled)
             return;
 
@@ -152,13 +153,13 @@ internal sealed class PartyFrameModule : IDisposable
 
     public void Draw()
     {
-        var hideLook = plugin.Configuration.UnitFrames.Party.Look;
+        var hideLook = plugin.Configuration.HudBars.Party.Look;
         hider.ShowAgain(_ => hideLook.Enabled);
         var snapshot = plugin.GameData.Current;
         var preview = PreviewRequested || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(PartyElement.Id);
         PreviewRequested = false;
 
-        var settings = plugin.Configuration.UnitFrames.Party;
+        var settings = plugin.Configuration.HudBars.Party;
         if (!settings.Look.Enabled)
             return;
 
@@ -246,7 +247,7 @@ internal sealed class PartyFrameModule : IDisposable
 
             // Clicks only for real members, and not while the boxes are being moved.
             if (!isSample && !plugin.Layout.UnlockMode)
-                plugin.UnitFrameSystem.HandleClicks($"party.{member.EntityId}", rowPos, size, member);
+                plugin.HudBarSystem.HandleClicks($"party.{member.EntityId}", rowPos, size, member);
         }
 
         // In unlock mode the box is the whole stack of bars.
@@ -257,18 +258,18 @@ internal sealed class PartyFrameModule : IDisposable
     private static uint JobIconId(uint jobId, PartyJobIconStyle style) =>
         (style == PartyJobIconStyle.Light ? 62100u : 62000u) + jobId;
 
-    private void DrawMember(ImDrawListPtr drawList, PartyFrameSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size, bool selected)
+    private void DrawMember(ImDrawListPtr drawList, PartyListSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size, bool selected)
     {
         var fadeMark = DrawListFade.Mark(drawList);
         var look = settings.Look;
         var scale = ImGuiHelpers.GlobalScale;
         var max = pos + size;
 
-        var rounding = MathF.Round(look.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         var fraction = member.MaxHp == 0 ? 0f : Math.Clamp(member.Hp / (float)member.MaxHp, 0f, 1f);
-        var fillColor = plugin.UnitFrameSystem.HpColor(look, member, true);
+        var fillColor = plugin.HudBarSystem.HpColor(look, member, true);
 
         // Background, then the HP. The right end of the fill is straight, except when the HP is full.
         drawList.AddRectFilled(pos, max, ImGui.GetColorU32(look.BackgroundColor), rounding);
@@ -277,8 +278,8 @@ internal sealed class PartyFrameModule : IDisposable
         if (fillRight > pos.X)
             FillRounded(drawList, pos, max, fillRight, ImGui.GetColorU32(fillColor), rounding, ImDrawFlags.RoundCornersAll);
 
-        if (look.ShowShield && member.ShieldPercent > 0)
-            UnitFrameModule.DrawShield(drawList, look, pos, size, fraction, rounding, member.ShieldPercent);
+        if (member.ShieldPercent > 0)
+            HudBarModule.DrawShield(drawList, look, pos, size, fraction, rounding, member.ShieldPercent);
 
         // The job icon of the member (the game's own icon, so every job has one). The name does not care about it: its place is only
         // the anchor and the offsets chosen for it, as on the enmity list with its dot.
@@ -319,10 +320,10 @@ internal sealed class PartyFrameModule : IDisposable
         var name = settings.ShowAwayTag && away is not null
             ? away
             : UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
-        plugin.UnitFrameSystem.DrawText(drawList, name, look.Name, pos, size);
+        plugin.HudBarSystem.DrawText(drawList, name, look.Name, pos, size);
 
         var hpText = UnitTextFormatter.FormatValue(look, member.Hp, member.MaxHp);
-        plugin.UnitFrameSystem.DrawText(drawList, hpText, look.Hp, pos, size);
+        plugin.HudBarSystem.DrawText(drawList, hpText, look.Hp, pos, size);
 
         if (away is not null)
             DrawListFade.FadeSince(drawList, fadeMark, settings.AwayOpacityPercent / 100f);
@@ -358,7 +359,7 @@ internal sealed class PartyFrameModule : IDisposable
     };
 
     // Where the MP bar goes: a point of the MP bar on a point of the member's bar, moved by the offsets (plus Y is up in the page, saved downwards).
-    private static (Vector2 Pos, Vector2 Size) MpRect(PartyFrameSettings settings, Vector2 pos, Vector2 size, float scale)
+    private static (Vector2 Pos, Vector2 Size) MpRect(PartyListSettings settings, Vector2 pos, Vector2 size, float scale)
     {
         var width = settings.MpWidthPx > 0 ? MathF.Round(settings.MpWidthPx * scale) : size.X;
         var height = MathF.Max(2f, MathF.Round(settings.Look.MpHeightPx * scale));
@@ -369,14 +370,14 @@ internal sealed class PartyFrameModule : IDisposable
         return (new Vector2(MathF.Round(mpPos.X), MathF.Round(mpPos.Y)), mpSize);
     }
 
-    private static void DrawMpBar(ImDrawListPtr drawList, PartyFrameSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size)
+    private static void DrawMpBar(ImDrawListPtr drawList, PartyListSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size)
     {
         var look = settings.Look;
         var scale = ImGuiHelpers.GlobalScale;
         var (mpPos, mpSize) = MpRect(settings, pos, size, scale);
         var mpMax = mpPos + mpSize;
 
-        var rounding = MathF.Min(MathF.Round(look.MpRoundingPx * scale), MathF.Min(mpSize.X, mpSize.Y) / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), MathF.Min(mpSize.X, mpSize.Y) / 2f);
         var fraction = Math.Clamp(member.Mp / (float)member.MaxMp, 0f, 1f);
 
         drawList.AddRectFilled(mpPos, mpMax, ImGui.GetColorU32(look.MpBackgroundColor), rounding);

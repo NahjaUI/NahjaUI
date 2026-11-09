@@ -33,6 +33,9 @@ internal sealed class NativeWindowHider
         addon->IsVisible = false;
     }
 
+    /// <summary>Gives back every window this hider hid (when the plugin is unloaded, so the game's own windows are not left invisible).</summary>
+    public void ShowAll() => ShowAgain(_ => false);
+
     /// <summary>Call every frame, even when the module is off. <paramref name="stillHidden"/> says if a window must stay hidden.</summary>
     public unsafe void ShowAgain(Func<string, bool> stillHidden)
     {

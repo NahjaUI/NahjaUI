@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace NahjaUI.Modules.UnitFrames;
+namespace NahjaUI.Modules.HudBars;
 
 /// <summary>
 /// The colour of each job, for the HP bar when "class color" is chosen.
@@ -9,7 +9,7 @@ namespace NahjaUI.Modules.UnitFrames;
 /// as transcribed in a public list (stocky37's "fflogs-colours.yaml", January 2022) for the jobs that existed then,
 /// plus Viper, Pictomancer and Blue Mage as given by the owner from the current FFLogs. Every one can be changed in the
 /// settings; what the user changes is stored in
-/// <see cref="UnitFramesSettings.JobColorOverrides"/> and these stay as the defaults.
+/// <see cref="HudBarsSettings.JobColorOverrides"/> and these stay as the defaults.
 /// </summary>
 internal static class JobColors
 {

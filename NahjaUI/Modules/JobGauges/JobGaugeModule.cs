@@ -7,7 +7,7 @@ using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NahjaUI.Core.Layout;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 
@@ -21,7 +21,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     // The game's own White Mage gauge.
     private const string NativeWhiteMageGauge = "JobHudWHM0";
 
-    // The game's own Warrior gauge (check the name in Debug > Game windows while playing a Warrior).
+    // The game's own Warrior gauge.
     private const string NativeWarriorGauge = "JobHudWAR0";
 
     // Job ids of the game (White Mage 24, Warrior 21).
@@ -38,7 +38,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
     private const uint RedMageJobId = 35;
 
-    // The game's own Dark Knight gauge (check the name in Debug > Game windows while playing a Dark Knight).
+    // The game's own Dark Knight gauge.
     private const string NativeDarkKnightGauge = "JobHudDRK0";
 
     private const uint DarkKnightJobId = 32;
@@ -46,14 +46,20 @@ internal sealed partial class JobGaugeModule : IDisposable
     // The game's Dark Knight window with the Darkside gauge, Dark Arts and the Living Shadow time (the Blood gauge is JobHudDRK0).
     private const string NativeDarkside = "JobHudDRK1";
 
-    // The game's own Gunbreaker gauge (check the name in Debug > Game windows while playing a Gunbreaker).
+    // The game's own Gunbreaker gauge.
     private const string NativeGunbreakerGauge = "JobHudGNB0";
 
     private const uint GunbreakerJobId = 37;
 
-    // The game's own Scholar, Astrologian and Sage gauges (the first window of each; check the names in Debug > Game windows).
+    // The game's own Scholar, Astrologian and Sage gauges.
     private const string NativeScholarGauge = "JobHudSCH0";
+    // The second window of the Scholar and the Astrologian (the game splits their gauge in two, like the Sage's): hidden together with the first.
+    private const string NativeScholarGauge2 = "JobHudSCH1";
+    // The window of the Arcanist family: the game uses it for Scholar (and probably Summoner).
+    private const string NativeArcanistGauge = "JobHudACN0";
+    private const uint SummonerJobId = 27;
     private const string NativeAstrologianGauge = "JobHudAST0";
+    private const string NativeAstrologianGauge2 = "JobHudAST1";
     private const string NativeSageGauge = "JobHudGFF0";
     private const string NativeSageGauge2 = "JobHudGFF1";
 
@@ -67,7 +73,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     // The Darkside bar is full at 60 seconds.
     private const float DarksideMaxMs = 60000f;
 
-    // The game's own Limit Break gauge (check the name in Debug > Game windows). It is not a job: this id is only the page entry.
+    // The game's own Limit Break gauge. It is not a job: this id is only the page entry.
     private const string NativeLimitBreak = "_LimitBreak";
 
     internal const uint LimitBreakPageId = 0xFFFF;
@@ -77,7 +83,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
     internal const uint FrontlinePageId = 0xFFFE;
 
-    private static readonly string[] NativeGauges = new[] { NativeWhiteMageGauge, NativeWarriorGauge, NativePaladinGauge, NativeRedMageGauge, NativeDarkKnightGauge, NativeDarkside, NativeGunbreakerGauge, NativeScholarGauge, NativeAstrologianGauge, NativeSageGauge, NativeSageGauge2, NativeLimitBreak, NativeFrontline }.Concat(ExtraGauges.NativeWindows).ToArray();
+    private static readonly string[] NativeGauges = new[] { NativeWhiteMageGauge, NativeWarriorGauge, NativePaladinGauge, NativeRedMageGauge, NativeDarkKnightGauge, NativeDarkside, NativeGunbreakerGauge, NativeScholarGauge, NativeScholarGauge2, NativeArcanistGauge, NativeAstrologianGauge, NativeAstrologianGauge2, NativeSageGauge, NativeSageGauge2, NativeLimitBreak, NativeFrontline }.Concat(ExtraGauges.NativeWindows).ToArray();
 
     // A new lily every 20 seconds.
     private const float LilyIntervalMs = 20000f;
@@ -352,6 +358,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeGauges, OnNativePreDraw);
+        hider.ShowAll();
     }
 
     // ---------------------------------------------------------------- hiding the game's gauge
@@ -393,8 +400,14 @@ internal sealed partial class JobGaugeModule : IDisposable
             // Only while ours is drawn: with our Darkside bar switched off, the game's stays.
             NativeDarkside => gauges.DarkKnight is { Enabled: true, ShowDarkside: true },
             NativeGunbreakerGauge => gauges.Gunbreaker is { Enabled: true },
-            NativeScholarGauge => gauges.Scholar is { Enabled: true },
-            NativeAstrologianGauge => gauges.Astrologian is { Enabled: true },
+            NativeArcanistGauge => plugin.GameData.Current.Player?.JobId switch
+            {
+                ScholarJobId => gauges.Scholar is { Enabled: true },
+                SummonerJobId => gauges.Extra.For("SMN").Enabled,
+                _ => false
+            },
+            NativeScholarGauge or NativeScholarGauge2 => gauges.Scholar is { Enabled: true },
+            NativeAstrologianGauge or NativeAstrologianGauge2 => gauges.Astrologian is { Enabled: true },
             NativeSageGauge or NativeSageGauge2 => gauges.Sage is { Enabled: true },
 
             // Only while ours is really drawn (the game gave us the gauge), so a failed reading never leaves the screen without one.
@@ -612,7 +625,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         var bars = Math.Clamp(gauge.Bars, 1, 3);
         var gap = MathF.Round(settings.GapPx * scale);
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         var barWidth = MathF.Floor((size.X - gap * (bars - 1)) / bars);
@@ -646,7 +659,6 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         if (settings.ShowLevel && fullBars >= 1)
         {
-            settings.EnsureText();
             DrawCenteredText(drawList, settings.Text, pos, size, $"LB{fullBars}");
         }
     }
@@ -666,7 +678,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (size.X < 2f || size.Y < 2f)
             return;
 
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;
 
@@ -691,7 +703,6 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         if (settings.ShowDarksideSeconds && gauge.DarksideMs > 0)
         {
-            settings.EnsureText();
             DrawCenteredText(drawList, settings.Text, pos, size, ((int)MathF.Ceiling(gauge.DarksideMs / 1000f)).ToString());
         }
 
@@ -707,7 +718,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         var (pos, size) = LayoutManager.GetRect(GunbreakerElement.Layout);
         var scale = ImGuiHelpers.GlobalScale;
         var gap = MathF.Round(settings.GapPx * scale);
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         var pipWidth = MathF.Floor((size.X - gap * (count - 1)) / count);
@@ -752,7 +763,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (size.X < 2f || size.Y < 2f)
             return;
 
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;
 
@@ -782,7 +793,6 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         if (settings.ShowNumbers)
         {
-            settings.EnsureText();
             DrawCenteredText(drawList, settings.Text, pos, size, value.ToString());
         }
     }
@@ -794,7 +804,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         var (pos, size) = LayoutManager.GetRect(RedStackElement.Layout);
         var scale = ImGuiHelpers.GlobalScale;
         var gap = MathF.Round(settings.GapPx * scale);
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         var pipWidth = MathF.Floor((size.X - gap * (count - 1)) / count);
@@ -826,7 +836,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var value = Math.Clamp((int)gaugeValue, 0, 100);
-        var rounding = MathF.Round(settings.RoundingPx * scale);
+        var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;
 
@@ -854,7 +864,6 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         if (settings.ShowNumber)
         {
-            settings.EnsureText();
             DrawCenteredText(drawList, settings.Text, pos, size, (shownNumber ?? value).ToString());
         }
     }
@@ -862,20 +871,19 @@ internal sealed partial class JobGaugeModule : IDisposable
     // A number on a gauge, placed like every other text: a point of the box, the offsets, size, font and color of the settings.
     private void DrawCenteredText(ImDrawListPtr drawList, FrameTextSettings text, Vector2 pos, Vector2 size, string value)
     {
-        plugin.UnitFrameSystem.DrawText(drawList, value, text, pos, size);
+        plugin.HudBarSystem.DrawText(drawList, value, text, pos, size, OverlayFont.NahjaDisplayBold);
     }
 
     private void DrawWhiteMage(WhiteMageGaugeSettings settings, WhiteMageGaugeSnapshot gauge)
     {
-        settings.EnsureText();
         var drawList = ImGui.GetBackgroundDrawList();
 
-        // How far the next lily is. The game counts this timer up from 0 to 20 seconds (check the Debug page if it looks wrong).
+        // How far the next lily is. The game counts this timer up from 0 to 20 seconds.
         var lilies = Math.Min((int)gauge.Lily, 3);
         var progress = lilies >= 3 ? 0f : Math.Clamp(gauge.LilyTimerMs / LilyIntervalMs, 0f, 1f);
 
         var (lilyPos, lilySize) = LayoutManager.GetRect(LilyElement.Layout);
-        DrawPips(drawList, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, lilyPos, lilySize, lilies, progress, settings.LilyColor, false);
+        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, lilyPos, lilySize, lilies, progress, settings.LilyColor, false);
 
         if (settings.ShowTimer && lilies < 3 && progress > 0f)
         {
@@ -888,7 +896,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         var blood = Math.Min((int)gauge.BloodLily, 3);
         var (bloodPos, bloodSize) = LayoutManager.GetRect(BloodLilyElement.Layout);
-        DrawPips(drawList, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, bloodPos, bloodSize, blood, 0f, settings.BloodLilyColor, settings.GlowWhenFull && blood >= 3);
+        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, bloodPos, bloodSize, blood, 0f, settings.BloodLilyColor, settings.GlowWhenFull && blood >= 3);
     }
 
     // Three rounded pips side by side, inside the box of the layout element. The first <filled> are full and the next one
@@ -958,7 +966,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         var left = pos.X + MathF.Round((size.X - total) / 2f);
         var centerX = left + pipIndex * (pipWidth + gap) + pipWidth / 2f;
 
-        plugin.UnitFrameSystem.DrawText(drawList, text, textSettings, new Vector2(centerX - pipWidth / 2f, pos.Y), new Vector2(pipWidth, size.Y));
+        plugin.HudBarSystem.DrawText(drawList, text, textSettings, new Vector2(centerX - pipWidth / 2f, pos.Y), new Vector2(pipWidth, size.Y), OverlayFont.NahjaDisplayBold);
     }
 
     // ---------------------------------------------------------------- healers: Scholar, Astrologian, Sage
@@ -968,14 +976,14 @@ internal sealed partial class JobGaugeModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
 
         var (flowPos, flowSize) = LayoutManager.GetRect(AetherflowElement.Layout);
-        DrawPips(drawList, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor, default, flowPos, flowSize,
+        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, flowPos, flowSize,
             Math.Min((int)gauge.Aetherflow, 3), 0f, settings.AetherflowColor, false);
 
         // While the Seraph is out the Faerie Gauge is hers: the bar shows the time she has left.
         var seraph = gauge.SeraphMs > 0;
         var fraction = seraph ? gauge.SeraphMs / SeraphMaxMs : gauge.Faerie / 100f;
         var text = seraph ? ((int)MathF.Ceiling(gauge.SeraphMs / 1000f)).ToString() : gauge.Faerie.ToString();
-        DrawFillBar(drawList, FaerieElement, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor,
+        DrawFillBar(drawList, FaerieElement, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor,
             seraph ? settings.SeraphColor : settings.FaerieColor, fraction, settings.ShowNumber ? text : null, settings.Text);
     }
 
@@ -984,14 +992,14 @@ internal sealed partial class JobGaugeModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
         var cardColor = gauge.Umbral ? settings.UmbralColor : settings.AstralColor;
 
-        DrawSlots(drawList, CardsElement, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor,
+        DrawSlots(drawList, CardsElement, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor,
             new Vector4?[] { gauge.Card1 ? cardColor : null, gauge.Card2 ? cardColor : null, gauge.Card3 ? cardColor : null });
 
         if (!settings.ShowCrown)
             return;
 
         Vector4? crown = gauge.Crown == 1 ? settings.LordColor : gauge.Crown == 2 ? settings.LadyColor : null;
-        DrawSlots(drawList, CrownElement, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor, new[] { crown });
+        DrawSlots(drawList, CrownElement, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, new[] { crown });
     }
 
     private void DrawSage(SageGaugeSettings settings, SageGaugeSnapshot gauge)
@@ -1004,7 +1012,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         var progress = stacks >= 3 ? 0f : Math.Clamp(gauge.AddersgallMs / intervalMs, 0f, 1f);
 
         var (gallPos, gallSize) = LayoutManager.GetRect(AddersgallElement.Layout);
-        DrawPips(drawList, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor, default, gallPos, gallSize,
+        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, gallPos, gallSize,
             stacks, progress, settings.AddersgallColor, false);
 
         if (settings.ShowTimer && stacks < 3 && progress > 0f)
@@ -1017,7 +1025,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var (stingPos, stingSize) = LayoutManager.GetRect(AdderstingElement.Layout);
-        DrawPips(drawList, settings.GapPx, settings.RoundingPx, settings.BackgroundColor, settings.BorderColor, default, stingPos, stingSize,
+        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, stingPos, stingSize,
             Math.Min((int)gauge.Addersting, 3), 0f, settings.AdderstingColor, false);
     }
 
@@ -1073,6 +1081,6 @@ internal sealed partial class JobGaugeModule : IDisposable
         drawList.AddRect(pos, end, ImGui.GetColorU32(borderColor), rounding, ImDrawFlags.None, thickness);
 
         if (text is not null)
-            plugin.UnitFrameSystem.DrawText(drawList, text, textSettings, pos, size);
+            plugin.HudBarSystem.DrawText(drawList, text, textSettings, pos, size, OverlayFont.NahjaDisplayBold);
     }
 }

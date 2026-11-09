@@ -17,18 +17,7 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly string[] Pages = { "General", "Trackers", "Unit frames", "Progress bars", "Job gauges", "Status effects", "Nameplates", "Enmity list", "Others", "Filters", "Tooltip", "Appearance", "Layout", "Profiles" };
-
-    // The Debug page is not in the sidebar: "/nui debug" opens it (and adds its entry for the rest of the session).
-    private bool debugUnlocked;
-
-    /// <summary>Opens the Debug page (used by "/nui debug").</summary>
-    public void ShowDebug()
-    {
-        debugUnlocked = true;
-        plugin.Configuration.SelectedPage = "Debug";
-        plugin.RequestSave();
-    }
+    private static readonly string[] Pages = { "General", "Trackers", "HUD bars", "Progress bars", "Job gauges", "Status effects", "Nameplates", "Enmity list", "Others", "Filters", "Tooltip", "Appearance", "Layout", "Profiles" };
 
     private readonly Plugin plugin;
     private readonly ProfilesPage profilesPage;
@@ -40,11 +29,6 @@ public class MainWindow : Window, IDisposable
     // Wide enough for the two columns of the Trackers page (list and editor): the page needs 720 px (times the UI scale) for its
     // content plus the sidebar and margins. Dalamud multiplies the size of a window by the UI scale itself, so it is NOT scaled here.
     private static readonly Vector2 DefaultSize = new(1040f, 680f);
-
-    // The tool that lists the game's own windows (Debug page).
-    private string windowFilter = "Target";
-    private string dumpWindow = "_PartyList";
-    private bool windowOnlyVisible = true;
 
     // Where the window must appear when it is opened from the small bar (its top right corner), and the corner as of the last frame.
     private Vector2 wantedTopRight;
@@ -193,7 +177,7 @@ public class MainWindow : Window, IDisposable
         var drawList = ImGui.GetWindowDrawList();
         var width = ImGui.GetWindowSize().X;
         var height = MathF.Round(MathF.Max(34f * scale, ImGui.GetTextLineHeight() + 14f * scale));
-        var rounding = MathF.Min(MathF.Round(plugin.Configuration.WindowRoundingPx * scale), height / 2f + 12f * scale);
+        var rounding = MathF.Min(MathF.Round(Theme.WindowRounding * scale), height / 2f + 12f * scale);
 
         drawList.AddRectFilled(windowPos, windowPos + new Vector2(width, height), ImGui.GetColorU32(Theme.Sidebar), rounding, ImDrawFlags.RoundCornersTop);
 
@@ -270,7 +254,7 @@ public class MainWindow : Window, IDisposable
         ImGui.Dummy(new Vector2(0f, 10f * scale));
 
         ImGui.Indent(10f * scale);
-        foreach (var page in debugUnlocked ? Pages.Append("Debug") : Pages)
+        foreach (var page in Pages)
         {
             if (SidebarItem(page, plugin.Configuration.SelectedPage == page, scale))
             {
@@ -325,19 +309,13 @@ public class MainWindow : Window, IDisposable
 
         var page = plugin.Configuration.SelectedPage;
 
-        // Pages that were merged or hidden: an older saved selection goes to the right place.
-        if (page is "Limit Break" or "Frontline gauge")
-            page = plugin.Configuration.SelectedPage = "Others";
-        else if (page == "Debug" && !debugUnlocked)
-            page = plugin.Configuration.SelectedPage = "General";
-
         switch (page)
         {
             case "Trackers":
                 plugin.TrackerEditorPage.Draw();
                 break;
-            case "Unit frames":
-                plugin.UnitFrameEditorPage.Draw();
+            case "HUD bars":
+                plugin.HudBarEditorPage.Draw();
                 break;
             case "Status effects":
                 plugin.StatusEffectsEditorPage.Draw();
@@ -388,9 +366,6 @@ public class MainWindow : Window, IDisposable
             case "Layout":
                 DrawLayout();
                 break;
-            case "Debug":
-                DrawDebug();
-                break;
             default:
                 DrawGeneral();
                 break;
@@ -402,7 +377,7 @@ public class MainWindow : Window, IDisposable
     private static string PageSubtitle(string page) => page switch
     {
         "Trackers" => "Icons for the enhancements, enfeeblements and ability cooldowns you want to watch",
-        "Unit frames" => "Player, target, focus and party frames: HP, MP, names and status icons",
+        "HUD bars" => "Player, target, focus and party list: HP, MP, names and status icons",
         "Status effects" => "Your own enhancements and enfeeblements, as two separate groups of icons",
         "Filters" => "Named lists of statuses, reused by icon rows, nameplates and trackers",
         "Nameplates" => "Bars and names over enemies and players, with progress bars and status icons",
@@ -414,7 +389,6 @@ public class MainWindow : Window, IDisposable
         "Appearance" => "General settings of the interface",
         "Profiles" => "Export, import and back up your settings",
         "Layout" => "Position and size of every element",
-        "Debug" => "Live game data and diagnostics",
         _ => "Overview and status"
     };
 
@@ -438,7 +412,7 @@ public class MainWindow : Window, IDisposable
 
             ImGui.TextColored(Theme.Accent, "1");
             ImGui.SameLine();
-            ImGui.TextWrapped("Turn on what you want to replace: Unit frames, Nameplates, Enmity list, Progress bars, Job gauges. Each page has its own switch, and the game's own element is hidden only while ours is on.");
+            ImGui.TextWrapped("Turn on what you want to replace: HUD bars, Nameplates, Enmity list, Progress bars, Job gauges. Each page has its own switch, and the game's own element is hidden only while ours is on.");
 
             ImGui.TextColored(Theme.Accent, "2");
             ImGui.SameLine();
@@ -468,7 +442,7 @@ public class MainWindow : Window, IDisposable
 
             foreach (var page in Pages)
             {
-                if (page is "General" or "Debug")
+                if (page is "General")
                     continue;
 
                 ImGui.PushStyleColor(ImGuiCol.Text, Theme.Accent);
@@ -504,16 +478,9 @@ public class MainWindow : Window, IDisposable
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 8, () =>
+        Widgets.Card("##card_theme", 9, () =>
         {
             Widgets.SectionLabel("Theme");
-
-            var accent = config.AccentColor;
-            if (ImGui.ColorEdit4("Accent color", ref accent, ImGuiColorEditFlags.NoAlpha))
-            {
-                config.AccentColor = new Vector4(accent.X, accent.Y, accent.Z, 1f);
-                plugin.RequestSave();
-            }
 
             if (ImGui.BeginCombo("Menu text size (px)", $"{config.MenuTextSize} px"))
             {
@@ -529,53 +496,16 @@ public class MainWindow : Window, IDisposable
                 ImGui.EndCombo();
             }
 
-            var rounding = config.WindowRoundingPx;
-            if (ImGui.SliderInt("Window corner rounding (px)", ref rounding, 0, 24))
+            var inBar = config.ShowInServerBar;
+            if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))
             {
-                config.WindowRoundingPx = rounding;
-                plugin.RequestSave();
-            }
-
-            ImGui.Spacing();
-            if (ImGui.Button("Reset window"))
-                centerRequested = true;
-
-            ImGui.SameLine();
-            if (ImGui.Button("Reset appearance"))
-            {
-                config.AccentColor = Theme.DefaultAccent;
-                config.WindowRoundingPx = 10;
-                plugin.RequestSave();
-            }
-        });
-
-        Widgets.Card("##card_game_interface", 10, () =>
-        {
-            Widgets.SectionLabel("Game interface");
-
-            var ringColor = config.TargetRingColor;
-            if (ImGui.ColorEdit4("Target ring color", ref ringColor, ImGuiColorEditFlags.NoAlpha))
-            {
-                config.TargetRingColor = new Vector4(ringColor.X, ringColor.Y, ringColor.Z, 1f);
-                plugin.RequestSave();
-            }
-
-            var decimals = config.TimerDecimalsBelowSeconds;
-            if (ImGui.SliderInt("Timer tenths below (s, 0 = never)", ref decimals, 0, 10))
-            {
-                config.TimerDecimalsBelowSeconds = decimals;
-                plugin.RequestSave();
-            }
-
-            var onTop = config.GameWindowsOnTop;
-            if (ImGui.Checkbox("Game windows over the interface", ref onTop))
-            {
-                config.GameWindowsOnTop = onTop;
+                config.ShowInServerBar = inBar;
+                plugin.ServerInfoBar.UpdateShown();
                 plugin.RequestSave();
             }
 
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("The map, the character window, menus and every other window of the game stay over our frames, which are cut around them.");
+                ImGui.SetTooltip("The entry at the top right: click it to open the window, right click for unlock mode. /nui works either way.");
 
             var streamer = config.StreamerMode;
             if (ImGui.Checkbox("Streamer mode", ref streamer))
@@ -588,30 +518,54 @@ public class MainWindow : Window, IDisposable
                 ImGui.SetTooltip("The names of player characters are shown as Player 1, Player 2... in everything NahjaUI draws. The game's own windows (chat, its own lists) are not changed.");
 
             ImGui.Spacing();
-            if (ImGui.Button("Use the NahjaUI font everywhere"))
-                plugin.UseNahjaFontEverywhere();
-
-            ImGui.TextColored(Theme.TextMuted, "Sets the font of every tracker, tracker group and progress bar to the NahjaUI font.");
-            ImGui.TextColored(Theme.TextMuted, "New trackers and progress bars already start with it.");
+            if (ImGui.Button("Reset window"))
+                centerRequested = true;
         });
 
-        Widgets.Card("##card_server_bar", 3, () =>
+        // The colors that every part of the interface uses unless it has its own ("Custom color").
+        Widgets.Card("##card_shared_colors", 24, () =>
         {
-            Widgets.SectionLabel("Server info bar");
+            Widgets.SectionLabel("Shared style of the interface");
+            ImGui.TextColored(Theme.TextMuted, "Used everywhere. A bar, a text or a gauge can have its own with \"Custom color\". Click a color to change it: its window has a Reset button.");
 
-            var inBar = plugin.Configuration.ShowInServerBar;
-            if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))
+            var colors = config.Colors;
+
+            void Pick(string label, Vector4 current, Vector4 original, bool alpha, Action<Vector4> apply)
             {
-                plugin.Configuration.ShowInServerBar = inBar;
-                plugin.ServerInfoBar.UpdateShown();
+                var value = current;
+                if (Widgets.ColorSetting(label, ref value, original, alpha))
+                {
+                    apply(value);
+                    plugin.RequestSave();
+                }
+            }
+
+            Pick("Background color", colors.Background, Theme.BarBackground, true, c => colors.Background = c);
+            Pick("Border color", colors.Border, Theme.BarBorder, false, c => colors.Border = c);
+            Pick("Text color", colors.Text, GlobalColors.DefaultText, false, c => colors.Text = c);
+            Pick("Shield color", colors.Shield, GlobalColors.DefaultShield, false, c => colors.Shield = c);
+            Pick("MP color", colors.Mp, GlobalColors.DefaultMp, false, c => colors.Mp = c);
+            Pick("Friendly NPC HP color", colors.FriendlyNpc, GlobalColors.DefaultFriendlyNpc, false, c => colors.FriendlyNpc = c);
+            Pick("Enemy HP color", colors.EnemyHp, GlobalColors.DefaultEnemyHp, false, c => colors.EnemyHp = c);
+            Pick("Pet / minion HP color", colors.PetMinion, GlobalColors.DefaultPetMinion, false, c => colors.PetMinion = c);
+            Pick("Object color", colors.ObjectColor, GlobalColors.DefaultObject, false, c => colors.ObjectColor = c);
+            Pick("Timer text color", colors.TimerText, GlobalColors.DefaultText, false, c => colors.TimerText = c);
+            Pick("Stacks text color", colors.StacksText, GlobalColors.DefaultText, false, c => colors.StacksText = c);
+            Pick("Target ring color", config.TargetRingColor, new Vector4(1f, 1f, 1f, 1f), false, c => config.TargetRingColor = c);
+
+            ImGui.Spacing();
+            var cornerRounding = colors.Rounding;
+            if (ImGui.SliderInt("Corner rounding (px)", ref cornerRounding, 0, 12))
+            {
+                colors.Rounding = cornerRounding;
                 plugin.RequestSave();
             }
 
-            ImGui.TextColored(Theme.TextMuted, "The entry at the top right: click it to open the window, right click for unlock mode. /nui works either way.");
-        });
+            ImGui.TextColored(Theme.TextMuted, "0 gives square corners. It applies to every bar, gauge, frame and icon.");
 
-        // The colour of each role, for the frames we draw (the nameplates use the game's own options).
-        plugin.UnitFrameEditorPage.DrawRoleColorsCard();
+            ImGui.Spacing();
+            plugin.HudBarEditorPage.DrawRoleColors();
+        });
     }
 
     // ---------------------------------------------------------------- layout page
@@ -785,398 +739,5 @@ public class MainWindow : Window, IDisposable
         }
 
         return changed;
-    }
-
-    // ---------------------------------------------------------------- debug page
-
-    // ---------------------------------------------------------------- font lab
-
-    private int labSize = 14;
-
-    private static readonly (OverlayFont Font, string Name)[] LabFonts =
-    {
-        (OverlayFont.NahjaDisplay, "Saira Cond. SemiBold"),
-        (OverlayFont.NahjaDisplayBold, "Saira Cond. Bold"),
-        (OverlayFont.NahjaText, "Saira Regular"),
-
-        (OverlayFont.GameUi, "Game Axis"),
-        (OverlayFont.GameUiBold, "Game Axis bold"),
-        (OverlayFont.GameNumbers, "Game Meidinger"),
-        (OverlayFont.Condensed, "Game Trump Gothic")
-    };
-
-    private static readonly (OutlinedText.Style Style, string Name)[] LabStyles =
-    {
-        (OutlinedText.Style.None, "No outline"),
-        (OutlinedText.Style.Px1Cross, "1 px, 4 dir"),
-        (OutlinedText.Style.Px1Eight, "1 px, 8 dir (now)"),
-        (OutlinedText.Style.Px15Twelve, "1.5 px, 12 dir"),
-        (OutlinedText.Style.Px2Sixteen, "2 px, 16 dir")
-    };
-
-    // The same text in every font and with every outline, side by side at the real UI scale, to choose by eye.
-    private void DrawFontLab()
-    {
-        Widgets.Card("##card_fontlab", 40, () =>
-        {
-            Widgets.SectionLabel("Font lab");
-            ImGui.TextColored(Theme.TextMuted, "Same text in each font (rows) and outline (columns). Outline sizes are real screen pixels.");
-
-            ImGui.SliderInt("Text size (px)##lab", ref labSize, 10, 28);
-
-            const string sample = "Maim 47 | 98% 2.5";
-            var scale = ImGuiHelpers.GlobalScale;
-            var drawList = ImGui.GetWindowDrawList();
-            var white = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 1f));
-            var labelHeight = ImGui.GetTextLineHeight();
-
-            // Measure once to size the cells: text, a margin and a small label with the outline name under it.
-            Vector2 cell;
-            using (plugin.Fonts.PushClosest(OverlayFont.NahjaDisplayBold, labSize))
-                cell = ImGui.CalcTextSize(sample) + new Vector2(20f * scale, 10f * scale + labelHeight);
-
-            var available = ImGui.GetContentRegionAvail().X;
-            var gap = 4f * scale;
-
-            foreach (var (font, name) in LabFonts)
-            {
-                ImGui.Spacing();
-                ImGui.Text(name);
-
-                var used = 0f;
-                for (var i = 0; i < LabStyles.Length; i++)
-                {
-                    // Wrap to the next line when the next cell does not fit.
-                    if (i > 0 && used + cell.X + gap <= available)
-                        ImGui.SameLine(0f, gap);
-                    else
-                        used = 0f;
-
-                    var min = ImGui.GetCursorScreenPos();
-                    ImGui.Dummy(cell);
-                    used += cell.X + gap;
-
-                    // A mid grey, like a HP bar or the game behind it.
-                    drawList.AddRectFilled(min, min + cell, ImGui.GetColorU32(new Vector4(0.30f, 0.33f, 0.40f, 1f)), 3f * scale);
-
-                    using (plugin.Fonts.PushClosest(font, labSize))
-                    {
-                        var textSize = ImGui.CalcTextSize(sample);
-                        var textPos = new Vector2(MathF.Round(min.X + 10f * scale), MathF.Round(min.Y + 5f * scale));
-                        OutlinedText.Draw(drawList, textPos, sample, white, LabStyles[i].Style);
-                    }
-
-                    drawList.AddText(new Vector2(min.X + 10f * scale, min.Y + cell.Y - labelHeight - 3f * scale),
-                        ImGui.GetColorU32(Theme.TextMuted), LabStyles[i].Name);
-                }
-            }
-        });
-    }
-
-    // The last combo the game reported (it disappears when its timer ends, so the last one seen is kept to read it afterwards).
-    private uint lastComboAction;
-    private float lastComboTimer;
-
-    private void DrawComboCard(GameSnapshot snapshot)
-    {
-        if (snapshot.Combo is { Action: not 0 } combo)
-        {
-            lastComboAction = combo.Action;
-            lastComboTimer = combo.Timer;
-        }
-
-        Widgets.Card("##card_combo", 6, () =>
-        {
-            Widgets.SectionLabel("Combo");
-
-            var now = snapshot.Combo;
-            ImGui.Text(now is { Action: not 0 }
-                ? $"Now: {GameNames.ActionName(now.Action)} ({now.Action}), {now.Timer:0.0} s left"
-                : "Now: no combo running");
-
-            ImGui.Text(lastComboAction == 0
-                ? "Last seen: none yet"
-                : $"Last seen: {GameNames.ActionName(lastComboAction)} ({lastComboAction}), {lastComboTimer:0.0} s left when last read");
-
-            // What the game's data says each follow-up needs before it.
-            foreach (var id in new uint[] { 25748, 25749, 25750 })
-            {
-                var parent = GameNames.ComboParent(id);
-                ImGui.Text($"{GameNames.ActionName(id)} ({id}) follows: {(parent == 0 ? "nothing" : $"{GameNames.ActionName(parent)} ({parent})")}");
-            }
-        });
-    }
-
-    private void DrawActionFlagsCard(GameSnapshot snapshot)
-    {
-        var lines = GameDataProvider.ReadActionFlags(snapshot.Player?.JobId ?? 0);
-
-        Widgets.Card("##card_action_flags", lines.Count + 3, () =>
-        {
-            Widgets.SectionLabel("Action flags (glow and forms)");
-
-            if (lines.Count == 0)
-                ImGui.TextColored(Theme.TextMuted, "Nothing glowing and no action in another form right now.");
-
-            foreach (var line in lines)
-                ImGui.Text(line);
-        });
-    }
-
-    private void DrawDebug()
-    {
-        var provider = plugin.GameData;
-        var snapshot = provider.Current;
-
-        DrawFontLab();
-
-        Widgets.Card("##card_snapshot", 5, () =>
-        {
-            Widgets.SectionLabel("Snapshot");
-            ImGui.Text($"Frame: {snapshot.Frame}");
-            ImGui.Text($"Build time: {provider.LastBuildMs:0.000} ms");
-            ImGui.Text($"Logged in: {snapshot.IsLoggedIn}");
-
-            if (provider.LastError is { } error)
-                ImGui.TextColored(Theme.Error, $"Last error: {error}");
-        });
-
-        Widgets.Card("##card_context", 6, () =>
-        {
-            Widgets.SectionLabel("Context");
-
-            var context = snapshot.Context;
-            if (Plugin.DataManager.GetExcelSheet<TerritoryType>().TryGetRow(context.TerritoryId, out var territoryRow))
-                ImGui.Text($"Location: {territoryRow.PlaceName.Value.Name.ToString()} ({context.TerritoryId})");
-            else
-                ImGui.Text($"Location: unknown ({context.TerritoryId})");
-
-            ImGui.Text($"In combat: {context.InCombat}");
-            ImGui.Text($"In duty: {context.InDuty}");
-            ImGui.Text($"Party size: {context.PartySize}");
-        });
-
-        DrawComboCard(snapshot);
-        DrawActionFlagsCard(snapshot);
-
-        DrawUnitCard("##card_player", "Player", snapshot.Player);
-        DrawUnitCard("##card_target", "Target", snapshot.Target);
-        DrawUnitCard("##card_focus", "Focus target", snapshot.Focus);
-        DrawUnitCard("##card_tot", "Target of target", snapshot.TargetOfTarget);
-
-        Widgets.Card("##card_party", snapshot.Party.Count + 2, () =>
-        {
-            Widgets.SectionLabel("Party");
-
-            if (snapshot.Party.Count == 0)
-            {
-                ImGui.TextColored(Theme.TextMuted, "Not in a party.");
-                return;
-            }
-
-            foreach (var member in snapshot.Party)
-            {
-                ImGui.Text($"{member.Name}  {GameNames.JobAbbreviation(member.JobId)} Lv {member.Level}   HP {member.Hp}/{member.MaxHp}   statuses: {member.Statuses.Count}");
-            }
-        });
-
-        StatusDebugCard.Draw(snapshot);
-
-
-        Widgets.Card("##card_limit_break_debug", 5, () =>
-        {
-            Widgets.SectionLabel("Limit Break (what the game says)");
-            ImGui.TextUnformatted(GameDataProvider.LimitBreakDebug());
-        });
-
-        Widgets.Card("##card_cover", 6, () =>
-        {
-            Widgets.SectionLabel("Game windows over the interface (test)");
-
-            var outline = plugin.Configuration.OutlineCoverAreas;
-            if (ImGui.Checkbox("Outline the cut areas in red", ref outline))
-            {
-                plugin.Configuration.OutlineCoverAreas = outline;
-                plugin.RequestSave();
-            }
-
-            ImGui.TextColored(Theme.TextMuted, $"Areas cut right now: {plugin.GameCover.Count}");
-
-            if (ImGui.Button("Copy the names of the windows cut##cover"))
-                ImGui.SetClipboardText(plugin.GameCover.NamesAsText());
-        });
-
-        Widgets.Card("##card_menu_capture", 16 + ContextMenuCapture.Captures.Count * 2, () =>
-        {
-            Widgets.SectionLabel("Game menus seen (right click)");
-            ImGui.TextColored(Theme.TextMuted, "Right click a unit (a party member, an enemy, yourself): what the game's menu held shows here, even after it closes.");
-            ImGui.Spacing();
-
-            if (ImGui.Button("Copy everything##menus"))
-                ImGui.SetClipboardText(ContextMenuCapture.AsText());
-
-            ImGui.SameLine();
-            if (ImGui.Button("Clear##menus"))
-                ContextMenuCapture.Clear();
-
-            if (ContextMenuCapture.Captures.Count == 0)
-                ImGui.TextColored(Theme.TextMuted, "Nothing seen yet.");
-
-            foreach (var capture in ContextMenuCapture.Captures)
-            {
-                ImGui.Spacing();
-                ImGui.TextColored(Theme.Accent, $"{capture.Window} at {capture.Time}");
-                foreach (var line in capture.Lines)
-                    ImGui.TextUnformatted(line);
-            }
-        });
-
-        Widgets.Card("##card_game_windows", 16, () =>
-        {
-            Widgets.SectionLabel("Game windows");
-            ImGui.TextColored(Theme.TextMuted, "To find the names of the game's own bars: select a target, a focus and a target of target,");
-            ImGui.TextColored(Theme.TextMuted, "then look for \"Target\" and \"Focus\" here. Only needed once, to hide them.");
-            ImGui.Spacing();
-
-            ImGui.InputText("Name contains", ref windowFilter, 32);
-            ImGui.Checkbox("Only visible windows", ref windowOnlyVisible);
-            ImGui.Spacing();
-
-            foreach (var (name, visible) in GameWindowList.Read())
-            {
-                if (windowOnlyVisible && !visible)
-                    continue;
-
-                if (windowFilter.Length > 0 && !name.Contains(windowFilter, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                ImGui.TextColored(visible ? Theme.Text : Theme.TextMuted, name);
-            }
-        });
-
-        Widgets.Card("##card_addon_dump", 20, () =>
-        {
-            Widgets.SectionLabel("What a game window holds");
-            ImGui.TextColored(Theme.TextMuted, "Type the exact name of a window (see the list above) to see its values and texts right now.");
-            ImGui.Spacing();
-
-            ImGui.InputText("Window", ref dumpWindow, 48);
-            ImGui.Spacing();
-
-            foreach (var line in AddonDump.Read(dumpWindow))
-                ImGui.TextUnformatted(line);
-        });
-
-        Widgets.Card("##card_addon_raw", 40, () =>
-        {
-            Widgets.SectionLabel("Find a hidden setting (bytes of the window and its nodes)");
-            ImGui.TextColored(Theme.TextMuted, "1) Remember.  2) Press Ignore a couple of times while nothing is touched (clears noise).  3) Change the setting in game.");
-            ImGui.TextColored(Theme.TextMuted, "The offsets listed below are what changed. Send a screenshot.");
-            ImGui.Spacing();
-
-            if (ImGui.Button("Remember##raw"))
-                AddonDump.Remember(dumpWindow);
-            ImGui.SameLine();
-            if (ImGui.Button("Ignore what changes now##raw"))
-                AddonDump.IgnoreChanging(dumpWindow);
-            ImGui.SameLine();
-            if (ImGui.Button("Forget##raw"))
-                AddonDump.Forget();
-            ImGui.SameLine();
-            if (ImGui.Button("Copy all changes##raw"))
-                ImGui.SetClipboardText(AddonDump.ExportAll(dumpWindow));
-
-            if (AddonDump.HasRemembered)
-            {
-                ImGui.Spacing();
-                foreach (var line in AddonDump.Diff(dumpWindow))
-                    ImGui.TextUnformatted(line);
-            }
-        });
-
-        Widgets.Card("##card_gauge_whm_raw", 6, () =>
-        {
-            Widgets.SectionLabel("White Mage gauge (raw)");
-
-            var whm = snapshot.WhiteMage;
-            if (whm is null)
-            {
-                ImGui.TextColored(Theme.TextMuted, "Not a White Mage right now.");
-                return;
-            }
-
-            ImGui.Text($"Lilies: {whm.Lily}");
-            ImGui.Text($"Blood lilies: {whm.BloodLily}");
-            ImGui.Text($"Lily timer (raw): {whm.LilyTimerMs:0} ms");
-        });
-
-        Widgets.Card("##card_gauge_war_raw", 4, () =>
-        {
-            Widgets.SectionLabel("Warrior gauge (raw)");
-
-            var war = snapshot.Warrior;
-            if (war is null)
-            {
-                ImGui.TextColored(Theme.TextMuted, "Not a Warrior right now.");
-                return;
-            }
-
-            ImGui.Text($"Beast Gauge: {war.BeastGauge}");
-        });
-
-        Widgets.Card("##card_cooldowns", snapshot.Cooldowns.Count * 2 + 3, () =>
-        {
-            Widgets.SectionLabel("Cooldowns (abilities watched by trackers)");
-
-            if (snapshot.Cooldowns.Count == 0)
-            {
-                ImGui.TextColored(Theme.TextMuted, "No cooldown tracker is enabled.");
-                return;
-            }
-
-            foreach (var cooldown in snapshot.Cooldowns.Values)
-            {
-                ImGui.Text($"{GameNames.ActionName(cooldown.ActionId)}   charges {cooldown.Charges}/{cooldown.MaxCharges}   next in {cooldown.Remaining:0.0}s   per charge {cooldown.Total:0.0}s");
-                ImGui.TextColored(Theme.TextMuted, $"   raw: gauge {cooldown.RawElapsed:0.0} / {cooldown.RawTotal:0.0}   group {cooldown.Group}   active {cooldown.GroupActive}");
-            }
-        });
-
-        Widgets.Card("##card_interface", 4, () =>
-        {
-            Widgets.SectionLabel("Interface");
-            ImGui.Text($"UI scale: {ImGuiHelpers.GlobalScale:0.00}");
-        });
-    }
-
-    // One card with the live data of a unit: name, job, HP, progress bar and every status.
-    private static void DrawUnitCard(string id, string title, UnitSnapshot? unit)
-    {
-        var lines = unit is null ? 2 : 5 + unit.Statuses.Count;
-
-        Widgets.Card(id, lines, () =>
-        {
-            Widgets.SectionLabel(title);
-
-            if (unit is null)
-            {
-                ImGui.TextColored(Theme.TextMuted, "None");
-                return;
-            }
-
-            var dead = unit.IsDead ? "  (dead)" : string.Empty;
-            ImGui.Text($"{unit.Name}   {GameNames.JobAbbreviation(unit.JobId)} Lv {unit.Level}{dead}");
-            ImGui.Text($"HP {unit.Hp} / {unit.MaxHp}      MP {unit.Mp} / {unit.MaxMp}");
-
-            if (unit.Cast is { } cast)
-                ImGui.Text($"Casting action {cast.ActionId}   {cast.CurrentTime:0.0} / {cast.TotalTime:0.0} s");
-            else
-                ImGui.TextColored(Theme.TextMuted, "Not casting");
-
-            ImGui.Text($"Statuses: {unit.Statuses.Count}");
-            foreach (var status in unit.Statuses)
-            {
-                ImGui.Text($"  {GameNames.StatusName(status.Id)} ({status.Id})   {status.RemainingTime:0.0} s   param {status.Param}   from {status.SourceId:X}");
-            }
-        });
     }
 }

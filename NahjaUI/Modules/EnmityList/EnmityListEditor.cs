@@ -3,7 +3,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.EnmityList;
 
@@ -50,7 +50,6 @@ internal sealed class EnmityListEditor
                 plugin.RequestSave();
             }
 
-            Slider("Corner rounding (px)", settings.RoundingPx, 0, 12, v => settings.RoundingPx = v);
             Slider("Space between bars (px)", settings.SpacingPx, 0, 30, v => settings.SpacingPx = v);
             Color("HP color", settings.HpColor, v => settings.HpColor = v);
             Color("Background color", settings.BackgroundColor, v => settings.BackgroundColor = v);
@@ -64,7 +63,7 @@ internal sealed class EnmityListEditor
             Check("Show the name", settings.Name.Enabled, v => settings.Name.Enabled = v);
             ImGui.TextColored(Theme.TextMuted, "Enemy names are written as the game gives them (the game has no option for it).");
 
-            if (UnitFrameEditor.TextControls(settings.Name))
+            if (HudBarEditor.TextControls(settings.Name))
                 plugin.RequestSave();
         });
 
@@ -74,7 +73,7 @@ internal sealed class EnmityListEditor
 
             Check("Show the HP percentage", settings.Hp.Enabled, v => settings.Hp.Enabled = v);
 
-            if (UnitFrameEditor.TextControls(settings.Hp))
+            if (HudBarEditor.TextControls(settings.Hp))
                 plugin.RequestSave();
         });
 
@@ -85,7 +84,7 @@ internal sealed class EnmityListEditor
             Check("Show the dot", settings.ShowEnmityDot, v => settings.ShowEnmityDot = v);
             Slider("Dot size (px)", settings.EnmityDotSizePx, 4, 30, v => settings.EnmityDotSizePx = v);
             var dotAnchor = settings.EnmityDotAnchor;
-            if (UnitFrameEditor.EnumCombo("Dot position", ref dotAnchor, point => point.Label()))
+            if (HudBarEditor.EnumCombo("Dot position", ref dotAnchor, point => point.Label()))
             {
                 settings.EnmityDotAnchor = dotAnchor;
                 plugin.RequestSave();
@@ -139,7 +138,7 @@ internal sealed class EnmityListEditor
 
             Check("Show the action name", settings.ProgressBarName.Enabled, v => settings.ProgressBarName.Enabled = v);
 
-            if (UnitFrameEditor.TextControls(settings.ProgressBarName))
+            if (HudBarEditor.TextControls(settings.ProgressBarName))
                 plugin.RequestSave();
         });
 
@@ -150,18 +149,18 @@ internal sealed class EnmityListEditor
             Check("Show the time left", settings.ProgressBarTime.Enabled, v => settings.ProgressBarTime.Enabled = v);
 
             var timeMode = settings.ProgressBarTimeMode;
-            if (UnitFrameEditor.EnumCombo("Time format", ref timeMode, NahjaUI.Modules.ProgressBars.ProgressBarEditor.TimeModeLabel))
+            if (HudBarEditor.EnumCombo("Time format", ref timeMode, NahjaUI.Modules.ProgressBars.ProgressBarEditor.TimeModeLabel))
             {
                 settings.ProgressBarTimeMode = timeMode;
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.TextControls(settings.ProgressBarTime))
+            if (HudBarEditor.TextControls(settings.ProgressBarTime))
                 plugin.RequestSave();
         });
 
-        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_el_enhancements", "Enhancements", settings.Enhancements, true);
-        plugin.UnitFrameEditorPage.DrawStatusRowCard("##card_el_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: false);
+        plugin.HudBarEditorPage.DrawStatusRowCard("##card_el_enhancements", "Enhancements", settings.Enhancements, true);
+        plugin.HudBarEditorPage.DrawStatusRowCard("##card_el_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: false);
     }
 
     private void Check(string label, bool current, Action<bool> apply)

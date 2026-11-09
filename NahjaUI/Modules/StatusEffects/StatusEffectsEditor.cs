@@ -3,7 +3,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.StatusEffects;
 
@@ -69,7 +69,7 @@ internal sealed class StatusEffectsEditor
             Widgets.SectionLabel("Group");
 
             var value = selected;
-            if (UnitFrameEditor.EnumCombo("Group to edit", ref value, GroupLabel))
+            if (HudBarEditor.EnumCombo("Group to edit", ref value, GroupLabel))
                 selected = value;
         });
     }
@@ -106,20 +106,20 @@ internal sealed class StatusEffectsEditor
             }
 
             var order = group.Look.Order;
-            if (UnitFrameEditor.EnumCombo("Order", ref order, UnitFrameEditor.OrderLabel))
+            if (HudBarEditor.EnumCombo("Order", ref order, HudBarEditor.OrderLabel))
             {
                 group.Look.Order = order;
                 plugin.RequestSave();
             }
 
             var growth = group.Look.Growth;
-            if (UnitFrameEditor.EnumCombo("Grow towards", ref growth, UnitFrameEditor.GrowthLabel))
+            if (HudBarEditor.EnumCombo("Grow towards", ref growth, HudBarEditor.GrowthLabel))
             {
                 group.Look.Growth = growth;
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.NextLineCombo(group.Look))
+            if (HudBarEditor.NextLineCombo(group.Look))
                 plugin.RequestSave();
 
         });
@@ -127,7 +127,7 @@ internal sealed class StatusEffectsEditor
 
     // ---------------------------------------------------------------- the icons
 
-    private void DrawIconsCard(NahjaUI.Modules.PartyFrames.StatusRowSettings look, StatusGroupKind kind)
+    private void DrawIconsCard(NahjaUI.Modules.PartyListBar.StatusRowSettings look, StatusGroupKind kind)
     {
         Widgets.Card($"##card_status_{kind}_icons", 8, () =>
         {
@@ -147,20 +147,6 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            var trim = look.Trim;
-            if (UnitFrameEditor.EnumCombo("Trim icon margins", ref trim, NahjaUI.Modules.Trackers.TrackerEditor.TrimLabel))
-            {
-                look.Trim = trim;
-                plugin.RequestSave();
-            }
-
-            var cornerRadius = look.CornerRadiusPx;
-            if (ImGui.SliderInt("Corner rounding (px)", ref cornerRadius, 0, 12))
-            {
-                look.CornerRadiusPx = cornerRadius;
-                plugin.RequestSave();
-            }
-
             var spacing = look.SpacingPx;
             if (ImGui.SliderInt("Space between icons (px)", ref spacing, 0, 20))
             {
@@ -172,7 +158,7 @@ internal sealed class StatusEffectsEditor
 
     // ---------------------------------------------------------------- the time
 
-    private void DrawTimeCard(NahjaUI.Modules.PartyFrames.StatusRowSettings look, StatusGroupKind kind)
+    private void DrawTimeCard(NahjaUI.Modules.PartyListBar.StatusRowSettings look, StatusGroupKind kind)
     {
         Widgets.Card($"##card_status_{kind}_time", 9, () =>
         {
@@ -185,14 +171,14 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.StatusTextControls(look, true))
+            if (HudBarEditor.StatusTextControls(look, true))
                 plugin.RequestSave();
         });
     }
 
     // ---------------------------------------------------------------- the stacks
 
-    private void DrawStacksCard(NahjaUI.Modules.PartyFrames.StatusRowSettings look, StatusGroupKind kind)
+    private void DrawStacksCard(NahjaUI.Modules.PartyListBar.StatusRowSettings look, StatusGroupKind kind)
     {
         Widgets.Card($"##card_status_{kind}_stacks", 7, () =>
         {
@@ -205,7 +191,7 @@ internal sealed class StatusEffectsEditor
                 plugin.RequestSave();
             }
 
-            if (UnitFrameEditor.StatusTextControls(look, false))
+            if (HudBarEditor.StatusTextControls(look, false))
                 plugin.RequestSave();
         });
     }

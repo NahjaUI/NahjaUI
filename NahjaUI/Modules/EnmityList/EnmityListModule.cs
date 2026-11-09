@@ -82,6 +82,7 @@ internal sealed class EnmityListModule : IDisposable
     public void Dispose()
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeLists, OnNativePreDraw);
+        hider.ShowAll();
     }
 
     private static EnemyEntrySnapshot Sample(string name, uint hp, uint maxHp, bool onMe, CastSnapshot? cast) =>
@@ -191,7 +192,7 @@ internal sealed class EnmityListModule : IDisposable
             boxMax = Vector2.Max(boxMax, rowMax);
 
             if (!isSample && enemy.Targetable != 0 && enemy.ActiveInList != 0 && !plugin.Layout.UnlockMode)
-                plugin.UnitFrameSystem.HandleClicks($"enemy.{enemy.Unit.EntityId}", rowPos, size, enemy.Unit, contextMenu: false);
+                plugin.HudBarSystem.HandleClicks($"enemy.{enemy.Unit.EntityId}", rowPos, size, enemy.Unit, contextMenu: false);
         }
 
         Element.DisplayRect = (boxMin, boxMax - boxMin);
@@ -210,7 +211,7 @@ internal sealed class EnmityListModule : IDisposable
         var fadeMark = DrawListFade.Mark(drawList);
 
         var max = pos + size;
-        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), size.Y / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), size.Y / 2f);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
         drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.BackgroundColor), rounding);
@@ -259,7 +260,7 @@ internal sealed class EnmityListModule : IDisposable
         var percentRoom = 0f;
         if (percentText is not null && settings.Hp.Anchor.Fraction().X >= 0.5f)
         {
-            using (var face = plugin.Fonts.PushCap(settings.Hp.Font, settings.Hp.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Hp.TextSize))
                 percentRoom = face.Width(percentText) + MathF.Round(12f * scale);
         }
 
@@ -267,14 +268,14 @@ internal sealed class EnmityListModule : IDisposable
         {
             var nameBoxWidth = MathF.Max(1f, size.X);
             string nameText;
-            using (var face = plugin.Fonts.PushCap(settings.Name.Font, settings.Name.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Name.TextSize))
                 nameText = Fit(face, unit.Name, nameBoxWidth - percentRoom - MathF.Round(4f * scale));
 
-            plugin.UnitFrameSystem.DrawText(drawList, nameText, settings.Name, pos, new Vector2(nameBoxWidth, size.Y));
+            plugin.HudBarSystem.DrawText(drawList, nameText, settings.Name, pos, new Vector2(nameBoxWidth, size.Y));
         }
 
         if (percentText is not null)
-            plugin.UnitFrameSystem.DrawText(drawList, percentText, settings.Hp, pos, size);
+            plugin.HudBarSystem.DrawText(drawList, percentText, settings.Hp, pos, size);
 
         if (showProgressBarNow && unit.Cast is not null && unit.Cast.TotalTime > 0f)
         {
@@ -286,8 +287,8 @@ internal sealed class EnmityListModule : IDisposable
         var playerId = plugin.GameData.Current.Player?.EntityId ?? 0u;
         var sampleRow = unit.EntityId == 0;
         plugin.StatusRows.DrawRows(drawList, settings.Enhancements, settings.Enfeeblements,
-            sampleRow ? Modules.UnitFrames.StatusRowRenderer.PreviewEnhancements : unit.Statuses,
-            sampleRow ? Modules.UnitFrames.StatusRowRenderer.PreviewEnfeeblements : unit.Statuses,
+            sampleRow ? Modules.HudBars.StatusRowRenderer.PreviewEnhancements : unit.Statuses,
+            sampleRow ? Modules.HudBars.StatusRowRenderer.PreviewEnfeeblements : unit.Statuses,
             sampleRow, playerId, pos, size, "enemy", friendly: false);
 
         if (untargetable)
@@ -335,7 +336,7 @@ internal sealed class EnmityListModule : IDisposable
     private void DrawProgressBar(ImDrawListPtr drawList, float scale, EnmityListSettings settings, CastSnapshot cast, float left, float top, float width)
     {
         var height = MathF.Round(settings.ProgressBarHeightPx * scale);
-        var rounding = MathF.Min(MathF.Round(settings.RoundingPx * scale), height / 2f);
+        var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), height / 2f);
         var min = new Vector2(left, top);
         var max = min + new Vector2(width, height);
         var color = cast.Interruptible ? settings.ProgressBarColor : settings.ProgressBarUninterruptibleColor;
@@ -361,21 +362,21 @@ internal sealed class EnmityListModule : IDisposable
         var timeRoom = 0f;
         if (settings.ProgressBarTime.Enabled && settings.ProgressBarTime.Anchor.Fraction().X >= 0.5f)
         {
-            using (var face = plugin.Fonts.PushCap(settings.ProgressBarTime.Font, settings.ProgressBarTime.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarTime.TextSize))
                 timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
         }
 
         if (settings.ProgressBarName.Enabled)
         {
             string name;
-            using (var face = plugin.Fonts.PushCap(settings.ProgressBarName.Font, settings.ProgressBarName.TextSize))
+            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarName.TextSize))
                 name = Fit(face, GameNames.CastName(cast.ActionType, cast.ActionId), width - timeRoom - MathF.Round(8f * scale));
 
-            plugin.UnitFrameSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
         }
 
         if (settings.ProgressBarTime.Enabled)
-            plugin.UnitFrameSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
     }
 
     // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.

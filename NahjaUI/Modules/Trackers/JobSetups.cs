@@ -45,11 +45,10 @@ internal static class JobSetups
         Action<TrackerPresets.Builder, TrackerGroupRuntime> Rotation,
         Action<TrackerPresets.Builder, TrackerGroupRuntime> Cooldowns,
         Action<TrackerPresets.Builder, TrackerGroupRuntime> Defensives,
-        string? LegacyMarker = null,
-        string[]? LegacyGroups = null,
         bool MpBar = false,
         Move[]? Moves = null,
-        string? Stance = null);
+        string? Stance = null,
+        bool Spellbook = false);
 
     // The gauge elements go from the top one to the bottom one.
     private static readonly Dictionary<string, Job> Jobs = new()
@@ -58,7 +57,7 @@ internal static class JobSetups
         ["Warrior"] = new Job(21, "WAR", p => new[] { p.JobGaugeSystem.WarriorElement }, WarriorRotation, WarriorCooldowns, WarriorDefensives, Stance: "Defiance"),
         ["Dark Knight"] = new Job(32, "DRK", p => new[] { p.JobGaugeSystem.DarkBloodElement, p.JobGaugeSystem.DarksideElement }, DarkKnightRotation, DarkKnightCooldowns, DarkKnightDefensives, MpBar: true, Moves: new[] { new Move("Shadowstride", true) }, Stance: "Grit"),
         ["Gunbreaker"] = new Job(37, "GNB", p => new[] { p.JobGaugeSystem.GunbreakerElement }, GunbreakerRotation, GunbreakerCooldowns, GunbreakerDefensives, Moves: new[] { new Move("Trajectory", true) }, Stance: "Royal Guard"),
-        ["White Mage"] = new Job(24, "WHM", p => new[] { p.JobGaugeSystem.LilyElement, p.JobGaugeSystem.BloodLilyElement }, WhiteMageRotation, WhiteMageCooldowns, WhiteMageDefensives, "WHM Healing CDs", new[] { "WHM Rotation", "WHM Healing CDs" }, Moves: new[] { new Move("Aetherial Shift") }),
+        ["White Mage"] = new Job(24, "WHM", p => new[] { p.JobGaugeSystem.LilyElement, p.JobGaugeSystem.BloodLilyElement }, WhiteMageRotation, WhiteMageCooldowns, WhiteMageDefensives, Moves: new[] { new Move("Aetherial Shift") }),
         ["Scholar"] = new Job(28, "SCH", p => new[] { p.JobGaugeSystem.AetherflowElement, p.JobGaugeSystem.FaerieElement }, ScholarRotation, ScholarCooldowns, ScholarDefensives),
         ["Astrologian"] = new Job(33, "AST", p => new[] { p.JobGaugeSystem.CardsElement, p.JobGaugeSystem.CrownElement }, AstrologianRotation, AstrologianCooldowns, AstrologianDefensives),
         ["Sage"] = new Job(40, "SGE", p => new[] { p.JobGaugeSystem.AddersgallElement, p.JobGaugeSystem.AdderstingElement }, SageRotation, SageCooldowns, SageDefensives, Moves: new[] { new Move("Icarus") }),
@@ -75,6 +74,8 @@ internal static class JobSetups
         ["Summoner"] = new Job(27, "SMN", p => p.JobGaugeSystem.ElementsOf("SMN"), SummonerRotation, SummonerCooldowns, SummonerDefensives),
         ["Red Mage"] = new Job(35, "RDM", p => new[] { p.JobGaugeSystem.RedWhiteElement, p.JobGaugeSystem.RedBlackElement, p.JobGaugeSystem.RedStackElement }, RedMageRotation, RedMageCooldowns, RedMageDefensives),
         ["Pictomancer"] = new Job(42, "PCT", p => p.JobGaugeSystem.ElementsOf("PCT"), PictomancerRotation, PictomancerCooldowns, PictomancerDefensives, Moves: new[] { new Move("Smudge") }),
+        // The Blue Mage has no gauge and a spellbook of about 120 spells: only the ones chosen below get a tracker (no safety net).
+        ["Blue Mage"] = new Job(36, "BLU", p => Array.Empty<LayoutElement>(), BlueMageRotation, BlueMageCooldowns, BlueMageDefensives, MpBar: true, Spellbook: true),
     };
 
     // The jobs without defensive abilities have no defensives row.
@@ -93,11 +94,6 @@ internal static class JobSetups
     {
         if (!Jobs.TryGetValue(jobName, out var job))
             return "Unknown job.";
-
-        // A job set up by hand in an older style (marked by one of its groups) is rebuilt.
-        var replaced = 0;
-        if (job.LegacyMarker is not null && job.LegacyGroups is not null && engine.Groups.Any(g => g.Definition.Name == job.LegacyMarker))
-            replaced = job.LegacyGroups.Count(name => RemoveOldGroup(engine, name));
 
         var rotationName = $"{job.Abbreviation} Rotation";
         var cooldownsName = $"{job.Abbreviation} CDs";
@@ -119,7 +115,7 @@ internal static class JobSetups
             var exists = engine.MembersOf(general).Any(a => a.Definition.Name == job.Stance && a.Definition.Load.JobIds.Contains(job.Id));
             if (!exists)
             {
-                builder.Stance(general, job.Stance, job.Stance == "Closed Position" ? NahjaUI.Modules.Filters.DefensiveFilters.DancePartnerId : null);
+                builder.Stance(general, job.Stance);
                 PutInJobOrder(engine, general, job.Id);
             }
         }
@@ -130,7 +126,7 @@ internal static class JobSetups
             if (!engine.MembersOf(general).Any(a => a.Definition.Name == "Jog"))
             {
                 var all = new TrackerPresets.Builder(engine);
-                all.Enhancement(general, "Jog");
+                all.PlainStatus(general, "Jog");
                 all.Finish();
                 builder.Add(all.Count, all.Missing);
 
@@ -149,7 +145,7 @@ internal static class JobSetups
             var exists = engine.MembersOf(general).Any(a => a.Definition.Name == "Peloton" && a.Definition.Load.JobIds.Contains(job.Id));
             if (!exists)
             {
-                builder.Enhancement(general, "Peloton");
+                builder.StatusTracker(general, "Peloton", glow: false); // Peloton never glows
                 PutInJobOrder(engine, general, job.Id);
             }
         }
@@ -190,7 +186,7 @@ internal static class JobSetups
                 foreach (var move in job.Moves)
                 {
                     var stores = known.Any(info => info.Name == move.Name && (info.MaxCharges > 1 || ActionManager.GetMaxCharges(info.Id, 100) > 1));
-                    builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores);
+                    builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: move.Name != "Peloton");
                     PutInJobOrder(engine, general, job.Id);
                 }
             }
@@ -200,7 +196,7 @@ internal static class JobSetups
             // Abilities that share their cooldown (use one and the other recharges too) count as one: a single tracker is enough.
             var trackedGroups = new HashSet<int>(builder.TrackedActions.Select(RecastGroup).Where(group => group >= 0));
 
-            foreach (var info in GameNames.AbilitiesOfJob(job.Id, 100))
+            foreach (var info in job.Spellbook ? Array.Empty<ActionInfo>() : GameNames.AbilitiesOfJob(job.Id, 100))
             {
                 var group = RecastGroup(info.Id);
                 if (info.Id == GameNames.SprintId || builder.TrackedActions.Contains(info.Id) || (group >= 0 && trackedGroups.Contains(group)))
@@ -267,12 +263,12 @@ internal static class JobSetups
 
         // Dark Knight is the one tank that also needs its MP (Edge of Shadow, The Blackest Night).
         if (job.MpBar)
-            plugin.Configuration.UnitFrames.Player.SetMpOn(job.Id, true);
+            plugin.Configuration.HudBars.Player.SetMpOn(job.Id, true);
 
-        var player = plugin.Configuration.UnitFrames.Player;
-        var showsMp = player.ShowMp && player.IsMpOn(job.Id);
+        var player = plugin.Configuration.HudBars.Player;
+        var showsMp = player.IsMpOn(job.Id);
         if (showsMp)
-            column.Add(new Slot(plugin.UnitFrameSystem.MpElement, true, 240, 6));
+            column.Add(new Slot(plugin.HudBarSystem.MpElement, true, 240, 6));
 
         // The global cooldown bar sits between the MP bar (or the gauges) and the progress bar.
         column.Add(new Slot(plugin.ProgressBarSystem.GcdElement, true, 240, 6));
@@ -323,8 +319,6 @@ internal static class JobSetups
             ? $"{jobName} setup applied. The progress bar{(showsMp ? " and the MP bar were" : " was")} moved too."
             : $"{jobName} setup added: {builder.Count} trackers. The progress bar{(showsMp ? " and the MP bar were" : " was")} moved too.";
 
-        if (replaced > 0)
-            report += $" The old {replaced} group(s) of this job were replaced.";
 
         if (added.Count > 0)
             report += $" Also added to the CDs row because the game says they have a cooldown: {string.Join(", ", added)}.";
@@ -444,7 +438,7 @@ internal static class JobSetups
         var group = all.Row("General", 3, true);
         group.Definition.Growth = GroupGrowth.ToLeft;
 
-        var frame = plugin.UnitFrameSystem.PlayerElement.Layout;
+        var frame = plugin.HudBarSystem.PlayerElement.Layout;
         var centered = frame.AttachTo is null && frame.ScreenAnchor == AnchorPoint.Center && frame.SelfAnchor == AnchorPoint.Center;
 
         var layout = group.Element.Layout;
@@ -455,7 +449,7 @@ internal static class JobSetups
         layout.OffsetY = centered ? frame.OffsetY : 190;
 
         all.Cd(group, "Sprint", new[] { "Sprint" }, new[] { "Sprint" });
-        all.Enhancement(group, "Jog");
+        all.PlainStatus(group, "Jog");
         all.Finish();
         report.Add(all.Count, all.Missing);
         return group;
@@ -801,7 +795,7 @@ internal static class JobSetups
         // Dia always up, then Sacred Sight (Glare IV, with its stacks), then what the other cooldowns give and runs out
         // (Divine Grace lets Divine Caress follow Temperance).
         b.Enfeeblement(row, "Dia", "Aero II", "Aero");
-        b.Enhancement(row, "Sacred Sight", stacks: true);
+        b.Enhancement(row, "Sacred Sight", stacks: true, iconAbility: "Glare IV");
         b.Enhancement(row, "Divine Grace");
         b.Enhancement(row, "Freecure");
     }
@@ -816,7 +810,7 @@ internal static class JobSetups
     private static void WhiteMageDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The ones that cover the party (Plenary Indulgence gives the status Confession), then Benediction, then the individual ones.
-        b.Cd(row, "Liturgy of the Bell", new[] { "Liturgy of the Bell" }, new[] { "Liturgy of the Bell" }, effectStacks: true);
+        b.Cd(row, "Liturgy of the Bell", new[] { "Liturgy of the Bell" }, new[] { "Liturgy of the Bell" }, effectStacks: true, abilityIcon: true);
         b.Cd(row, "Temperance", new[] { "Temperance" }, new[] { "Temperance" });
         b.Cd(row, "Asylum", new[] { "Asylum" }, new[] { "Asylum" });
         b.Cd(row, "Plenary Indulgence", new[] { "Plenary Indulgence" }, new[] { "Confession" });
@@ -1346,5 +1340,37 @@ internal static class JobSetups
     {
         // Tempera Grassa shares its cooldown with it and is only its follow-up.
         b.Cd(row, "Tempera Coat", new[] { "Tempera Coat" }, new[] { "Tempera Coat" });
+    }
+
+    // ---- Blue Mage (the spells of the solo build; a spell that is not in the active set never shows)
+
+    private static void BlueMageRotation(TrackerPresets.Builder b, TrackerGroupRuntime row)
+    {
+        // What stays on you while you play: shown only while it is on, no glow (they are on almost all the time).
+        b.StatusTracker(row, "Aetheric Mimicry: Tank");
+        b.StatusTracker(row, "Basic Instinct");
+        b.StatusTracker(row, "Mighty Guard");
+        b.StatusTracker(row, "Devour");
+        b.StatusTracker(row, "Rehydration");
+    }
+
+    private static void BlueMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
+    {
+        // Shown only while the effect is on or the spell recharges. The vibe check first (The Ram's Voice, then Ultravibration), then the rest.
+        b.Spell(row, "The Ram's Voice");
+        b.Spell(row, "Ultravibration");
+        b.Spell(row, "Doom");
+        b.Spell(row, "Peat Pelt");
+        b.Spell(row, "Deep Clean");
+        b.Spell(row, "Mortal Flame");
+        b.Spell(row, "Moon Flute", "Waxing Nocturne");
+        b.Spell(row, "Sea Shanty");
+        b.Spell(row, "Dimensional Shift");
+    }
+
+    private static void BlueMageDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
+    {
+        b.Spell(row, "Dragon Force", "Dragon Force");
+        b.Spell(row, "White Wind");
     }
 }

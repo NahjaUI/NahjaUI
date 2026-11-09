@@ -68,8 +68,8 @@ internal static class ConfigSafety
 }
 
 /// <summary>
-/// Converts settings saved by an older version of the plugin, one step per version number. Small additions that are safe to repeat
-/// (the default filters, for example) use their own flags and do not need a step here.
+/// Converts settings saved by an older version of the plugin, one step per version number. There are no steps yet: the plugin has not
+/// been published. When a public version changes the saved format, raise Configuration.CurrentVersion and add one case here.
 /// </summary>
 internal static class ConfigMigrations
 {
@@ -77,41 +77,8 @@ internal static class ConfigMigrations
     {
         while (config.Version < Configuration.CurrentVersion)
         {
-            switch (config.Version)
-            {
-                case 1:
-                    // 1 -> 2: the starting point of numbered versions. Everything before it was converted by flags inside the settings.
-                    break;
-
-                case 2:
-                    // 2 -> 3: the stance trackers of the tanks and the Closed Position warning of the Dancer are shown only while the status
-                    // is missing (they used to be always there, red when missing).
-                    OnlyWhenMissing(config);
-                    break;
-            }
-
+            // One case per version number goes here, converting the settings of that version to the next one.
             config.Version++;
-        }
-    }
-
-    private static readonly string[] WarningTrackers = { "Iron Will", "Defiance", "Grit", "Royal Guard", "Closed Position" };
-
-    private static void OnlyWhenMissing(Configuration config)
-    {
-        foreach (var tracker in config.Trackers)
-        {
-            if (Array.IndexOf(WarningTrackers, tracker.Name) < 0 || tracker.Rules.Count != 1)
-                continue;
-
-            var rule = tracker.Rules[0];
-            if (rule.Kind != NahjaUI.Modules.Trackers.ConditionKind.StatusAlways
-                || rule.RedWhen != NahjaUI.Modules.Trackers.EffectWhen.StatusMissing
-                || rule.DimWhen != NahjaUI.Modules.Trackers.EffectWhen.StatusMissing)
-                continue;
-
-            rule.Kind = NahjaUI.Modules.Trackers.ConditionKind.StatusMissing;
-            rule.RedWhen = NahjaUI.Modules.Trackers.EffectWhen.Always;
-            rule.DimWhen = NahjaUI.Modules.Trackers.EffectWhen.Always;
         }
     }
 }

@@ -1265,3 +1265,149 @@ Still to do (medium/minor of the audit): separate vs combined "Hide the game's X
 
 ## fontnames
 - Font drop-downs show only NahjaUI Display / Numbers / Text (no Saira in the label). Saira is OFL: credit lives in docs/FONT_LICENSE.txt, which must travel with the plugin.
+
+## prerelease1 - cleanup, safety, renames
+- All development tools removed (Debug page, "/nui debug", Font Lab, AddonDump, ContextMenuCapture, StatusDebugCard, GameWindowList, ReadActionFlags, LimitBreakDebug, [icons] log, OutlineCoverAreas). If a tool is needed again, rewrite it; nothing dev-only stays in the code.
+- Safety: Plugin.Guard() isolates each part of the frame (3 failures in a row => rests 10 s); Dispose runs each part inside Safely(); every module gives back the game windows it hid (NativeWindowHider.ShowAll in Dispose; nameplates now use the hider too); Widgets.Card catches errors of its content.
+- Renames: Unit frames -> "HUD bars" (code HudBar*, folder Modules/HudBars, layout ids hudbar.*), Party frames -> "Party List" (code PartyList*, folder Modules/PartyListBar). Saved settings/layouts/profiles converted by ConfigRename. Delete the old folders Modules/UnitFrames and Modules/PartyFrames.
+
+## markerfix (reverted)
+- Owner wants: "Show the game's icon above the plate" ON = we draw it and the game's is removed; OFF = the game draws its own. That is how it works; do not change it. The test NPC (Tiroro, an event NPC) belongs to the "Others" tab, not "Friendly NPCs" (Friendly = fighting non-hostile characters with HP: pets, chocobo, trust/duty NPCs).
+
+## plate icon defaults
+- Default of the game icon above the plate (every kind): shown (ON), size 72, offsets X 0 and Y 0. Tabs "Friendly NPCs" and "Others" keep their names.
+
+## jog preset
+- Jog tracker (group General, right after Sprint): no text and never glows (the game gives the status when Sprint ends and removes it in combat or on zone change). Builder.PlainStatus.
+
+## plugin listing
+- Dalamud listing text rewritten (NahjaUI.json: punchline, description in FFXIV terms, tags; command help of /nui in Plugin.cs). The manifest file in the owner project must be replaced with this one; add RepoUrl and IconUrl when the GitHub repo exists. images/icon.png must be copied to the output folder (csproj) or the dev plugin shows a "?".
+
+## peloton preset
+- Peloton tracker never glows (both the one in General for jobs without it and the ability tracker of Bard, Machinist and Dancer).
+
+## Blue Mage preset (bluepreset1)
+- New job setup "Blue Mage" (id 36, BLU), no gauge, MP bar on. Built for the solo build (Basic Instinct, Mighty Guard, Devour, Rehydration, vibe check, Doom, Peat Pelt + Deep Clean, Dragon Force, White Wind...).
+- Rotation row: effects on you (Aetheric Mimicry: Tank, Basic Instinct, Mighty Guard, Devour, Rehydration), shown only while on, no glow.
+- CDs / Defensive CDs rows use the new `Builder.Spell(...)`: the icon is shown ONLY while its effect is on or while the spell recharges (global cooldown ignored). A spell that is not in the active set never recharges, so it never appears: no need to read the spellbook.
+- The "safety net" that adds every ability with a cooldown is skipped for the Blue Mage (`Spellbook: true`), or it would add ~120 spells.
+- Status names (Waxing Nocturne, Devour, Rehydration...) come from memory: the preset report lists any name not found in the game data.
+
+## WHM icons (whmicons1)
+- Builder: `Enhancement/StatusTracker(..., iconAbility: "Name")` and `Cd(..., abilityIcon: true)` make the effect rule show the ICON OF AN ABILITY instead of the status icon (rule.Icon = Ability), because the game's status icon can carry its own stack count.
+- WHM: Sacred Sight shows the Glare IV icon; Liturgy of the Bell (its effect) shows the icon of the ability. Author in the csproj is now "Nahja Stark".
+
+## Filters are not for trackers (trackerfilter1, decided with Sandro)
+- A tracker draws ONE icon, so a filter (list of statuses) collapsed to the one that ends first: no count, no way to tell which. The filters stay on the party list, nameplates and the other bars, where each status is its own icon.
+- The "Which: One status / Filter" selector of the tracker editor is now only shown for a trigger that ALREADY uses a filter (the Dancer's partner preset, older setups), so it can be switched to one status. New triggers can no longer pick a filter. The engine still supports `FilterId` (the Dancer's stance needs it).
+- Idea if it is ever wanted: a group that draws one icon per active status of a filter (not built; the party list row already does it for others).
+
+## Filter support removed from the tracker engine (trackerfilter2, decided with Sandro)
+- Removed `TrackerRule.FilterId/UsesFilter`, the filter matching in the engine, the tracker editor selector and the `filterId` of `Builder.Stance`. The filters stay for the party list, nameplates and bars. Do not bring them back to trackers unless Sandro finds a real case.
+- The Dancer's "Closed Position" tracker is a normal one-status tracker: it only loads when playing a Dancer and is shown red and dimmed while the player does NOT have the status (the dance partner was not set), like a tank stance. It does not track anything when not playing a Dancer. It uses the lowest-id status named "Closed Position" (FindStatus), assumed to be the Dancer's own; TO TEST in game with a partner set. Old saved trackers with the filter get that status on load.
+
+## Parameter bar sub-tabs (hudtabs1)
+- HUD bars > Parameter bar now has two sub-tabs: "HP Bar" (general card, name, HP numbers, HP on each job) and "MP Bar" (MP bar, MP numbers, MP on each job). The master "Enabled" stays in the HP Bar tab and its tooltip says it turns the whole Parameter bar on or off.
+- Menu goal set by Sandro: fewer cards per page, easier to navigate. Proposal given in chat (sub-tabs by topic, fold cards by default, group small cards).
+
+## MP bar on for crafters and gatherers (mpcraft1)
+- Default `MpOnJobs` now includes the crafters (8-15) and gatherers (16-18) (CP / GP). `MigrateMpLists` adds them once to setups that already existed (flag `MpCraftersGatherersAdded`); after that the user can turn them off again in "MP bar on each job".
+
+## Shared colors, phase 1 (colors1, decided with Sandro)
+- Decisions: Shield and MP are global; Level and Timer/Stacks are treated as text (global text + "Custom color"); Tooltip description/details: global text + "Custom color".
+- New `GlobalColors` (Core/Ui) saved in `Configuration.Colors` and in the Appearance block of profiles: Background, Border, Text, Shield, Mp. Appearance has a card "Colors of the interface" with a reset. (Cast interruptible / not interruptible and Highlight come with the progress bars, nameplates, enmity list and gauges.)
+- How a place uses it: its settings keep a flag `CustomX` and the getter returns `CustomX ? own : GlobalColors.Current.X`, so the renderers did not change. The saved value is the color in use. The editor control is `HudBarEditor.SharedColor`: a checkbox "Custom ..." and, only when on, the picker; turning it on starts from the color in use.
+- Migration: an `[OnDeserialized]` step (once, marker `SharedColorsMigrated`; a new object is born migrated) turns a color that differs from the old default into a custom one, so tuned colors survive.
+- Done so far: HUD bars (HP bar background/border/shield, MP bar color/background/border, party list MP color and the text color of every HUD bar text). Left: progress bars, nameplates, enmity list, job gauges, tooltip, tracker texts, status row timer/stacks colors.
+
+## Dispel border color (dispel1)
+- The border of the enfeeblements that Esuna and the like can remove is now a light blue (0.62, 0.84, 1.0), between the blue of the game's frame and the white of the Esuna icon (it was gold). `StatusRowSettings.DefaultDispelColor`. Setups saved with the old gold are moved to the new color once; a color the user chose is kept.
+
+## Scholar / Astrologian native gauges (gaugehide1)
+- Sandro saw the game's Aetherflow gauge staying on screen with our Scholar gauge on. The game splits the Scholar and Astrologian gauges in two windows, like the Sage's (GFF0/GFF1), and only the first one (`JobHudSCH0`, `JobHudAST0`) was hidden. Now `JobHudSCH1` and `JobHudAST1` are hidden too, with the same rule (only while our gauge of the job is enabled). Names guessed from the pattern of the other jobs: TO TEST in game; if something still shows, get its window name.
+
+## Role actions under level sync (rolesync1)
+- The tracker engine hid every ability whose level was above the (synced) player level, role actions included. Role actions (Rescue, Swiftcast, Lucid Dreaming, Feint...) stay usable under sync once learned, so they are now exempt (`GameNames.IsRoleAction`, from the game's `IsRoleAction` column). Job abilities keep being hidden when the level is too low. TO TEST: Scholar level 100 synced in a FATE: the Rescue tracker must show.
+
+## Arcanist gauge window and role actions (round 2)
+- The game's Scholar gauge window is `JobHudACN0` (the Arcanist family), not `JobHudSCH0`. It is now hidden for Scholar (when our Scholar gauge is on) and for Summoner (when our Summoner gauge is on). SCH1/AST1 stay as harmless guesses.
+- `GameNames.IsRoleAction` also accepts player actions with no class/job and a level (fallback in case the `IsRoleAction` column does not flag Rescue). Not confirmed in game.
+
+## Corner rounding is global only (owner decision)
+- One slider in Appearance ("Shared style of the interface", `GlobalColors.Rounding`, 0-12). Every bar, frame, gauge, name plate, enmity bar, progress bar, GCD bar and tooltip reads `GlobalColors.Current.Rounding`. There is NO per-element rounding: mixed roundness has no aesthetic sense. ImGui itself limits the rounding to half the height of a small bar.
+- Left out on purpose: the corner radius of tracker icons (`CornerRadiusPx`), because they are small.
+- Nothing compiled or tested.
+
+## Rule: no migration code (owner decision)
+- Do not write code that reads old keys, converts old settings or migrates saved files. The plugin is not public yet; anything that only keeps the owner's current setup is not worth it. Losing a setting and placing it again is fine.
+- Only write compatibility code if it will matter for people who install the public plugin.
+- Older migrations already in the code (shared colors, MP lists, etc.) were written before this rule.
+
+## Cleanup of migrations (done after the rule above)
+- Removed: shared-color and dispel-color markers, Parameter bar and MP list migrations, gauge/progress bar/status row text migrations, name plate legacy style conversion, the whole tracker legacy model (old fields of TrackerDefinition and the engine code that converted them), stack-text normalization, group size migration, defensive filter version steps, JobSetups legacy groups, ConfigRename (and its use in profile import), the steps of ConfigMigrations (the framework stays, empty), main window page redirect.
+- Kept on purpose (real features): ConfigSafety.BeforeUpdate (copy of the file before an update), ConfigMigrations framework, profile import version check, "Use the NahjaUI font everywhere" button (now edits the fonts of the trigger texts, progress bars and gauges).
+- Files to delete by hand in Visual Studio (this tool cannot delete): `Core\Ui\RoundingControl.cs` and `Core\Profiles\ConfigRename.cs`.
+- Old saved files lose what only the old code understood; that is accepted.
+
+## Trackers: General card removed
+- The "General" card of the tracker editor is gone. A tracker is turned on/off by double click on its row in the explorer or from the right-click menu (Enable/Disable). The right-click menu has a new "Edit name" entry that opens a small name box (the name stays automatic otherwise).
+- Idea in discussion: an "Advanced" mode that hides niche options by default (inventory of menus first, then a helper that marks controls as advanced). Not started.
+- Nothing compiled or tested.
+
+## Ability conditions renamed, new "On cooldown with charges left"
+- Labels of the "When" combo for ability triggers: "Highlighted by the game" (was It is activated), "On cooldown" (was It is recharging: no charge left), "Off cooldown" (was It is ready: at least one charge), "Always (on or off cooldown)".
+- New `ConditionKind.AbilityOnCooldownWithCharges` (appended at the end of the enum so saved values do not shift): matches while an ability with several charges has one recharging and at least one still usable. It overlaps with "Off cooldown" on purpose (a trigger list is tried in order). Its phase counts as Cooling for the effects.
+- Nothing compiled or tested.
+
+## Trackers trigger refactor (supersedes the section above)
+- `ConditionKind` now: StatusPresent, StatusMissing, AbilityHighlighted ("When the game highlights it"), AbilityOnCooldown, AbilityOffCooldown, AbilityFull, AbilityNotFull. Removed: AbilityAlways, StatusAlways, AbilityOnCooldownWithCharges. "Always" is built by combining triggers (the order decides).
+- Enum values are not kept for old saves (no-migration rule). `EffectWhen` is gone: `TrackerRule` has plain bools `Glow`, `Red`, `Dim`, applied whenever the trigger matches. `IgnoreGlobalCooldown` is gone: a single-charge ability whose total cooldown is within the global cooldown always counts as off cooldown.
+- Engine: OnCooldown = no charge left; OffCooldown = at least one charge; Full = all charges; NotFull = some charge recharging (multi-charge only). Phase is Cooling while something recharges, so sweep and time show.
+- Editor: "Full" and "Not full" are hidden when the game says the ability has one charge (the saved value stays visible). New ability trigger defaults to Off cooldown.
+- Presets: per ability version (newest first): [Highlighted + Glow, only if glow], [On cooldown + Dim], [Off cooldown]; each with time text (+ stacks when it has charges). Upkeep with one name = present + missing (red and dim). Blue Mage `Spell` = On cooldown + Dim.
+- Nothing compiled or tested.
+
+## Icon trim is always on
+- Removed the "Trim icon margins" option everywhere (trackers, hud bar status rows, status effects, party list setting). Removed `IconTrim`, `TrackerDefinition.Trim` and `TrimLabel`. The empty margins of the game's icons are always cut (`IconMargins.Get` straight into `IconUv`). Nothing compiled or tested.
+
+## Fixed accent color and window rounding
+- Removed the user options "Accent color" and "Window corner rounding", and the "Reset appearance" button. `Theme.Accent` is now a fixed readonly color (violet 139,124,255) and `Theme.WindowRounding` a constant (6). Removed `Configuration.AccentColor/WindowRoundingPx` and their entries in profile export/import. Nothing compiled or tested.
+
+## Icon corner rounding is global
+- Removed `CornerRadiusPx` (and its sliders) from trackers, tracker group template, status rows of the HUD bars, Status Effects and the party list. Icons use `GlobalColors.Current.Rounding`, capped at half of the shorter side. Nothing compiled or tested.
+
+## Appearance page reorganised
+- Theme card: Menu text size, "Show NahjaUI in the server info bar", and the buttons "Reset window" + "Use the NahjaUI font everywhere".
+- "Shared style of the interface" card now holds: Background, Border, Text, Shield, MP, Target ring color, Corner rounding and the Role colors (tank, healer, damage, crafter, gatherer). No "Reset shared style" and no "Reset role colors" buttons: every color uses `Widgets.ColorSetting` (swatch + own picker popup with a "Reset" button that restores the original color). Removed `GlobalColors.Reset` and `DrawRoleColorsCard` (now `DrawRoleColors`, content only).
+- Removed options: "Timer tenths below" (fixed `TrackerEngine.DecimalsBelowSeconds = 3`) and "Game windows over the interface" (always on). Removed `Configuration.TimerDecimalsBelowSeconds/GameWindowsOnTop`.
+- Streamer mode now lives in a small "Privacy" card. The "Game interface" and "Server info bar" cards are gone.
+- `ColorSetting` uses `ImGui.ColorButton` + `ColorPicker4`: if the bindings differ in signature, fix there. Nothing compiled or tested.
+
+## Timers without tenths, stronger shield yellow, streamer mode in Theme
+- Timers never show tenths any more: removed `DecimalsBelowSeconds` and the decimal branch of `FormatTime` (whole seconds rounded up, minutes from 60 s).
+- `GlobalColors.DefaultShield` is now (1.0, 0.85, 0.25) (was a pale 0.96, 0.91, 0.66). Saved shield colors keep their value.
+- Streamer mode moved to the Theme card; the "Privacy" card is gone. Nothing compiled or tested.
+
+## One font family, no font choice
+- The interface only uses the three NahjaUI fonts, fixed by the kind of text: **Display** (Saira Condensed SemiBold) for names, HP texts and progress bar / cast texts (frames, party, nameplates, enmity list, progress bars); **Numbers** (Saira Condensed Bold) for the timers and stacks of trackers and of the status icon rows, and for the text of job gauges; **Text** (Saira Regular) for menus, tooltips and labels.
+- Removed every font selector (frame texts, job gauge texts, nameplate name, progress bars, trackers, status rows) and every saved font field (`FrameTextSettings.Font`, `NamePlateStyle.NameFont`, `StatusRowSettings.Font/StacksFont`, `TrackerTextDefinition.Font`). Only the size stays configurable. `HudBarModule.DrawText` takes an optional `font` (default Display); job gauges pass Numbers.
+- `OverlayFont` enum now has only NahjaDisplay, NahjaDisplayBold and NahjaText (game fonts Meidinger, Axis and Trump Gothic removed). Removed the "Use the NahjaUI font everywhere" button and `Plugin.UseNahjaFontEverywhere`. The enmity list now uses Display like the other frames.
+- Decision: no custom font option, ever (for now). Nothing compiled or tested.
+
+## HP bar master checkbox removed
+- Removed "Show the HP bar" from the "HP bar on each job" card and `HudBarSettings.ShowHp`: the per-job toggles are enough (all jobs off hides the bar). The player's HP bar shows when the frame is enabled and the job is on. Nothing compiled or tested.
+
+## HUD bar colors are global, fewer switches
+- New global colors in `GlobalColors` (Appearance, "Shared style of the interface"): `FriendlyNpc`, `EnemyHp`, `PetMinion`, `ObjectColor`, `TimerText`, `StacksText` (each with a Reset in its picker). Removed `FriendlyColor/HostileColor/PetColor/ObjectColor` from every HUD bar (player, target, target of target, focus, party look) and `TimerColor/StacksColor` from the icon rows (now read-only properties of `StatusRowSettings` that return the global ones, `[JsonIgnore]`).
+- HUD bars: removed all "Custom" color options (background, border, shield, MP, MP background, MP border) and their fields; `BackgroundColor/BorderColor/ShieldColor/MpColor/MpBackgroundColor/MpBorderColor` are read-only and come from `GlobalColors.Current`. The "Custom color" of texts (`FrameTextSettings.CustomColor`) is still there (shared with gauges, progress bars and enmity list).
+- Removed `ShowShield` (shields always drawn, also on target of target / focus / party) and `ShowMp` (the MP bar of the player depends only on the per-job list) with their checkboxes. Removed the MP color picker of the party options.
+- Nothing compiled or tested.
+
+## Tester release setup (repo.json)
+- GitHub repo: https://github.com/NahjaUI/NahjaUI (branch master). Custom repository URL for Dalamud: `https://raw.githubusercontent.com/NahjaUI/NahjaUI/master/repo.json`.
+- `repo.json` (repo root) lists the plugin; downloads point to `releases/latest/download/latest.zip`. `.github/workflows/release.yml`: pushing a tag `vX.Y.Z.W` builds Release, creates a GitHub release with `latest.zip` (made by DalamudPackager) and updates `AssemblyVersion` and `LastUpdate` in repo.json, committing to master. `DalamudApiLevel` in repo.json is 15 (matches Dalamud.NET.Sdk 15): check it against the NahjaUI.json inside the first latest.zip.
+- csproj: Version 0.1.0.0, RepoUrl, IconUrl, and docs/FONT_LICENSE.txt copied next to the dll (so it travels in the zip). `pr-build.yml` is still the unedited SamplePlugin template (wrong names): fix or delete. The stale files listed earlier were already deleted by the owner (checked).
+- Nothing built or published yet.
+
+## README
+- `README.md` written at the repo root (English): what it is, install through the custom repository, first steps (`/nui`, `/nui unlock`, trackers presets), how to report (GitHub issues), build, credits (AGPL v3 per LICENSE.md, Saira OFL, Square Enix disclaimer). Discord is not mentioned until it exists.

@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
-using NahjaUI.Modules.UnitFrames;
+using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.ProgressBars;
 
@@ -25,26 +25,15 @@ public class ProgressBarSettings
     /// <summary>The icon of the action, inside the bar at its left.</summary>
     public bool ShowIcon { get; set; } = true;
 
-    public bool ShowName { get; set; } = true;
-
-    public bool ShowTime { get; set; } = true;
-
     public ProgressBarTimeMode TimeMode { get; set; } = ProgressBarTimeMode.Remaining;
 
-    /// <summary>Font size of the name and the time, in pixels (a fixed step, see OverlayFonts.AvailableSizes).</summary>
-    public int TextSize { get; set; } = 10;
-
-    public OverlayFont Font { get; set; } = OverlayFont.NahjaDisplay;
-
     // The action name and the time left, each with its own place, size, font and color (same controls as every other text).
-    // ShowName, ShowTime, TextSize and Font above are the old single settings, only read once to fill these two.
     public FrameTextSettings Name { get; set; } = new()
     {
         Anchor = AnchorPoint.Left,
         OffsetX = 6,
         OffsetY = 0,
-        TextSize = 10,
-        Font = OverlayFont.NahjaDisplay
+        TextSize = 10
     };
 
     public FrameTextSettings Time { get; set; } = new()
@@ -52,29 +41,8 @@ public class ProgressBarSettings
         Anchor = AnchorPoint.Right,
         OffsetX = -6,
         OffsetY = 0,
-        TextSize = 10,
-        Font = OverlayFont.NahjaDisplay
+        TextSize = 10
     };
-
-    public bool TextsMigrated { get; set; }
-
-    /// <summary>Fills Name and Time from the old settings, once.</summary>
-    public void EnsureTexts()
-    {
-        if (TextsMigrated)
-            return;
-
-        Name.Enabled = ShowName;
-        Time.Enabled = ShowTime;
-        Name.TextSize = TextSize;
-        Time.TextSize = TextSize;
-        Name.Font = Font;
-        Time.Font = Font;
-        TextsMigrated = true;
-    }
-
-    /// <summary>Corner rounding of the bar, in logical pixels (0 = square corners).</summary>
-    public int RoundingPx { get; set; } = 6;
 
     public Vector4 BarColor { get; set; }
 
@@ -129,7 +97,7 @@ public class GcdBarSettings
     /// <summary>How long before the end an ability would already delay the next action (the animation lock, about 700 ms).</summary>
     public int WeaveMs { get; set; } = 700;
 
-    public int RoundingPx { get; set; } = 6;
+
 
     public Vector4 BarColor { get; set; } = new(0.85f, 0.85f, 0.92f, 1f);
     public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;

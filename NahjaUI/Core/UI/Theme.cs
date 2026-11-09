@@ -11,7 +11,11 @@ namespace NahjaUI.Core.Ui;
 /// </summary>
 internal static class Theme
 {
-    public static readonly Vector4 DefaultAccent = Rgb(139, 124, 255);
+    /// <summary>The accent colour of the interface (violet). It is fixed: it is the identity of NahjaUI.</summary>
+    public static readonly Vector4 Accent = Rgb(139, 124, 255);
+
+    /// <summary>Corner rounding of the NahjaUI windows, in logical pixels.</summary>
+    public const int WindowRounding = 6;
 
     public static readonly Vector4 Background = Rgb(16, 18, 30);
     public static readonly Vector4 Sidebar = Rgb(21, 24, 40);
@@ -19,10 +23,10 @@ internal static class Theme
     public static readonly Vector4 Field = Rgb(40, 45, 72);
     public static readonly Vector4 Border = Rgb(58, 64, 100);
 
-    // Colors shared by every bar of the interface (unit frames, gauges, progress bars, plates, enmity list), so they all look alike.
+    // Colors shared by every bar of the interface (HUD bars, gauges, progress bars, plates, enmity list), so they all look alike.
     public static readonly Vector4 BarBackground = new(0.05f, 0.06f, 0.10f, 0.90f);
     public static readonly Vector4 BarBorder = new(0f, 0f, 0f, 1f);
-    public static readonly Vector4 Gold = new(1f, 0.82f, 0.30f, 1f);   // marks, glows, "ready" frames, levels, dispels
+    public static readonly Vector4 Gold = new(1f, 0.82f, 0.30f, 1f);   // marks, glows, "ready" frames, levels
     public static readonly Vector4 ProgressBarViolet = new(0.55f, 0.49f, 1f, 1f);   // yours, and any action that cannot be interrupted
     public static readonly Vector4 ProgressBarRed = new(0.92f, 0.36f, 0.36f, 1f);   // what enemies and your target cast
 
@@ -35,9 +39,6 @@ internal static class Theme
     public static readonly Vector4 Warning = Rgb(232, 166, 52);
     public static readonly Vector4 Success = Rgb(102, 204, 128);
     public static readonly Vector4 Error = Rgb(230, 90, 90);
-
-    // The current accent. ThemeScope updates it from the configuration every frame.
-    public static Vector4 Accent { get; internal set; } = DefaultAccent;
 
     public static Vector4 Rgb(int r, int g, int b, float a = 1f) => new(r / 255f, g / 255f, b / 255f, a);
 
@@ -64,8 +65,7 @@ internal sealed class ThemeScope : IDisposable
 
         // Logical pixels: the fonts are already built for the UI scale.
         fontScope = OverlayFonts.Current?.PushClosest(OverlayFont.NahjaText, config.MenuTextSize);
-        var accent = config.AccentColor;
-        Theme.Accent = accent;
+        var accent = Theme.Accent;
 
         var accentHover = Theme.Mix(accent, Vector4.One, 0.15f);
 
@@ -118,7 +118,7 @@ internal sealed class ThemeScope : IDisposable
         PushColor(ImGuiCol.ResizeGripActive, Theme.WithAlpha(accent, 0.90f));
 
         // Shape: rounded everywhere, generous spacing. All pixel values scale with the user's UI scale.
-        PushVar(ImGuiStyleVar.WindowRounding, Math.Clamp(config.WindowRoundingPx, 0, 30) * scale);
+        PushVar(ImGuiStyleVar.WindowRounding, Theme.WindowRounding * scale);
         PushVar(ImGuiStyleVar.ChildRounding, 8f * scale);
         PushVar(ImGuiStyleVar.FrameRounding, 6f * scale);
         PushVar(ImGuiStyleVar.GrabRounding, 6f * scale);

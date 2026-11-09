@@ -67,6 +67,9 @@ internal static class Widgets
         ImGui.Spacing();
     }
 
+    // The cards that already failed once (the error is written to the log only the first time).
+    private static readonly System.Collections.Generic.HashSet<string> FailedCards = new();
+
     // The shared box: a bordered child window with no scrolling, sized from the last measurement.
     private static void DrawBox(string id, float estimate, Action content, bool foldable = false)
     {
@@ -88,7 +91,20 @@ internal static class Widgets
             {
                 currentCard = foldable ? id : null;
                 currentTitleDrawn = false;
-                content();
+
+                // A card that fails shows a short message instead of taking the whole page (and the game's frame) down.
+                try
+                {
+                    content();
+                }
+                catch (Exception ex)
+                {
+                    if (FailedCards.Add(id))
+                        Plugin.Log.Error(ex, "NahjaUI: the card {Id} failed.", id);
+
+                    ImGui.TextColored(Theme.Error, "This card could not be drawn.");
+                }
+
                 currentCard = null;
 
                 if (clipPushed)
@@ -105,6 +121,45 @@ internal static class Widgets
         // Remember it for the next frame (only real changes, so the height never jitters).
         if (!folded && measured > 0f && MathF.Abs(measured - height) >= 1f)
             MeasuredHeights[id] = measured;
+    }
+
+    /// <summary>
+    /// A color setting: the swatch opens the picker, and the picker has a "Reset" button that brings back the original color.
+    /// Returns true when the color changed.
+    /// </summary>
+    public static bool ColorSetting(string label, ref Vector4 value, Vector4 original, bool alpha = false)
+    {
+        var changed = false;
+        var flags = alpha ? ImGuiColorEditFlags.AlphaBar : ImGuiColorEditFlags.NoAlpha;
+        var popupId = "##picker_" + label;
+        var side = ImGui.GetFrameHeight();
+
+        if (ImGui.ColorButton("##swatch_" + label, value, alpha ? ImGuiColorEditFlags.None : ImGuiColorEditFlags.NoAlpha, new Vector2(side, side)))
+            ImGui.OpenPopup(popupId);
+
+        ImGui.SameLine();
+        ImGui.TextUnformatted(label);
+
+        if (ImGui.BeginPopup(popupId))
+        {
+            if (ImGui.ColorPicker4("##picker", ref value, flags))
+            {
+                if (!alpha)
+                    value = new Vector4(value.X, value.Y, value.Z, 1f);
+
+                changed = true;
+            }
+
+            if (ImGui.Button("Reset"))
+            {
+                value = original;
+                changed = true;
+            }
+
+            ImGui.EndPopup();
+        }
+
+        return changed;
     }
 
     /// <summary>The main action of a page: filled with the accent colour.</summary>
