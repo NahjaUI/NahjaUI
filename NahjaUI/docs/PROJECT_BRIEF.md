@@ -3,12 +3,12 @@
 Paste this at the start of every AI session. Last updated: 2026-10-26.
 Full specification (Spanish): https://claude.ai/artifact/V7JzhmVTNhnXd3v3zKFRCN
 
-## How to work with the owner
+## Working rules
 
-- Owner: Sandro. Not a programmer. Speaks Spanish: explain in simple Spanish. Code, comments and UI text are in English.
+- Code, comments and UI text are in English.
 - Give COMPLETE files ready to paste (not diffs or fragments) and say exactly where each file goes.
 - One small change at a time. After each change: build, test in game, git commit.
-- Never invent Dalamud or ImGui API names. If unsure, say so and ask Sandro to paste the relevant template code or compiler error.
+- Never invent Dalamud or ImGui API names. If unsure, say so and ask for the relevant template code or compiler error.
 - When the build fails, ask for the exact compiler message and fix only that.
 
 ## What we are building
@@ -166,7 +166,7 @@ Nameplates step 1 (DONE and tested in game 2026-10-26): the Nameplates page (Ena
 - Save configuration debounced (never every frame).
 - Wrap each module and tracker update in try/catch; log through `Plugin.Log`.
 - Prefer small classes with one job. Comment the "why", not the "what".
-- No new libraries without asking Sandro.
+- No new libraries without asking.
 
 ## Milestones and status
 
@@ -403,12 +403,12 @@ New frames start from this list; check it when touching an old one.
 - Option `HideGameTargetArrow` (test, off by default): hides the addon "_TargetCursor" in PreDraw like the other native windows. The class `AddonTargetCursor` exists in the clones but the addon name string is from memory and NOT confirmed: if the arrow stays visible, the name or the idea (maybe it is not this addon) is wrong.
 - Step 2 (not done): our own subtler marker for the target (arrows at the sides of the plate, or similar). The game has no option for the arrow, so a checkbox of ours is acceptable here.
 
-## Nameplates: target rules (agreed with Sandro)
+## Nameplates: target rules (agreed with Nahja)
 - `ShowBarOnTarget` (default on): the target's plate always draws the life bar, even when the game's options would show only the name or nothing. Deliberate exception to "follow the game": it is a visible checkbox of ours. The name still follows the game's flags. Applies to what we draw (enemies, players when enabled).
 - The target is marked by the accent ring around the bar (replaces the game's big arrow, `HideGameTargetArrow`, now a normal option; "_TargetCursor" works, confirmed).
 - PLAN (next phase, not done): things WITHOUT a life bar (NPCs, doors, pets, objects) need text-only plates of ours; the target among them is marked with chevrons `‹ Name ›` pointing inward, in the accent color (U+2039/U+203A are inside the font ranges). Until that phase exists, hiding the game's arrow leaves those targets without any mark: keep the option off if that bothers.
 
-## Nameplates: options removed (decided with Sandro)
+## Nameplates: options removed (decided with Nahja)
 - Removed: intro line of the page; "Follow the game's options" (now fixed behavior); "Click on a plate to target" and every click window over plates (invisible windows over many plates stole the mouse focus and broke camera turning with the held mouse; they stay on player/target/party frames); "Smaller plates when far"; "Hide the game's target arrow" (now always hidden while nameplates are Enabled); the whole Players card (Draw players / Me / Party / Other players: when Nameplates are enabled, they are for every unit; whoever wants the game's plates elsewhere turns ours off).
 - Kept: Enabled, "Always show the life bar of my target", and the flags/colors test line (still useful until the text-only plates phase; remove then).
 - Old saved settings with the removed names are ignored by the loader.
@@ -425,9 +425,9 @@ New frames start from this list; check it when touching an old one.
 - TO VERIFY: if some NPC/object does have a real small icon in the game, it will be missing now (the test line still prints `icon N` for every plate).
 
 ## Nameplates: marker anchored to the name
-- The game's big marker (quest marks...) now sits centered over the NAME BLOCK (title included) and on top of it; when the name is not drawn it falls back to the bar. No selectable anchor (a marker has one natural place): only size and offset X/Y (Y measured from the top of the name block; editor Y up, saved downward). Default Y is now 2 px (saved -2); Sandro will give the final value to use as the default for fresh installs.
+- The game's big marker (quest marks...) now sits centered over the NAME BLOCK (title included) and on top of it; when the name is not drawn it falls back to the bar. No selectable anchor (a marker has one natural place): only size and offset X/Y (Y measured from the top of the name block; editor Y up, saved downward). Default Y is now 2 px (saved -2); Nahja will give the final value to use as the default for fresh installs.
 
-- Final default for the marker Y: editor value -6 (saved +6: the icon's bottom edge 6 px below the top of the name block), tested by Sandro. -22 in the editor sat too low and covered the name.
+- Final default for the marker Y: editor value -6 (saved +6: the icon's bottom edge 6 px below the top of the name block), tested by Nahja. -22 in the editor sat too low and covered the name.
 
 ## Nameplates: the name line is centered with its icon
 - The small icon (and the level) are part of the name line: the width used to center/align the block is icon + gap + name + level, so the whole line is centered over the bar (before, only the text was and the icon hung to the left, which looked off-center). The title is aligned inside the same block.
@@ -435,7 +435,7 @@ New frames start from this list; check it when touching an old one.
 ## Enmity list: untargetable enemies are drawn half transparent
 - Values read in game (Susano trial): a normal enemy shows act 1, lock 0, tgt 1 (whether targeted or not); when the enemy cannot be targeted (the game fades its row to ~50%) all three go to 0. `tgt` (IGameObject.IsTargetable) is the signal we use.
 - Rows with `Targetable == 0` are drawn with 50% alpha (`UntargetableAlpha`) and are not clickable. Done with `Core/Ui/DrawListFade`: it multiplies the alpha of the vertices drawn since a mark (works for bar, border, texts and cast together). No option: we follow the game.
-- The meaning of `act`/`lock` is still unknown (not needed). The "show the game's values" and "keep the game's list visible" test options can go when Sandro confirms the dimming.
+- The meaning of `act`/`lock` is still unknown (not needed). The "show the game's values" and "keep the game's list visible" test options can go when Nahja confirms the dimming.
 - TO VERIFY IN GAME: the row really fades during the closed phase and returns to normal when it can be targeted again; no flicker.
 
 - Enmity list: the enmity dot has its own size (diameter in px, default 12; before it was 22% of the bar height, about 8 px, too small). Fix: `DrawListFade.cs` was missing `using System;` (MathF).
@@ -453,17 +453,17 @@ New frames start from this list; check it when touching an old one.
 ## Enmity list: out of range fade
 - Seen in game (Fire Sprite far away): `act 0 lock 0 tgt 1`; the game fades the row a little, it is still clickable but cannot be selected because of the distance. So `act` (ActiveInList) very probably means "in range / selectable". Rows with `act 0` and `tgt 1` are drawn at 70% (`OutOfRangeAlpha`, an ESTIMATE of the game's lighter fade) and stay clickable; `tgt 0` stays at 50% and not clickable.
 - TO VERIFY: that `act` flips with the distance (walk in and out of range), and tune 0.7 against the game's own row.
-- Correction (Sandro): an out-of-range row (`act 0`, `tgt 1`) is NOT clickable in the game; only its hover glow shows. An untargetable row (`tgt 0`) shows neither glow nor click. So our rows are not clickable when `act 0` or `tgt 0`. We have no hover glow on the rows (the game's glow on targetable rows is not copied yet).
+- Correction (Nahja): an out-of-range row (`act 0`, `tgt 1`) is NOT clickable in the game; only its hover glow shows. An untargetable row (`tgt 0`) shows neither glow nor click. So our rows are not clickable when `act 0` or `tgt 0`. We have no hover glow on the rows (the game's glow on targetable rows is not copied yet).
 
 ## Clicks: no right click menu where the game has none; target of target can be name only
 - The game's right click menu is opened only on frames where the game has one (player, target, focus, party). The enmity list rows and the target of target now only react to the LEFT click (select). `HandleClicks(..., contextMenu)` has the new parameter (default true). The enmity list checkbox is now "Click on a bar to target".
-- The target of target in the game does have a life bar and can be selected with the left click (checked by Sandro): it keeps its bar by default. New option `UnitFrameSettings.ShowFrame` (only used by the target of target page, "Show the life bar (off: only the name)"): off hides background, life, shield, border and the life number; the name stays at its place and the box is still the click area. Name color etc. unchanged for now.
+- The target of target in the game does have a life bar and can be selected with the left click (checked by Nahja): it keeps its bar by default. New option `UnitFrameSettings.ShowFrame` (only used by the target of target page, "Show the life bar (off: only the name)"): off hides background, life, shield, border and the life number; the name stays at its place and the box is still the click area. Name color etc. unchanged for now.
 - Also: those boxes are not covered/hidden by our drawing when the game's menu is open because the enmity list and target of target no longer open any menu.
 
 ## Terminology and foldable cards
 - CODE NAMES FOLLOW THE GAME TOO (decision of the user, old saved configs/profiles may be lost, accepted): everything in code, ids and saved keys now uses the game's words: Enhancement/Enfeeblement (not Buff/Debuff), Hp (not Life), Mp (not Mana): `Enhancements`, `Enfeeblements`, `PlayerEnhancements`, `isEnhancement`, `HpColor`, `ShowHp`, `MpElement`, `"unitframe.player.mp"`, card ids `##card_pf_enhancements`, `##card_np_hp`... Exceptions that are NOT ours and must keep their name: game addon `_TargetInfoBuffDebuff`, `VtxBuffer`/`buffer`, `AddonLifecycle`, `...Manager` classes. WRITE ALL NEW CODE WITH THESE WORDS. The rules below that say "code names stay" are superseded by this line.
 - TERMINOLOGY RULE: in everything the player reads, the life of a unit is called HP (the game's own word), never "life" or "health". Code names (LifeColor, ShowLife, card ids like `##card_np_life`) stay as they are; card ids must NOT change (the folded state is saved by id).
-- Interface words (agreed with Sandro): the list on the left of the main window is the MENU (sidebar), the row at the top of a page (e.g. Parameter bar / Target / Target of target / Focus / Party / Class colors) are TABS, and each box inside a tab is a CARD.
+- Interface words (agreed with Nahja): the list on the left of the main window is the MENU (sidebar), the row at the top of a page (e.g. Parameter bar / Target / Target of target / Focus / Party / Class colors) are TABS, and each box inside a tab is a CARD.
 - FOLDABLE CARDS: the first `Widgets.SectionLabel` of a card is its header; clicking it (a small triangle at the right: down = open, pointing left = folded) folds the card down to its title. Implementation in `Widgets.DrawBox`: the card box is shrunk to the header height and its content is still run but clipped by the box (nothing below can be seen or clicked); the full height is still measured only while open. The folded ids are saved in `Configuration.CollapsedCards` (loaded into `Widgets.Collapsed` in the plugin constructor; `Widgets.CollapsedChanged` saves). Callouts and boxes without a SectionLabel are not foldable. Everything starts OPEN. Idea for later: fold the long cards by default for new users.
 - TO VERIFY IN GAME: the click on the header folds/opens, the next cards move up with no jitter, nothing below a folded title can be clicked, and the state survives a restart.
 
@@ -527,7 +527,7 @@ Sources: the official UI guide (na.finalfantasyxiv.com/uiguide: "battle buff sep
 ## Text anchors: vertical centre on the anchor line (decision, texts and enmity dot only)
 - Horizontal: the same point of the text and of the box meet (left-left, centre-centre, right-right). Vertical: the CENTRE of the letters sits on the anchor line (top edge, middle or bottom edge of the bar). So Top left = text centred on the top edge, Bottom left = on the bottom edge; no overlap between them even on a 6 px bar.
 - Applies to unit frame texts (also used by the enmity list), tracker timers/stacks, the nameplate name block and the enmity dot. NOT to the Layout (ScreenAnchor/SelfAnchor stay corner to corner). Saved offsets of Top/Bottom texts now look different.
-- Fix (cap ratio), TESTED by Sandro: the ratio letter height / font size is measured with `ImFontPtr.FontSize` (size the font was built at), not `ImGui.GetFontSize()`. Before, letters came out about twice too big; with the fix they are the real size. Do not revert.
+- Fix (cap ratio), TESTED by Nahja: the ratio letter height / font size is measured with `ImFontPtr.FontSize` (size the font was built at), not `ImGui.GetFontSize()`. Before, letters came out about twice too big; with the fix they are the real size. Do not revert.
 
 ## MP text
 - The MP bar of the Parameter bar has a text with exactly the same choices as the HP text (what it says, separator, decimals, thousands, position, size, font, color): `MpTextSettings` (Off by default, default says "738K" style current value). One shared card `DrawValueText` and one shared formatter (`IValueTextFormat`) for HP and MP.
@@ -1297,23 +1297,23 @@ Still to do (medium/minor of the audit): separate vs combined "Hide the game's X
 - Builder: `Enhancement/StatusTracker(..., iconAbility: "Name")` and `Cd(..., abilityIcon: true)` make the effect rule show the ICON OF AN ABILITY instead of the status icon (rule.Icon = Ability), because the game's status icon can carry its own stack count.
 - WHM: Sacred Sight shows the Glare IV icon; Liturgy of the Bell (its effect) shows the icon of the ability. Author in the csproj is now "Nahja Stark".
 
-## Filters are not for trackers (trackerfilter1, decided with Sandro)
+## Filters are not for trackers (trackerfilter1, decided with Nahja)
 - A tracker draws ONE icon, so a filter (list of statuses) collapsed to the one that ends first: no count, no way to tell which. The filters stay on the party list, nameplates and the other bars, where each status is its own icon.
 - The "Which: One status / Filter" selector of the tracker editor is now only shown for a trigger that ALREADY uses a filter (the Dancer's partner preset, older setups), so it can be switched to one status. New triggers can no longer pick a filter. The engine still supports `FilterId` (the Dancer's stance needs it).
 - Idea if it is ever wanted: a group that draws one icon per active status of a filter (not built; the party list row already does it for others).
 
-## Filter support removed from the tracker engine (trackerfilter2, decided with Sandro)
-- Removed `TrackerRule.FilterId/UsesFilter`, the filter matching in the engine, the tracker editor selector and the `filterId` of `Builder.Stance`. The filters stay for the party list, nameplates and bars. Do not bring them back to trackers unless Sandro finds a real case.
+## Filter support removed from the tracker engine (trackerfilter2, decided with Nahja)
+- Removed `TrackerRule.FilterId/UsesFilter`, the filter matching in the engine, the tracker editor selector and the `filterId` of `Builder.Stance`. The filters stay for the party list, nameplates and bars. Do not bring them back to trackers unless Nahja finds a real case.
 - The Dancer's "Closed Position" tracker is a normal one-status tracker: it only loads when playing a Dancer and is shown red and dimmed while the player does NOT have the status (the dance partner was not set), like a tank stance. It does not track anything when not playing a Dancer. It uses the lowest-id status named "Closed Position" (FindStatus), assumed to be the Dancer's own; TO TEST in game with a partner set. Old saved trackers with the filter get that status on load.
 
 ## Parameter bar sub-tabs (hudtabs1)
 - HUD bars > Parameter bar now has two sub-tabs: "HP Bar" (general card, name, HP numbers, HP on each job) and "MP Bar" (MP bar, MP numbers, MP on each job). The master "Enabled" stays in the HP Bar tab and its tooltip says it turns the whole Parameter bar on or off.
-- Menu goal set by Sandro: fewer cards per page, easier to navigate. Proposal given in chat (sub-tabs by topic, fold cards by default, group small cards).
+- Menu goal set by Nahja: fewer cards per page, easier to navigate. Proposal given in chat (sub-tabs by topic, fold cards by default, group small cards).
 
 ## MP bar on for crafters and gatherers (mpcraft1)
 - Default `MpOnJobs` now includes the crafters (8-15) and gatherers (16-18) (CP / GP). `MigrateMpLists` adds them once to setups that already existed (flag `MpCraftersGatherersAdded`); after that the user can turn them off again in "MP bar on each job".
 
-## Shared colors, phase 1 (colors1, decided with Sandro)
+## Shared colors, phase 1 (colors1, decided with Nahja)
 - Decisions: Shield and MP are global; Level and Timer/Stacks are treated as text (global text + "Custom color"); Tooltip description/details: global text + "Custom color".
 - New `GlobalColors` (Core/Ui) saved in `Configuration.Colors` and in the Appearance block of profiles: Background, Border, Text, Shield, Mp. Appearance has a card "Colors of the interface" with a reset. (Cast interruptible / not interruptible and Highlight come with the progress bars, nameplates, enmity list and gauges.)
 - How a place uses it: its settings keep a flag `CustomX` and the getter returns `CustomX ? own : GlobalColors.Current.X`, so the renderers did not change. The saved value is the color in use. The editor control is `HudBarEditor.SharedColor`: a checkbox "Custom ..." and, only when on, the picker; turning it on starts from the color in use.
@@ -1324,7 +1324,7 @@ Still to do (medium/minor of the audit): separate vs combined "Hide the game's X
 - The border of the enfeeblements that Esuna and the like can remove is now a light blue (0.62, 0.84, 1.0), between the blue of the game's frame and the white of the Esuna icon (it was gold). `StatusRowSettings.DefaultDispelColor`. Setups saved with the old gold are moved to the new color once; a color the user chose is kept.
 
 ## Scholar / Astrologian native gauges (gaugehide1)
-- Sandro saw the game's Aetherflow gauge staying on screen with our Scholar gauge on. The game splits the Scholar and Astrologian gauges in two windows, like the Sage's (GFF0/GFF1), and only the first one (`JobHudSCH0`, `JobHudAST0`) was hidden. Now `JobHudSCH1` and `JobHudAST1` are hidden too, with the same rule (only while our gauge of the job is enabled). Names guessed from the pattern of the other jobs: TO TEST in game; if something still shows, get its window name.
+- Nahja saw the game's Aetherflow gauge staying on screen with our Scholar gauge on. The game splits the Scholar and Astrologian gauges in two windows, like the Sage's (GFF0/GFF1), and only the first one (`JobHudSCH0`, `JobHudAST0`) was hidden. Now `JobHudSCH1` and `JobHudAST1` are hidden too, with the same rule (only while our gauge of the job is enabled). Names guessed from the pattern of the other jobs: TO TEST in game; if something still shows, get its window name.
 
 ## Role actions under level sync (rolesync1)
 - The tracker engine hid every ability whose level was above the (synced) player level, role actions included. Role actions (Rescue, Swiftcast, Lucid Dreaming, Feint...) stay usable under sync once learned, so they are now exempt (`GameNames.IsRoleAction`, from the game's `IsRoleAction` column). Job abilities keep being hidden when the level is too low. TO TEST: Scholar level 100 synced in a FATE: the Rescue tracker must show.
