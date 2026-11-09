@@ -1,7 +1,6 @@
 # NahjaUI - project brief
 
 Paste this at the start of every AI session. Last updated: 2026-10-26.
-Full specification (Spanish): https://claude.ai/artifact/V7JzhmVTNhnXd3v3zKFRCN
 
 ## Working rules
 

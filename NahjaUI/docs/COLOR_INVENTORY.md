@@ -1,6 +1,6 @@
 # Color inventory (colors1 plan)
 
-Goal (Sandro): the shared colors live in **Appearance** and apply to the whole interface. Every place that had its own picker gets a
+Goal (Nahja): the shared colors live in **Appearance** and apply to the whole interface. Every place that had its own picker gets a
 "Custom color" checkbox (off by default = uses the Appearance color; on = shows its own picker). The menus get shorter and nobody loses the choice.
 
 Numbers come from a search of the editors: about 46 color pickers in the editors, 19 of them "background", 20 of them "border", 8 of them text.
