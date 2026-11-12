@@ -132,7 +132,6 @@ internal static class DefensiveFilters
         var enfeeblements = party.Enfeeblements;
         enfeeblements.Filter = NahjaUI.Modules.PartyListBar.StatusRowFilter.All;
         enfeeblements.OnlyMine = false;
-        enfeeblements.DispelBorder = true;
     }
 
     /// <summary>Recreates the default filters that are missing (same ids, so what uses them finds them again). The ones that exist are not touched.</summary>

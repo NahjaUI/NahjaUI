@@ -14,7 +14,7 @@ using NahjaUI.Modules.Trackers;
 namespace NahjaUI.Modules.ProgressBars;
 
 /// <summary>
-/// Draws your progress bar and your target's progress bar: a plain rectangle that fills from left to right,
+/// Draws your progress bar, your target's and your focus's: a plain rectangle that fills from left to right,
 /// with the action icon inside it, the action name and the time. It also hides the game's own progress bars.
 /// It only reads the game snapshot.
 /// </summary>
@@ -53,6 +53,16 @@ internal sealed class ProgressBarModule : IDisposable
             Height = 22
         });
 
+        FocusElement = plugin.Layout.Register("progressbar.focus", "Focus progress bar", new ElementLayout
+        {
+            ScreenAnchor = AnchorPoint.Center,
+            SelfAnchor = AnchorPoint.Center,
+            OffsetX = 0,
+            OffsetY = -196,
+            Width = 280,
+            Height = 22
+        });
+
         // The global cooldown bar sits on top of the player's progress bar (1 px apart, like the other stacked bars).
         GcdElement = plugin.Layout.Register("progressbar.gcd", "Global cooldown bar", new ElementLayout
         {
@@ -73,6 +83,8 @@ internal sealed class ProgressBarModule : IDisposable
     public LayoutElement GcdElement { get; }
 
     public LayoutElement TargetElement { get; }
+
+    public LayoutElement FocusElement { get; }
 
     /// <summary>
     /// Set by the settings page every frame it is open: the bars then show a sample cast so their look can be adjusted
@@ -133,12 +145,16 @@ internal sealed class ProgressBarModule : IDisposable
         // The icon of an enemy action means nothing (the game's own bar has none): the target bar shows it only for allies.
         var (targetPos, targetSize) = LayoutManager.GetRect(TargetElement.Layout);
         plugin.GameCover.Draw(targetPos, targetSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, false));
+
+        // The focus bar works like the target's. The game's own focus cast bar is part of its focus frame, which the Focus frame hides.
+        var (focusPos, focusSize) = LayoutManager.GetRect(FocusElement.Layout);
+        plugin.GameCover.Draw(focusPos, focusSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Focus, FocusElement, snapshot.Focus?.Cast, preview, true, false));
     }
 
     // The global cooldown: a thin bar that fills while it runs, with the queue window (last 0.5 s) and the weave limit marked.
     private void DrawGcd(GcdBarSettings settings, GcdSnapshot? gcd, bool preview)
     {
-        if (!settings.Enabled)
+        if (!settings.Enabled || !plugin.Layout.IsShown(GcdElement))
             return;
 
         preview |= plugin.Layout.IsPreviewing(GcdElement.Id);
@@ -203,7 +219,7 @@ internal sealed class ProgressBarModule : IDisposable
 
     private void DrawBar(ProgressBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
     {
-        if (!settings.Enabled)
+        if (!settings.Enabled || !plugin.Layout.IsShown(element))
             return;
 
 
@@ -330,47 +346,16 @@ internal sealed class ProgressBarModule : IDisposable
             ? remaining.ToString("0.0")
             : $"{view.Current:0.0} / {view.Total:0.0}";
 
-        var timeRoom = 0f;
-        if (settings.Time.Enabled && settings.Time.Anchor.Fraction().X >= 0.5f)
-        {
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Time.TextSize))
-                timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
-        }
-
         var boxPos = new Vector2(barLeft, pos.Y);
         var boxSize = new Vector2(max.X - barLeft, max.Y - pos.Y);
 
         if (settings.Name.Enabled)
         {
-            string name;
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Name.TextSize))
-                name = Fit(face, view.Name, boxSize.X - timeRoom - MathF.Round(12f * scale));
-
-            plugin.HudBarSystem.DrawText(drawList, name, settings.Name, boxPos, boxSize);
+            var timeArea = plugin.HudBarSystem.MeasureText(timeText, settings.Time, boxPos, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, view.Name, settings.Name, boxPos, boxSize, fitInBox: true, avoid: timeArea);
         }
 
         if (settings.Time.Enabled)
             plugin.HudBarSystem.DrawText(drawList, timeText, settings.Time, boxPos, boxSize);
-    }
-
-    // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.
-    private static string Fit(TextFace face, string text, float available)
-    {
-        if (available <= 0f)
-            return string.Empty;
-
-        if (face.Width(text) <= available)
-            return text;
-
-        while (text.Length > 1)
-        {
-            text = text[..^1];
-
-            var candidate = text + "...";
-            if (face.Width(candidate) <= available)
-                return candidate;
-        }
-
-        return string.Empty;
     }
 }

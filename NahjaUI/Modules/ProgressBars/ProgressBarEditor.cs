@@ -40,6 +40,12 @@ internal sealed class ProgressBarEditor
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("Focus Progress Bar"))
+        {
+            DrawBar("Focus progress bar", "##card_progressbar_focus", settings.Focus, plugin.ProgressBarSystem.FocusElement, true, true);
+            ImGui.EndTabItem();
+        }
+
         if (ImGui.BeginTabItem("Global Cooldown Bar"))
         {
             DrawGcd(settings.Gcd, plugin.ProgressBarSystem.GcdElement);
@@ -65,6 +71,7 @@ internal sealed class ProgressBarEditor
             }
 
             Check("Enabled", settings.Enabled, v => settings.Enabled = v);
+            Widgets.EnabledHintOnly("The game has no global cooldown bar, so there is nothing to hide: this one is only added.");
             ImGui.TextColored(Theme.TextMuted, "A thin bar right above your progress bar. It fills while the global cooldown runs.");
             Check("Always visible (empty when the global cooldown is not running)", settings.AlwaysVisible, v => settings.AlwaysVisible = v);
 
@@ -79,7 +86,7 @@ internal sealed class ProgressBarEditor
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)##gcd", ref height, 1, 5))
+            if (ImGui.InputInt("Height (px)##gcd", ref height, 2, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 100);
                 plugin.RequestSave();
@@ -112,8 +119,10 @@ internal sealed class ProgressBarEditor
             ColorRow("Bar color##gcd", settings.BarColor, c => settings.BarColor = c, true);
             ColorRow("Queue window color", settings.QueueColor, c => settings.QueueColor = c, true);
             ColorRow("Weave limit color", settings.WeaveColor, c => settings.WeaveColor = c, true);
-            ColorRow("Background color##gcd", settings.BackgroundColor, c => settings.BackgroundColor = c, false);
-            ColorRow("Border color##gcd", settings.BorderColor, c => settings.BorderColor = c, true);
+            if (HudBarEditor.BackgroundAndBorder("bgbd12", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
         });
     }
 
@@ -126,7 +135,7 @@ internal sealed class ProgressBarEditor
         }
     }
 
-    private void DrawBar(string title, string cardId, ProgressBarSettings settings, LayoutElement element, bool isTarget)
+    private void DrawBar(string title, string cardId, ProgressBarSettings settings, LayoutElement element, bool isTarget, bool isFocus = false)
     {
 
         Widgets.Card(cardId, isTarget ? 20 : 22, () =>
@@ -139,7 +148,7 @@ internal sealed class ProgressBarEditor
                 settings.Enabled = enabled;
                 plugin.RequestSave();
             }
-            Widgets.EnabledHint(isTarget ? "The target progress bar is only hidden if the game's progress bar is separate from the target frame: set the target info to separate parts in the game's HUD layout." : null);
+            Widgets.EnabledHint(isFocus ? "The game's own focus cast bar is part of its focus frame: it is hidden when the Focus frame of NahjaUI is enabled." : isTarget ? "The target progress bar is only hidden if the game's progress bar is separate from the target frame: set the target info to separate parts in the game's HUD layout." : null);
 
             ImGui.Spacing();
 
@@ -166,7 +175,7 @@ internal sealed class ProgressBarEditor
             if (!isTarget)
             {
                 var showIcon = settings.ShowIcon;
-                if (ImGui.Checkbox("Show the action icon inside the bar", ref showIcon))
+                if (ImGui.Checkbox("Show the action icon", ref showIcon))
                 {
                     settings.ShowIcon = showIcon;
                     plugin.RequestSave();
@@ -220,19 +229,10 @@ internal sealed class ProgressBarEditor
                 }
             }
 
-            var background = settings.BackgroundColor;
-            if (ImGui.ColorEdit4("Background color", ref background, ImGuiColorEditFlags.None))
-            {
-                settings.BackgroundColor = background;
+            if (HudBarEditor.BackgroundAndBorder("bgbd11", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
                 plugin.RequestSave();
-            }
-
-            var border = settings.BorderColor;
-            if (ImGui.ColorEdit4("Border color", ref border, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.BorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
-                plugin.RequestSave();
-            }
         });
 
         // The action name and the time left: one card each, with the same controls as every other text.

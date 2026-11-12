@@ -7,14 +7,6 @@ using NahjaUI.Modules.HudBars;
 
 namespace NahjaUI.Modules.EnmityList;
 
-/// <summary>The side of the bar where its cast goes.</summary>
-public enum ProgressBarSide
-{
-    Below,
-    Right,
-    Left
-}
-
 /// <summary>Settings of the enmity list: one bar per enemy that is fighting you, like the game's own list (up to 8).</summary>
 [Serializable]
 public class EnmityListSettings
@@ -26,8 +18,24 @@ public class EnmityListSettings
     public int SpacingPx { get; set; } = 6;
 
     public Vector4 HpColor { get; set; } = new(0.79f, 0.29f, 0.27f, 1f);
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
+
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 
     // The name and the HP percentage: the same kind of text as in the other frames (a point of the bar, offsets, size, font, color).
     // The name starts after the enmity dot (when it shows) and the percentage is attached to the whole bar.
@@ -56,8 +64,11 @@ public class EnmityListSettings
     /// <summary>Diameter of the enmity dot, in logical pixels.</summary>
     public int EnmityDotSizePx { get; set; } = 12;
 
-    /// <summary>The point of the bar the dot is attached to (the same point of the dot goes there), then the offsets move it.</summary>
+    /// <summary>The point of the bar the dot is attached to. A point of the dot (<see cref="EnmityDotSelfAnchor"/>) goes there, then the offsets move it.</summary>
     public AnchorPoint EnmityDotAnchor { get; set; } = AnchorPoint.Left;
+
+    /// <summary>The point of the dot that goes on the point of the bar.</summary>
+    public AnchorPoint EnmityDotSelfAnchor { get; set; } = AnchorPoint.Left;
 
     public int EnmityDotOffsetX { get; set; } = 8;
 
@@ -69,17 +80,18 @@ public class EnmityListSettings
     // The cast of each enemy under its bar (shown when the game's own option says so). The color tells if you can interrupt it
     // (colors of the Progress bars page, target bar).
     public int ProgressBarHeightPx { get; set; } = 14;
-    public int ProgressBarGapPx { get; set; } = 2;
 
-    /// <summary>Which side of the bar the cast goes: under it (default), at its right or at its left.</summary>
-    public ProgressBarSide ProgressBarPosition { get; set; } = ProgressBarSide.Below;
+    // Where the cast goes: a point of the cast (ProgressBarSelfAnchor) goes on a point of the bar (ProgressBarBarAnchor), then the offsets move it.
+    // By default it hangs under the bar, 2 px below it.
+    public AnchorPoint ProgressBarBarAnchor { get; set; } = AnchorPoint.BottomLeft;
+    public AnchorPoint ProgressBarSelfAnchor { get; set; } = AnchorPoint.TopLeft;
 
     /// <summary>Width of the cast, in logical pixels. 0 means the same width as the bar.</summary>
     public int ProgressBarWidthPx { get; set; } = 0;
 
     // Fine move of the cast (saved like the other offsets: Y counts downwards, the page shows plus as up).
     public int ProgressBarOffsetX { get; set; } = 0;
-    public int ProgressBarOffsetY { get; set; } = 0;
+    public int ProgressBarOffsetY { get; set; } = 2;
 
     // Colors of the cast (they start like the target progress bar of the Progress bars page, but are our own): the fill says if it can be interrupted.
     public Vector4 ProgressBarColor { get; set; } = NahjaUI.Core.Ui.Theme.ProgressBarRed;
@@ -93,8 +105,24 @@ public class EnmityListSettings
     private static readonly Vector4 OldGrey = new(0.62f, 0.62f, 0.70f, 1f);
     private static readonly Vector4 PlayerViolet = NahjaUI.Core.Ui.Theme.ProgressBarViolet;
     private Vector4 progressBarUninterruptibleColor = PlayerViolet;
-    public Vector4 ProgressBarBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
-    public Vector4 ProgressBarBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    private Vector4 progressBarBackgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomProgressBarBackground { get; set; }
+
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 ProgressBarBackgroundColor
+    {
+        get => CustomProgressBarBackground ? progressBarBackgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => progressBarBackgroundColorValue = value;
+    }
+    private Vector4 progressBarBorderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomProgressBarBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 ProgressBarBorderColor
+    {
+        get => CustomProgressBarBorder ? progressBarBorderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => progressBarBorderColorValue = value;
+    }
 
     // The rows of status icons of each enemy: the same rows as next to the other frames (filters, order, icons, texts). Both start off.
     // Enhancements go at the left of the bar and enfeeblements at the right; by default only your own enfeeblements (your DoTs).

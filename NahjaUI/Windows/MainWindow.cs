@@ -347,6 +347,12 @@ public class MainWindow : Window, IDisposable
                         ImGui.EndTabItem();
                     }
 
+                    if (ImGui.BeginTabItem("Limit Break (PvP)"))
+                    {
+                        plugin.JobGaugeEditorPage.DrawLimitBreakPvpPage();
+                        ImGui.EndTabItem();
+                    }
+
                     if (ImGui.BeginTabItem("Frontline gauge"))
                     {
                         plugin.JobGaugeEditorPage.DrawFrontlinePage();
@@ -542,6 +548,7 @@ public class MainWindow : Window, IDisposable
 
             Pick("Background color", colors.Background, Theme.BarBackground, true, c => colors.Background = c);
             Pick("Border color", colors.Border, Theme.BarBorder, false, c => colors.Border = c);
+            Pick("Cleanse border color (Esuna)", colors.DispelBorder, GlobalColors.DefaultDispelBorder, false, c => colors.DispelBorder = c);
             Pick("Text color", colors.Text, GlobalColors.DefaultText, false, c => colors.Text = c);
             Pick("Shield color", colors.Shield, GlobalColors.DefaultShield, false, c => colors.Shield = c);
             Pick("MP color", colors.Mp, GlobalColors.DefaultMp, false, c => colors.Mp = c);
@@ -589,7 +596,8 @@ public class MainWindow : Window, IDisposable
                 layout.UnlockMode = true;
         });
 
-        var movable = layout.Positionable;
+        // Alphabetical, so an element is found by its name.
+        var movable = layout.Positionable.OrderBy(element => element.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 
         Widgets.Card("##card_elements", movable.Count + 2, () =>
         {
@@ -610,7 +618,7 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        Widgets.Card("##card_editor", 16, () => DrawElementEditor(selected));
+        Widgets.Card("##card_editor", 20, () => DrawElementEditor(selected));
     }
 
     private void DrawElementEditor(LayoutElement element)
@@ -666,7 +674,7 @@ public class MainWindow : Window, IDisposable
 
         // The +/- buttons next to each field move by 1 px (10 px with Ctrl held).
         var x = data.OffsetX;
-        if (ImGui.InputInt("Offset X (px)", ref x, 1, 10))
+        if (ImGui.InputInt("Offset X (px)", ref x, 1, 5))
         {
             data.OffsetX = x;
             plugin.RequestSave();
@@ -674,7 +682,7 @@ public class MainWindow : Window, IDisposable
 
         // Up is plus (the saved value counts downwards, so the sign is turned here).
         var y = -data.OffsetY;
-        if (ImGui.InputInt("Offset Y (px)", ref y, 1, 10))
+        if (ImGui.InputInt("Offset Y (px)", ref y, 1, 5))
         {
             data.OffsetY = -y;
             plugin.RequestSave();
@@ -697,6 +705,11 @@ public class MainWindow : Window, IDisposable
             var jobName = jobId == 0 ? "no job" : GameNames.JobAbbreviation(jobId);
             ImGui.TextColored(Theme.TextMuted, $"What you change here is saved for {jobName}. Jobs you have not moved it on start from where it was when you turned this on.");
         }
+
+        ImGui.Spacing();
+        ImGui.TextColored(Theme.TextMuted, "Show this element");
+        if (VisibilityControls.Draw(data))
+            plugin.RequestSave();
 
         ImGui.Spacing();
 

@@ -113,6 +113,56 @@ internal sealed class LayoutManager
         return false;
     }
 
+    /// <summary>Gives the general situation (combat, weapon). Set by the plugin once the game data exists.</summary>
+    public Func<NahjaUI.Game.ContextSnapshot>? ContextSource { get; set; }
+
+    /// <summary>
+    /// Do the "show when" conditions of this element allow drawing it right now? While you move elements (unlock mode) or
+    /// edit one on the Layout page it is always shown, so it can be placed.
+    /// </summary>
+    public bool IsShown(LayoutElement element)
+    {
+        var data = element.Layout;
+        if (data.HasNoCondition || UnlockMode || IsPreviewing(element.Id))
+            return true;
+
+        var context = ContextSource?.Invoke();
+        if (context is null)
+            return true;
+
+        if (data.ShowInCombat == ShowCombat.InCombat && !context.InCombat)
+            return false;
+
+        if (data.ShowInCombat == ShowCombat.OutOfCombat && context.InCombat)
+            return false;
+
+        if (data.ShowWithWeapon == ShowWeapon.Drawn && !context.WeaponDrawn)
+            return false;
+
+        if (data.ShowWithWeapon == ShowWeapon.Sheathed && context.WeaponDrawn)
+            return false;
+
+        return true;
+    }
+
+    /// <summary>Like <see cref="IsShown"/>, for code that has no reference to the manager (static drawing helpers).</summary>
+    public static bool IsShownNow(LayoutElement element) => Current?.IsShown(element) ?? true;
+
+    /// <summary>The label of an option, for the combo boxes.</summary>
+    public static string Label(ShowCombat value) => value switch
+    {
+        ShowCombat.InCombat => "Only in combat",
+        ShowCombat.OutOfCombat => "Only out of combat",
+        _ => "Always"
+    };
+
+    public static string Label(ShowWeapon value) => value switch
+    {
+        ShowWeapon.Drawn => "Only with the weapon drawn",
+        ShowWeapon.Sheathed => "Only with the weapon sheathed",
+        _ => "Always"
+    };
+
     public LayoutElement? SelectedElement =>
         SelectedId is null ? null : elements.Find(e => e.Id == SelectedId);
 

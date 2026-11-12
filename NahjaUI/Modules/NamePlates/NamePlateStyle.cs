@@ -25,8 +25,24 @@ public class NamePlateStyle
 
 
     // The empty part and the outline of the HP bar (the filled part is the game's color).
-    public Vector4 BarBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
-    public Vector4 BarBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    private Vector4 barBackgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBarBackground { get; set; }
+
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BarBackgroundColor
+    {
+        get => CustomBarBackground ? barBackgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => barBackgroundColorValue = value;
+    }
+    private Vector4 barBorderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBarBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BarBorderColor
+    {
+        get => CustomBarBorder ? barBorderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => barBorderColorValue = value;
+    }
 
     // The name sits on the top left of the bar and touches its top edge, like in the HUD bars.
     public AnchorPoint NameAnchor { get; set; } = AnchorPoint.TopLeft;
@@ -55,14 +71,15 @@ public class NamePlateStyle
     // The progress bar under the HP bar: same width as the bar.
     public bool ShowProgressBar { get; set; } = true;
     public int ProgressBarHeightPx { get; set; } = 15;
-    public int ProgressBarGapPx { get; set; } = 3;
 
-    // Same options as the casts of the enmity list: the side of the bar, the width (0 = the bar's) and a fine move.
+    // Same options as the casts of the enmity list: where it goes (a point of the progress bar on a point of the HP bar), the width
+    // (0 = the bar's) and a fine move. By default it hangs under the bar, 3 px below it.
     // Saved like the other offsets: Y counts downwards, the page shows plus as up.
-    public NahjaUI.Modules.EnmityList.ProgressBarSide ProgressBarPosition { get; set; } = NahjaUI.Modules.EnmityList.ProgressBarSide.Below;
+    public AnchorPoint ProgressBarBarAnchor { get; set; } = AnchorPoint.BottomLeft;
+    public AnchorPoint ProgressBarSelfAnchor { get; set; } = AnchorPoint.TopLeft;
     public int ProgressBarWidthPx { get; set; } = 0;
     public int ProgressBarOffsetX { get; set; } = 0;
-    public int ProgressBarOffsetY { get; set; } = 0;
+    public int ProgressBarOffsetY { get; set; } = 3;
 
     // Colors of the progress bar (they start like the target progress bar of the Progress bars page, but are our own): the fill says
     // if the cast can be interrupted.
@@ -77,8 +94,24 @@ public class NamePlateStyle
     private static readonly Vector4 OldGrey = new(0.62f, 0.62f, 0.70f, 1f);
     private static readonly Vector4 PlayerViolet = NahjaUI.Core.Ui.Theme.ProgressBarViolet;
     private Vector4 progressBarUninterruptibleColor = PlayerViolet;
-    public Vector4 ProgressBarBackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
-    public Vector4 ProgressBarBorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    private Vector4 progressBarBackgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomProgressBarBackground { get; set; }
+
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 ProgressBarBackgroundColor
+    {
+        get => CustomProgressBarBackground ? progressBarBackgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => progressBarBackgroundColorValue = value;
+    }
+    private Vector4 progressBarBorderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomProgressBarBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 ProgressBarBorderColor
+    {
+        get => CustomProgressBarBorder ? progressBarBorderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => progressBarBorderColorValue = value;
+    }
 
     // The rows of status icons of a plate: enhancements above the bar, enfeeblements under it, placed like the ones of the HUD bars.
     // They are the same rows as next to the HUD bars (filters, order, icons, texts); both start off.

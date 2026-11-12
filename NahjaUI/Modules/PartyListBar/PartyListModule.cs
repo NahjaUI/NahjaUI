@@ -163,6 +163,12 @@ internal sealed class PartyListModule : IDisposable
         if (!settings.Look.Enabled)
             return;
 
+        if (!plugin.Layout.IsShown(PartyElement))
+        {
+            PartyElement.DisplayRect = null;
+            return;
+        }
+
         IReadOnlyList<UnitSnapshot> members = BuildMembers(snapshot, settings);
         var isSample = false;
 
@@ -320,9 +326,11 @@ internal sealed class PartyListModule : IDisposable
         var name = settings.ShowAwayTag && away is not null
             ? away
             : UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
-        plugin.HudBarSystem.DrawText(drawList, name, look.Name, pos, size);
-
+        // The name is shortened with "..." when it would go out of the bar or run into the HP text.
         var hpText = UnitTextFormatter.FormatValue(look, member.Hp, member.MaxHp);
+        var hpArea = plugin.HudBarSystem.MeasureText(hpText, look.Hp, pos, size);
+        plugin.HudBarSystem.DrawText(drawList, name, look.Name, pos, size, fitInBox: true, avoid: hpArea);
+
         plugin.HudBarSystem.DrawText(drawList, hpText, look.Hp, pos, size);
 
         if (away is not null)

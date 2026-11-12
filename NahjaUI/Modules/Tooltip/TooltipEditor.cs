@@ -26,6 +26,7 @@ internal sealed class TooltipEditor
         {
             Widgets.SectionLabel("Tooltip");
             Check("Enabled", s.Enabled, v => s.Enabled = v);
+            Widgets.EnabledHintOnly("This tooltip is only NahjaUI's, for its own icons: there is no game window to hide.");
         });
 
         Widgets.Card("##card_tt_where", 12, () =>
@@ -58,7 +59,7 @@ internal sealed class TooltipEditor
         {
             Widgets.SectionLabel("Look");
 
-            Slider("Text size (px)", s.TextSize, 10, 24, v => s.TextSize = v);
+            TextSizeCombo(s);
             Slider("Maximum width (px)", s.MaxWidthPx, 160, 600, v => s.MaxWidthPx = v);
             Check("The name uses the accent color", s.NameUsesAccent, v => s.NameUsesAccent = v);
             if (!s.NameUsesAccent)
@@ -83,6 +84,27 @@ internal sealed class TooltipEditor
                 plugin.RequestSave();
             }
         });
+    }
+
+    // Font sizes are fixed steps (each one is a real font, so the text is always sharp), like the text of every other element.
+    private void TextSizeCombo(TooltipSettings s)
+    {
+        if (!ImGui.BeginCombo("Text size (px)", $"{s.TextSize} px", ImGuiComboFlags.None))
+            return;
+
+        foreach (var size in OverlayFonts.AvailableSizes)
+        {
+            if (size < 10 || size > 24)
+                continue;
+
+            if (ImGui.Selectable($"{size} px", s.TextSize == size))
+            {
+                s.TextSize = size;
+                plugin.RequestSave();
+            }
+        }
+
+        ImGui.EndCombo();
     }
 
     private void Check(string label, bool current, Action<bool> apply)

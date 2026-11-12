@@ -143,6 +143,9 @@ internal sealed class StatusEffectsModule : IDisposable
 
     private void DrawGroup(LayoutElement element, StatusGroupSettings group, List<StatusSnapshot> statuses, bool isSample)
     {
+        if (!plugin.Layout.IsShown(element))
+            return;
+
         var look = group.Look;
         var scale = ImGuiHelpers.GlobalScale;
 

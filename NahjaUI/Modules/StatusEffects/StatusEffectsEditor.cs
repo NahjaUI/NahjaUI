@@ -134,21 +134,21 @@ internal sealed class StatusEffectsEditor
             Widgets.SectionLabel("Icons");
 
             var width = look.IconWidth;
-            if (ImGui.InputInt("Icon width (px)", ref width, 1, 4))
+            if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
             {
                 look.IconWidth = Math.Clamp(width, 8, 128);
                 plugin.RequestSave();
             }
 
             var height = look.IconHeight;
-            if (ImGui.InputInt("Icon height (px)", ref height, 1, 4))
+            if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
             {
                 look.IconHeight = Math.Clamp(height, 8, 128);
                 plugin.RequestSave();
             }
 
             var spacing = look.SpacingPx;
-            if (ImGui.SliderInt("Space between icons (px)", ref spacing, 0, 20))
+            if (ImGui.SliderInt("Space between icons (px)", ref spacing, 0, 30))
             {
                 look.SpacingPx = spacing;
                 plugin.RequestSave();

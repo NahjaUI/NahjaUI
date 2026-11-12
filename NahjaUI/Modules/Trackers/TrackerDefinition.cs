@@ -141,13 +141,6 @@ public enum TrackerUnit
     TargetOfTarget
 }
 
-public enum TrackerCombatMode
-{
-    Any,
-    InCombat,
-    OutOfCombat
-}
-
 /// <summary>In which kind of content a tracker loads. The statuses and abilities of PvP are not the ones of PvE, so trackers are for PvE unless said otherwise.</summary>
 public enum TrackerPvpMode
 {
@@ -162,8 +155,6 @@ public class TrackerLoadConditions
 {
     /// <summary>Jobs the tracker loads on. Empty means every job.</summary>
     public List<uint> JobIds { get; set; } = new();
-
-    public TrackerCombatMode Combat { get; set; } = TrackerCombatMode.Any;
 
     /// <summary>PvE only by default.</summary>
     public TrackerPvpMode Where { get; set; } = TrackerPvpMode.PveOnly;
@@ -203,7 +194,6 @@ public class TrackerDefinition
 
         Load = new TrackerLoadConditions
         {
-            Combat = other.Load.Combat,
             Where = other.Load.Where,
             JobIds = new List<uint>(other.Load.JobIds)
         };

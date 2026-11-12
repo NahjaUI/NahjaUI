@@ -477,16 +477,12 @@ internal sealed class NamePlateModule : IDisposable
         {
             var progressBarHeight = MathF.Round(style.ProgressBarHeightPx * scale);
             var progressBarWidth = style.ProgressBarWidthPx > 0 ? MathF.Round(style.ProgressBarWidthPx * scale) : width;
-            var gap = MathF.Round(style.ProgressBarGapPx * scale);
-            var barHeight = max.Y - min.Y;
 
-            // On the chosen side of the bar, then moved by the offsets (plus Y is up in the page, saved downwards).
-            var progressBarPos = style.ProgressBarPosition switch
-            {
-                NahjaUI.Modules.EnmityList.ProgressBarSide.Right => new Vector2(max.X + gap, min.Y + MathF.Round((barHeight - progressBarHeight) / 2f)),
-                NahjaUI.Modules.EnmityList.ProgressBarSide.Left => new Vector2(min.X - gap - progressBarWidth, min.Y + MathF.Round((barHeight - progressBarHeight) / 2f)),
-                _ => new Vector2(min.X, max.Y + gap)
-            };
+            // A point of the progress bar on a point of the HP bar, then moved by the offsets (plus Y is up in the page, saved downwards).
+            var hpBarSize = max - min;
+            var progressBarPos = min + hpBarSize * style.ProgressBarBarAnchor.Fraction()
+                                 - new Vector2(progressBarWidth, progressBarHeight) * style.ProgressBarSelfAnchor.Fraction();
+            progressBarPos = new Vector2(MathF.Round(progressBarPos.X), MathF.Round(progressBarPos.Y));
 
             progressBarPos += new Vector2(MathF.Round(style.ProgressBarOffsetX * scale), MathF.Round(style.ProgressBarOffsetY * scale));
             DrawProgressBar(drawList, scale, style, plate.Cast, progressBarPos.X, progressBarPos.Y, progressBarWidth);
@@ -566,45 +562,14 @@ internal sealed class NamePlateModule : IDisposable
         var timeText = settings.ProgressBarTimeMode == NahjaUI.Modules.ProgressBars.ProgressBarTimeMode.Remaining
             ? MathF.Max(0f, cast.TotalTime - cast.CurrentTime).ToString("0.0")
             : $"{cast.CurrentTime:0.0} / {cast.TotalTime:0.0}";
-        var timeRoom = 0f;
-        if (settings.ProgressBarTime.Enabled && settings.ProgressBarTime.Anchor.Fraction().X >= 0.5f)
-        {
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarTime.TextSize))
-                timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
-        }
-
-        // The action name is shortened with "..." so it does not run into the time.
+        // The action name is shortened with "..." so it does not go out of the bar or run into the time.
         if (settings.ProgressBarName.Enabled)
         {
-            string name;
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarName.TextSize))
-                name = Fit(face, GameNames.CastName(cast.ActionType, cast.ActionId), width - timeRoom - MathF.Round(12f * scale));
-
-            plugin.HudBarSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
+            var timeArea = plugin.HudBarSystem.MeasureText(timeText, settings.ProgressBarTime, min, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, GameNames.CastName(cast.ActionType, cast.ActionId), settings.ProgressBarName, min, boxSize, fitInBox: true, avoid: timeArea);
         }
 
         if (settings.ProgressBarTime.Enabled)
             plugin.HudBarSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
-    }
-
-    // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.
-    private static string Fit(TextFace face, string text, float available)
-    {
-        if (available <= 0f)
-            return string.Empty;
-
-        if (face.Width(text) <= available)
-            return text;
-
-        while (text.Length > 1)
-        {
-            text = text[..^1];
-
-            var candidate = text + "...";
-            if (face.Width(candidate) <= available)
-                return candidate;
-        }
-
-        return string.Empty;
     }
 }

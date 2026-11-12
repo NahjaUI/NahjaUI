@@ -337,9 +337,10 @@ internal sealed class StatusRowRenderer
         var thickness = MathF.Max(1f, MathF.Round(scale));
         drawList.AddRect(pos, pos + size, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 1f)), rounding, ImDrawFlags.None, thickness);
 
-        // An enfeeblement that a cleanse can remove gets a coloured border. Only on friendly units: Esuna cannot be used on an enemy.
-        if (friendly && row.DispelBorder && GameNames.StatusCategory(status.Id) == 2 && GameNames.StatusCanDispel(status.Id))
-            drawList.AddRect(pos, pos + size, ImGui.GetColorU32(row.DispelColor), rounding, ImDrawFlags.None, thickness * 2f);
+        // An enfeeblement that a cleanse can remove gets a coloured border (the color of the Appearance page). Only on friendly units, since
+        // Esuna cannot be used on an enemy, and not in PvP, where there is no Esuna.
+        if (friendly && !plugin.GameData.Current.Context.InPvP && GameNames.StatusCategory(status.Id) == 2 && GameNames.StatusCanDispel(status.Id))
+            drawList.AddRect(pos, pos + size, ImGui.GetColorU32(GlobalColors.Current.DispelBorder), rounding, ImDrawFlags.None, thickness * 2f);
 
         // The text size is in logical pixels (the fonts are already built scaled).
         var timerPx = Math.Clamp(row.TimerSize, 4, 64);

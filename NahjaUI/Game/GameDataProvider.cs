@@ -134,7 +134,8 @@ internal sealed class GameDataProvider : IDisposable
             soloShown,
             soloRaw,
             Plugin.ClientState.IsPvP,
-            Plugin.ClientState.IsPvPExcludingDen);
+            Plugin.ClientState.IsPvPExcludingDen,
+            localPlayer.StatusFlags.HasFlag(StatusFlags.WeaponOut));
 
         var player = ToUnit(localPlayer);
 
@@ -164,7 +165,8 @@ internal sealed class GameDataProvider : IDisposable
             BuildAstrologianGauge(player),
             BuildSageGauge(player),
             BuildExtraGauge(player),
-            BuildGcd());
+            BuildGcd(),
+            BuildAlliance());
 
         // The statuses seen this frame are the ones to remember for the next one.
         (statusClock, nextStatusClock) = (nextStatusClock, statusClock);
@@ -477,12 +479,9 @@ internal sealed class GameDataProvider : IDisposable
         return bars;
     }
 
-    // The Limit Break gauge of the party (units gathered, units per bar). Only read in PvE; null when the game has none.
+    // The Limit Break gauge (units gathered, units per bar), in PvE (the party's) and in PvP (the team's, read the same way); null when the game has none.
     private static unsafe LimitBreakSnapshot? BuildLimitBreak(ContextSnapshot context)
     {
-        if (context.InPvP)
-            return null;
-
         var controller = FFXIVClientStructs.FFXIV.Client.Game.UI.LimitBreakController.Instance();
         // BarCount is how many bars the game gives the party right now (0 when there is no limit break to gather: alone, for example).
         if (controller == null || controller->BarUnits == 0 || controller->BarCount == 0)
@@ -1125,6 +1124,50 @@ internal sealed class GameDataProvider : IDisposable
         // New status, or the game sent a new value: start counting from it.
         nextStatusClock[key] = (reported, now);
         return reported;
+    }
+
+    // The members of the other parties of the alliance, one slot each, in the game's order; null when you are not in an alliance.
+    // An empty slot is null. A normal alliance has 16 slots (two other parties of eight); the game keeps room for 20, which only
+    // small group alliances (parties of four) fill.
+    private unsafe IReadOnlyList<UnitSnapshot?>? BuildAlliance()
+    {
+        var partyList = Plugin.PartyList;
+        if (!partyList.IsAlliance)
+            return null;
+
+        var own = new HashSet<uint>();
+        foreach (var member in partyList)
+            own.Add(member.EntityId);
+
+        // A normal alliance is two other parties of eight (16 slots). Only the small group alliances (parties of four) use all 20: the
+        // game says which one it is in a flag of its group manager (bit 2). The slots after the real ones hold nothing that can be trusted.
+        var group = FFXIVClientStructs.FFXIV.Client.Game.Group.GroupManager.Instance();
+        var small = group != null && (group->MainGroup.AllianceFlags & 2) != 0;
+        var count = small ? 20 : 16;
+        var slots = new UnitSnapshot?[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            var member = partyList.CreateAllianceMemberReference(partyList.GetAllianceMemberAddress(i));
+            if (member is null || member.EntityId == 0 || own.Contains(member.EntityId))
+                continue;
+
+            try
+            {
+                var unit = ToUnit(member);
+
+                // Nobody there: no job and no HP at all. It stays an empty slot (never a dead member).
+                if (unit.JobId != 0 || unit.MaxHp != 0)
+                    slots[i] = unit;
+            }
+            catch (Exception ex)
+            {
+                // One member that cannot be read leaves his cell empty; it never breaks the rest of the snapshot.
+                Plugin.Log.Warning(ex, "NahjaUI: an alliance member could not be read.");
+            }
+        }
+
+        return slots;
     }
 
     private IReadOnlyList<UnitSnapshot> BuildParty()

@@ -88,7 +88,31 @@ internal sealed class JobGaugeEditor
     public void DrawLimitBreakPage()
     {
         plugin.JobGaugeSystem.PreviewJobId = JobGaugeModule.LimitBreakPageId;
-        DrawLimitBreak(plugin.Configuration.JobGauges.LimitBreak);
+        DrawLimitBreak(plugin.Configuration.JobGauges.LimitBreak, plugin.JobGaugeSystem.LimitBreakElement, "lb", "Limit Break (the party's gauge, every job)");
+    }
+
+    /// <summary>The "Limit Break (PvP)" page: the gauge of the game's PvP matches, with its own position and look.</summary>
+    public void DrawLimitBreakPvpPage()
+    {
+        plugin.JobGaugeSystem.PreviewJobId = JobGaugeModule.LimitBreakPvpPageId;
+        DrawLimitBreak(plugin.Configuration.JobGauges.LimitBreakPvp, plugin.JobGaugeSystem.LimitBreakPvpElement, "lbpvp", "Limit Break (PvP)");
+        DrawLimitBreakReading();
+    }
+
+    // What the game gives right now, to check that the PvP gauge is read well.
+    private void DrawLimitBreakReading()
+    {
+        Widgets.Card("##card_gauge_lbpvp_reading", 4, () =>
+        {
+            Widgets.SectionLabel("What the game says right now");
+
+            var snapshot = plugin.GameData.Current;
+            var gauge = snapshot.LimitBreak;
+            ImGui.TextColored(Theme.TextMuted, $"In a PvP zone: {(snapshot.Context.InPvP ? "yes" : "no")}");
+            ImGui.TextColored(Theme.TextMuted, gauge is null
+                ? "Limit Break gauge: not read (the game gives none right now)."
+                : $"Limit Break gauge: {gauge.Units} of {gauge.BarUnits} per bar, {gauge.Bars} bar(s).");
+        });
     }
 
     /// <summary>The "Frontline gauge" page: the PvP gauge.</summary>
@@ -154,7 +178,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt("Space between pips (px)", ref gap, 0, 20))
+            if (ImGui.SliderInt("Space between pips (px)", ref gap, 0, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -190,28 +214,18 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
 
-            var background = settings.BackgroundColor;
-            if (ImGui.ColorEdit4("Background color", ref background, ImGuiColorEditFlags.None))
-            {
-                settings.BackgroundColor = background;
+            if (HudBarEditor.BackgroundAndBorder("bgbd1", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
                 plugin.RequestSave();
-            }
-
-            var border = settings.BorderColor;
-            if (ImGui.ColorEdit4("Border color", ref border, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.BorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
-                plugin.RequestSave();
-            }
         });
     }
 
-    private void DrawLimitBreak(LimitBreakGaugeSettings settings)
+    private void DrawLimitBreak(LimitBreakGaugeSettings settings, LayoutElement element, string id, string title)
     {
-        const string id = "lb";
-        Widgets.Card("##card_gauge_lb", 20, () =>
+        Widgets.Card($"##card_gauge_{id}", 20, () =>
         {
-            Widgets.SectionLabel("Limit Break (the party's gauge, every job)");
+            Widgets.SectionLabel(title);
 
             var enabled = settings.Enabled;
             if (ImGui.Checkbox($"Enabled##{id}", ref enabled))
@@ -219,6 +233,7 @@ internal sealed class JobGaugeEditor
                 settings.Enabled = enabled;
                 plugin.RequestSave();
             }
+            Widgets.EnabledHint();
 
             var showLevel = settings.ShowLevel;
             if (ImGui.Checkbox($"Write the level (LB1, LB2, LB3) when a bar is full##{id}", ref showLevel))
@@ -229,12 +244,12 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
-            SizeControls("Gauge", plugin.JobGaugeSystem.LimitBreakElement.Layout);
+            SizeControls("Gauge", element.Layout);
 
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt($"Space between bars (px)##{id}", ref gap, 0, 20))
+            if (ImGui.SliderInt($"Space between bars (px)##{id}", ref gap, 0, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -263,19 +278,10 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
 
-            var background = settings.BackgroundColor;
-            if (ImGui.ColorEdit4($"Empty bar color##{id}", ref background, ImGuiColorEditFlags.None))
-            {
-                settings.BackgroundColor = background;
+            if (HudBarEditor.BackgroundAndBorder($"bgbd2_{id}", "Empty bar color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
                 plugin.RequestSave();
-            }
-
-            var border = settings.BorderColor;
-            if (ImGui.ColorEdit4($"Border color##{id}", ref border, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.BorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
-                plugin.RequestSave();
-            }
         });
     }
 
@@ -333,8 +339,10 @@ internal sealed class JobGaugeEditor
             Color("Aetherflow color##sch", settings.AetherflowColor, false, v => settings.AetherflowColor = v);
             Color("Faerie Gauge color##sch", settings.FaerieColor, false, v => settings.FaerieColor = v);
             Color("Seraph color##sch", settings.SeraphColor, false, v => settings.SeraphColor = v);
-            Color("Background color##sch", settings.BackgroundColor, true, v => settings.BackgroundColor = v);
-            Color("Border color##sch", settings.BorderColor, false, v => settings.BorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder("bgbd5", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
         });
     }
 
@@ -359,8 +367,10 @@ internal sealed class JobGaugeEditor
             Color("Umbral Draw color##ast", settings.UmbralColor, false, v => settings.UmbralColor = v);
             Color("Lord of Crowns color##ast", settings.LordColor, false, v => settings.LordColor = v);
             Color("Lady of Crowns color##ast", settings.LadyColor, false, v => settings.LadyColor = v);
-            Color("Background color##ast", settings.BackgroundColor, true, v => settings.BackgroundColor = v);
-            Color("Border color##ast", settings.BorderColor, false, v => settings.BorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder("bgbd6", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
         });
     }
 
@@ -404,8 +414,10 @@ internal sealed class JobGaugeEditor
             ImGui.PopID();
 
             ImGui.Spacing();
-            Color($"Background color##{id}", settings.BackgroundColor, true, v => settings.BackgroundColor = v);
-            Color($"Border color##{id}", settings.BorderColor, false, v => settings.BorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder($"bgbd7_{id}", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
             Color($"Mark color##{id}", settings.MarkColor, true, v => settings.MarkColor = v);
         });
     }
@@ -436,8 +448,10 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
             Color("Addersgall color##sge", settings.AddersgallColor, false, v => settings.AddersgallColor = v);
             Color("Addersting color##sge", settings.AdderstingColor, false, v => settings.AdderstingColor = v);
-            Color("Background color##sge", settings.BackgroundColor, true, v => settings.BackgroundColor = v);
-            Color("Border color##sge", settings.BorderColor, false, v => settings.BorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder("bgbd8", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
         });
     }
 
@@ -463,7 +477,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt($"Space between cartridges (px)##{id}", ref gap, 0, 20))
+            if (ImGui.SliderInt($"Space between cartridges (px)##{id}", ref gap, 0, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -478,19 +492,10 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
 
-            var background = settings.BackgroundColor;
-            if (ImGui.ColorEdit4($"Empty cartridge color##{id}", ref background, ImGuiColorEditFlags.None))
-            {
-                settings.BackgroundColor = background;
+            if (HudBarEditor.BackgroundAndBorder($"bgbd3_{id}", "Empty cartridge color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
                 plugin.RequestSave();
-            }
-
-            var border = settings.BorderColor;
-            if (ImGui.ColorEdit4($"Border color##{id}", ref border, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.BorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
-                plugin.RequestSave();
-            }
         });
     }
 
@@ -559,8 +564,10 @@ internal sealed class JobGaugeEditor
             Pick("Blood color from 50 up", settings.ReadyColor, false, v => settings.ReadyColor = v);
             Pick("Darkside color", settings.DarksideColor, false, v => settings.DarksideColor = v);
             Pick("Dark Arts frame color", settings.DarkArtsColor, false, v => settings.DarkArtsColor = v);
-            Pick("Empty bar color", settings.BackgroundColor, true, v => settings.BackgroundColor = v);
-            Pick("Border color", settings.BorderColor, false, v => settings.BorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder($"bgbd9_{id}", "Empty bar color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
             Pick("Mark color", settings.ThresholdColor, true, v => settings.ThresholdColor = v);
         });
     }
@@ -606,7 +613,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt($"Space between stacks (px)##{id}", ref gap, 0, 20))
+            if (ImGui.SliderInt($"Space between stacks (px)##{id}", ref gap, 0, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -625,8 +632,10 @@ internal sealed class JobGaugeEditor
             Pick("Black Mana color", settings.BlackColor, false, v => settings.BlackColor = v);
             Pick("Mana Stack color", settings.StackColor, false, v => settings.StackColor = v);
             Pick("Ready frame color", settings.ReadyFrameColor, false, v => settings.ReadyFrameColor = v);
-            Pick("Background color", settings.BackgroundColor, true, v => settings.BackgroundColor = v);
-            Pick("Border color", settings.BorderColor, false, v => settings.BorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder($"bgbd10_{id}", "Background color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
+                plugin.RequestSave();
             Pick("Mark color", settings.ThresholdColor, true, v => settings.ThresholdColor = v);
         });
     }
@@ -644,6 +653,7 @@ internal sealed class JobGaugeEditor
                 settings.Enabled = enabled;
                 plugin.RequestSave();
             }
+            Widgets.EnabledHint();
 
             var showNumber = settings.ShowNumber;
             if (ImGui.Checkbox($"Show the number on the bar##{id}", ref showNumber))
@@ -701,19 +711,10 @@ internal sealed class JobGaugeEditor
                 }
             }
 
-            var background = settings.BackgroundColor;
-            if (ImGui.ColorEdit4($"Empty bar color##{id}", ref background, ImGuiColorEditFlags.None))
-            {
-                settings.BackgroundColor = background;
+            if (HudBarEditor.BackgroundAndBorder($"bgbd4_{id}", "Empty bar color", "Border color",
+                settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
+                settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
                 plugin.RequestSave();
-            }
-
-            var border = settings.BorderColor;
-            if (ImGui.ColorEdit4($"Border color##{id}", ref border, ImGuiColorEditFlags.NoAlpha))
-            {
-                settings.BorderColor = new Vector4(border.X, border.Y, border.Z, 1f);
-                plugin.RequestSave();
-            }
 
             if (hasThreshold)
             {

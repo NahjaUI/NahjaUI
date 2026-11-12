@@ -95,6 +95,9 @@ internal sealed partial class JobGaugeModule
             if (part is null)
                 continue;
 
+            if (!LayoutManager.IsShownNow(elements[i]))
+                continue;
+
             var (pos, size) = LayoutManager.GetRect(elements[i].Layout);
             if (size.X < 2f || size.Y < 2f)
                 continue;

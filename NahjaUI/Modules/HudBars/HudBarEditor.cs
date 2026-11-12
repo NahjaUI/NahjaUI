@@ -7,6 +7,7 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.AllianceList;
 
 namespace NahjaUI.Modules.HudBars;
 
@@ -68,8 +69,9 @@ internal sealed class HudBarEditor
     private const int TargetOfTargetPage = 3;
     private const int FocusPage = 4;
     private const int PartyPage = 5;
+    private const int AlliancePage = 6;
     // (The MP cards come at the end of the Parameter bar page; MpPage is not a button of the picker.)
-    private static readonly string[] PickerNames = { "Parameter bar", "MP bar", "Target", "Target of target", "Focus", "Party List" };
+    private static readonly string[] PickerNames = { "Parameter bar", "MP bar", "Target", "Target of target", "Focus", "Party List", "Alliance List" };
     private static readonly string[] FrameNames = { "HP bar", "Player MP bar", "Target frame", "Target of target frame", "Focus frame" };
 
     private readonly Plugin plugin;
@@ -130,6 +132,13 @@ internal sealed class HudBarEditor
         var system = plugin.HudBarSystem;
 
 
+        // The alliance list: one grid with its own cards.
+        if (selectedFrame == AlliancePage)
+        {
+            plugin.AllianceListEditorPage.Draw();
+            return;
+        }
+
         // The party list: the same cards as the other frames (their look), then the ones that are only about the party.
         if (selectedFrame == PartyPage)
         {
@@ -138,10 +147,10 @@ internal sealed class HudBarEditor
             var party = frames.Party;
             DrawGeneral(party.Look, plugin.PartyListSystem.PartyElement, true);
             DrawPartyOptions(party);
-            DrawStatusRows("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
-            DrawStatusRows("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch, canOnlyMine: false);
             DrawName(party.Look);
             DrawHp(party.Look);
+            DrawStatusRows("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
+            DrawStatusRows("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch, canOnlyMine: false);
             return;
         }
 
@@ -162,7 +171,10 @@ internal sealed class HudBarEditor
             return;
         }
 
+        // The same order on every page: general, texts, then the enhancements and enfeeblements.
         DrawGeneral(settings, element, isPlayer);
+        DrawName(settings);
+        DrawHp(settings);
 
         // Enhancements and enfeeblements next to the bar (not on the target of target; the player has its own page, "Status effects").
         if (selectedFrame != TargetOfTargetPage && selectedFrame != HpPage)
@@ -171,9 +183,6 @@ internal sealed class HudBarEditor
             DrawStatusRows($"##card_uf{selectedFrame}_enhancements", "Enhancements", settings.Enhancements, true, frameEnhancementSearch);
             DrawStatusRows($"##card_uf{selectedFrame}_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, frameEnfeeblementSearch);
         }
-
-        DrawName(settings);
-        DrawHp(settings);
     }
 
     // The Parameter bar page (the game's name for the HP and MP bars of the player): one sub-tab for each bar.
@@ -218,6 +227,7 @@ internal sealed class HudBarEditor
                 }
                 Widgets.EnabledHint(selectedFrame == TargetPage ? "It only works if the game's target info is set to separate parts in its HUD layout."
                     : selectedFrame == HpPage ? "Turns the whole Parameter bar on or off: the HP bar and the MP bar."
+                    : selectedFrame == PartyPage ? "The game's Party List is the one hidden."
                     : null);
             }
 
@@ -296,7 +306,7 @@ internal sealed class HudBarEditor
 
 
             var showJobIcon = party.ShowJobIcon;
-            if (ImGui.Checkbox("Job icon inside the bar", ref showJobIcon))
+            if (ImGui.Checkbox("Show the job icon", ref showJobIcon))
             {
                 party.ShowJobIcon = showJobIcon;
                 plugin.RequestSave();
@@ -362,16 +372,16 @@ internal sealed class HudBarEditor
             }
 
             var mpWidth = party.MpWidthPx;
-            if (ImGui.InputInt("Width (px, 0 = same as the bar)", ref mpWidth, 1, 5))
+            if (ImGui.InputInt("Width (px, 0 = same as the bar)", ref mpWidth, 2, 10))
             {
                 party.MpWidthPx = Math.Clamp(mpWidth, 0, 500);
                 plugin.RequestSave();
             }
 
             var mpHeight = party.Look.MpHeightPx;
-            if (ImGui.SliderInt("Height (px)", ref mpHeight, 2, 30))
+            if (ImGui.InputInt("Height (px)", ref mpHeight, 2, 10))
             {
-                party.Look.MpHeightPx = mpHeight;
+                party.Look.MpHeightPx = Math.Clamp(mpHeight, 1, 1000);
                 plugin.RequestSave();
             }
 
@@ -416,7 +426,7 @@ internal sealed class HudBarEditor
     }
 
     // One row of icons of the party (enhancements or enfeeblements): what it shows, where it goes, how big the icons are.
-    private void DrawStatusRows(string cardId, string title, StatusRowSettings row, bool isEnhancement, StatusSearchState search, bool canAttach = true, bool canOnlyMine = true, bool canDispel = true)
+    private void DrawStatusRows(string cardId, string title, StatusRowSettings row, bool isEnhancement, StatusSearchState search, bool canAttach = true, bool canOnlyMine = true)
     {
         var kind = isEnhancement ? "enhancement" : "enfeeblement";
 
@@ -465,26 +475,6 @@ internal sealed class HudBarEditor
             {
                 row.OnlyMine = false;
                 plugin.RequestSave();
-            }
-
-            if (!isEnhancement && canDispel)
-            {
-                var dispel = row.DispelBorder;
-                if (ImGui.Checkbox("Border on the ones a cleanse (Esuna) can remove (friendly units only)", ref dispel))
-                {
-                    row.DispelBorder = dispel;
-                    plugin.RequestSave();
-                }
-
-                if (row.DispelBorder)
-                {
-                    var color = row.DispelColor;
-                    if (ImGui.ColorEdit4("Border color##dispel", ref color, ImGuiColorEditFlags.NoInputs))
-                    {
-                        row.DispelColor = color;
-                        plugin.RequestSave();
-                    }
-                }
             }
 
             ImGui.Spacing();
@@ -570,21 +560,21 @@ internal sealed class HudBarEditor
             ImGui.Spacing();
 
             var width = row.IconWidth;
-            if (ImGui.InputInt("Icon width (px)", ref width, 1, 4))
+            if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
             {
                 row.IconWidth = Math.Clamp(width, 8, 128);
                 plugin.RequestSave();
             }
 
             var height = row.IconHeight;
-            if (ImGui.InputInt("Icon height (px)", ref height, 1, 4))
+            if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
             {
                 row.IconHeight = Math.Clamp(height, 8, 128);
                 plugin.RequestSave();
             }
 
             var spacing = row.SpacingPx;
-            if (ImGui.SliderInt("Space between icons (px)", ref spacing, 0, 20))
+            if (ImGui.SliderInt("Space between icons (px)", ref spacing, 0, 30))
             {
                 row.SpacingPx = spacing;
                 plugin.RequestSave();
@@ -687,12 +677,12 @@ internal sealed class HudBarEditor
     private readonly Dictionary<string, StatusSearchState> otherRowSearches = new();
 
     /// <summary>One row of status icons for another page (the nameplates): the same card as the one of the HUD bars.</summary>
-    internal void DrawStatusRowCard(string cardId, string title, StatusRowSettings row, bool isEnhancement, bool canAttach = true, bool canDispel = true)
+    internal void DrawStatusRowCard(string cardId, string title, StatusRowSettings row, bool isEnhancement, bool canAttach = true)
     {
         if (!otherRowSearches.TryGetValue(cardId, out var search))
             otherRowSearches[cardId] = search = new StatusSearchState();
 
-        DrawStatusRows(cardId, title, row, isEnhancement, search, canAttach, canDispel: canDispel);
+        DrawStatusRows(cardId, title, row, isEnhancement, search, canAttach);
     }
 
     // The filters of the Filters page: the statuses of a ticked filter count as part of the list. The ticked ones come first, in the order
@@ -1197,6 +1187,16 @@ internal sealed class HudBarEditor
         }
 
         ImGui.Unindent();
+        return changed;
+    }
+
+    // The background and the border of a bar: the colors of Appearance, or its own when "Custom" is on. Returns true when something changed.
+    internal static bool BackgroundAndBorder(string id, string backgroundLabel, string borderLabel,
+        bool customBackground, Vector4 background, Action<bool> setCustomBackground, Action<Vector4> setBackground,
+        bool customBorder, Vector4 border, Action<bool> setCustomBorder, Action<Vector4> setBorder)
+    {
+        var changed = SharedColor($"{id}_bg", backgroundLabel, customBackground, background, true, setCustomBackground, setBackground);
+        changed |= SharedColor($"{id}_bd", borderLabel, customBorder, border, false, setCustomBorder, setBorder);
         return changed;
     }
 

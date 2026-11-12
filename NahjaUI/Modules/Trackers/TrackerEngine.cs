@@ -609,7 +609,7 @@ internal sealed class TrackerEngine
         // 2. Draw the trackers that have their own position.
         foreach (var runtime in runtimes)
         {
-            if (runtime.Element.IsManaged || !runtime.State.Visible)
+            if (runtime.Element.IsManaged || !runtime.State.Visible || !plugin.Layout.IsShown(runtime.Element))
                 continue;
 
             var (pos, size) = LayoutManager.GetRect(runtime.Element.Layout);
@@ -638,7 +638,8 @@ internal sealed class TrackerEngine
                     shown.Add(member);
             }
 
-            if (shown.Count == 0)
+            // The group has its own "show when" conditions (all its trackers follow them).
+            if (shown.Count == 0 || !plugin.Layout.IsShown(group.Element))
             {
                 group.Element.DisplayRect = null;
                 continue;
@@ -926,7 +927,7 @@ internal sealed class TrackerEngine
         return true;
     }
 
-    // Does the tracker load on this job and in this kind of content (PvE or PvP)? (Only those parts of the load conditions; combat does not matter for placing.)
+    // Does the tracker load on this job and in this kind of content (PvE or PvP)? (Only those parts of the load conditions; when it is shown, combat and weapon, is the "show when" of the layout element.)
     private static bool AppliesToJob(TrackerDefinition tracker, uint? job, bool inPvp)
     {
         if (tracker.Load.Where == TrackerPvpMode.PveOnly && inPvp)
@@ -946,15 +947,7 @@ internal sealed class TrackerEngine
         if (load.Where == TrackerPvpMode.PveOnly && context.InPvP)
             return false;
 
-        if (load.Where == TrackerPvpMode.PvpOnly && !context.InPvP)
-            return false;
-
-        return load.Combat switch
-        {
-            TrackerCombatMode.InCombat => context.InCombat,
-            TrackerCombatMode.OutOfCombat => !context.InCombat,
-            _ => true
-        };
+        return !(load.Where == TrackerPvpMode.PvpOnly && !context.InPvP);
     }
 
     // ---------------------------------------------------------------- drawing

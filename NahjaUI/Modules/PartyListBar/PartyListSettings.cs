@@ -107,14 +107,6 @@ public class StatusRowSettings
     /// <summary>Filters (ids) whose statuses only count when you applied them. The other filters of the row keep showing everybody's.</summary>
     public List<string> OnlyMineFilterIds { get; set; } = new();
 
-    /// <summary>A border on the enfeeblements that a cleanse (Esuna and the like) can remove. The game's data says which ones.</summary>
-    public bool DispelBorder { get; set; }
-
-    /// <summary>A light blue, between the blue of the game's frame and the white of the Esuna icon.</summary>
-    public static readonly Vector4 DefaultDispelColor = new(0.62f, 0.84f, 1f, 1f);
-
-    public Vector4 DispelColor { get; set; } = DefaultDispelColor;
-
     /// <summary>
     /// Statuses that are always shown, whoever applied them (a raid enfeeblement you want to see even if it is not yours).
     /// They count even when "only the ones I applied" is on.

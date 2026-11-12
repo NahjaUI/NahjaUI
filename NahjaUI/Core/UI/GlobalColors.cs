@@ -33,10 +33,15 @@ public sealed class GlobalColors
     /// <summary>Colour of the stack count written over the icons.</summary>
     public Vector4 StacksText { get; set; } = DefaultText;
 
+    /// <summary>Colour of the border on the enfeeblements that a cleanse (Esuna and the like) can remove, on friendly units outside PvP.</summary>
+    public Vector4 DispelBorder { get; set; } = DefaultDispelBorder;
+
     /// <summary>Corner rounding of every bar and frame that does not have its own, in pixels (0 = square corners).</summary>
     public int Rounding { get; set; } = DefaultRounding;
 
     public const int DefaultRounding = 6;
+    /// <summary>A light blue, between the blue of the game's frame and the white of the Esuna icon.</summary>
+    public static readonly Vector4 DefaultDispelBorder = new(0.62f, 0.84f, 1f, 1f);
     public static readonly Vector4 DefaultShield = new(1f, 0.85f, 0.25f, 1f);
     public static readonly Vector4 DefaultMp = new(0.36f, 0.55f, 0.94f, 1f);
     public static readonly Vector4 DefaultText = new(1f, 1f, 1f, 1f);

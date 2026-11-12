@@ -77,6 +77,11 @@ internal sealed unsafe class GameWindowCover
                 if (NeverCut.Contains(name))
                     continue;
 
+                // The alliance lists: with the option on in the HUD layout they are "visible" and paint something even when you are not in an
+                // alliance, and their box cut the enmity list of a tester. Nothing of ours needs cutting around them.
+                if (name.StartsWith("_AllianceList", StringComparison.Ordinal))
+                    continue;
+
                 var box = new Box { Min = new Vector2(float.MaxValue), Max = new Vector2(float.MinValue) };
                 Collect(&unit->UldManager, unit->Scale, 0, new Vector2(float.MinValue), new Vector2(float.MaxValue), ref box);
 

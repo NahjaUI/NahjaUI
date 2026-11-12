@@ -133,7 +133,7 @@ internal sealed class EnmityListModule : IDisposable
         var preview = PreviewRequested || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(Element.Id);
         PreviewRequested = false;
 
-        if (!settings.Enabled)
+        if (!settings.Enabled || !plugin.Layout.IsShown(Element))
             return;
 
         // The game's option can hide the list (the samples of the unlock mode still show, to place it).
@@ -160,10 +160,13 @@ internal sealed class EnmityListModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
         var (pos, size) = LayoutManager.GetRect(Element.Layout);
 
-        // A cast under the bar takes room in the column (the next bar starts below it); at the sides it takes none.
-        var progressBarBlock = showProgressBarNow && settings.ProgressBarPosition == ProgressBarSide.Below
-            ? MathF.Round((settings.ProgressBarGapPx + settings.ProgressBarHeightPx) * scale) + MathF.Max(0f, MathF.Round(settings.ProgressBarOffsetY * scale))
-            : 0f;
+        // The part of a cast that hangs below its bar takes room in the column (the next bar starts under it); at the sides it takes none.
+        var progressBarBlock = 0f;
+        if (showProgressBarNow)
+        {
+            var (progressBarPos, _) = ProgressBarRect(settings, scale, Vector2.Zero, size);
+            progressBarBlock = MathF.Max(0f, progressBarPos.Y + MathF.Round(settings.ProgressBarHeightPx * scale) - size.Y);
+        }
         var step = size.Y + progressBarBlock + MathF.Round(settings.SpacingPx * scale);
         var targetId = snapshot.Target?.EntityId;
 
@@ -240,11 +243,10 @@ internal sealed class EnmityListModule : IDisposable
         // The dot: one color when the enemy is attacking you, another when it is attacking someone else.
         if (settings.ShowEnmityDot)
         {
-            // The dot is attached to a point of the bar (the same point of the dot goes there), then the offsets move it.
+            // A point of the dot goes on a point of the bar, then the offsets move it (like every other image or bar of the interface).
             var diameter = MathF.Max(4f, MathF.Round(settings.EnmityDotSizePx * scale));
             var radius = diameter / 2f;
-            var dotFraction = settings.EnmityDotAnchor.Fraction();
-            var dotMin = pos + size * dotFraction - new Vector2(diameter * dotFraction.X, radius)
+            var dotMin = pos + size * settings.EnmityDotAnchor.Fraction() - new Vector2(diameter, diameter) * settings.EnmityDotSelfAnchor.Fraction()
                          + new Vector2(settings.EnmityDotOffsetX, settings.EnmityDotOffsetY) * scale;
             var center = new Vector2(MathF.Round(dotMin.X + radius), MathF.Round(dotMin.Y + radius));
             drawList.AddCircleFilled(center, radius, ImGui.GetColorU32(enemy.TargetsMe ? settings.OnMeColor : settings.OnOthersColor));
@@ -252,26 +254,15 @@ internal sealed class EnmityListModule : IDisposable
         }
 
         // The percentage and the name are attached to the whole bar (the dot is not taken into account: the offset of the name
-        // counts from the edge of the bar). The name is shortened with "..." so it never runs into the percentage.
+        // counts from the edge of the bar). The name is shortened with "..." so it never goes out of the bar or runs into the percentage.
         string? percentText = null;
         if (settings.Hp.Enabled && unit.MaxHp > 0)
             percentText = $"{MathF.Floor(fraction * 100f):0}%";
 
-        var percentRoom = 0f;
-        if (percentText is not null && settings.Hp.Anchor.Fraction().X >= 0.5f)
-        {
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Hp.TextSize))
-                percentRoom = face.Width(percentText) + MathF.Round(12f * scale);
-        }
-
         if (settings.Name.Enabled)
         {
-            var nameBoxWidth = MathF.Max(1f, size.X);
-            string nameText;
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.Name.TextSize))
-                nameText = Fit(face, unit.Name, nameBoxWidth - percentRoom - MathF.Round(4f * scale));
-
-            plugin.HudBarSystem.DrawText(drawList, nameText, settings.Name, pos, new Vector2(nameBoxWidth, size.Y));
+            var percentArea = percentText is null ? null : plugin.HudBarSystem.MeasureText(percentText, settings.Hp, pos, size);
+            plugin.HudBarSystem.DrawText(drawList, unit.Name, settings.Name, pos, size, fitInBox: true, avoid: percentArea);
         }
 
         if (percentText is not null)
@@ -297,20 +288,14 @@ internal sealed class EnmityListModule : IDisposable
             DrawListFade.FadeSince(drawList, fadeMark, OutOfRangeAlpha);
     }
 
-    // Where the cast of a bar goes: on the chosen side, then moved by the offsets (plus Y is up in the page, saved downwards).
+    // Where the cast of a bar goes: a point of the cast on a point of the bar, then moved by the offsets (plus Y is up in the page, saved downwards).
     private static (Vector2 Pos, float Width) ProgressBarRect(EnmityListSettings settings, float scale, Vector2 barPos, Vector2 barSize)
     {
         var width = settings.ProgressBarWidthPx > 0 ? MathF.Round(settings.ProgressBarWidthPx * scale) : barSize.X;
         var height = MathF.Round(settings.ProgressBarHeightPx * scale);
-        var gap = MathF.Round(settings.ProgressBarGapPx * scale);
 
-        var pos = settings.ProgressBarPosition switch
-        {
-            ProgressBarSide.Right => new Vector2(barPos.X + barSize.X + gap, barPos.Y + MathF.Round((barSize.Y - height) / 2f)),
-            ProgressBarSide.Left => new Vector2(barPos.X - gap - width, barPos.Y + MathF.Round((barSize.Y - height) / 2f)),
-            _ => new Vector2(barPos.X, barPos.Y + barSize.Y + gap)
-        };
-
+        var pos = barPos + barSize * settings.ProgressBarBarAnchor.Fraction() - new Vector2(width, height) * settings.ProgressBarSelfAnchor.Fraction();
+        pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
         pos += new Vector2(MathF.Round(settings.ProgressBarOffsetX * scale), MathF.Round(settings.ProgressBarOffsetY * scale));
         return (pos, width);
     }
@@ -359,39 +344,13 @@ internal sealed class EnmityListModule : IDisposable
         var timeText = settings.ProgressBarTimeMode == NahjaUI.Modules.ProgressBars.ProgressBarTimeMode.Remaining
             ? MathF.Max(0f, cast.TotalTime - cast.CurrentTime).ToString("0.0")
             : $"{cast.CurrentTime:0.0} / {cast.TotalTime:0.0}";
-        var timeRoom = 0f;
-        if (settings.ProgressBarTime.Enabled && settings.ProgressBarTime.Anchor.Fraction().X >= 0.5f)
-        {
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarTime.TextSize))
-                timeRoom = face.Width(timeText) + MathF.Round(12f * scale);
-        }
-
         if (settings.ProgressBarName.Enabled)
         {
-            string name;
-            using (var face = plugin.Fonts.PushCap(OverlayFont.NahjaDisplay, settings.ProgressBarName.TextSize))
-                name = Fit(face, GameNames.CastName(cast.ActionType, cast.ActionId), width - timeRoom - MathF.Round(8f * scale));
-
-            plugin.HudBarSystem.DrawText(drawList, name, settings.ProgressBarName, min, boxSize);
+            var timeArea = plugin.HudBarSystem.MeasureText(timeText, settings.ProgressBarTime, min, boxSize);
+            plugin.HudBarSystem.DrawText(drawList, GameNames.CastName(cast.ActionType, cast.ActionId), settings.ProgressBarName, min, boxSize, fitInBox: true, avoid: timeArea);
         }
 
         if (settings.ProgressBarTime.Enabled)
             plugin.HudBarSystem.DrawText(drawList, timeText, settings.ProgressBarTime, min, boxSize);
-    }
-
-    // Shortens a text with "..." until it fits the width. The font must already be the one used to draw it.
-    private static string Fit(TextFace face, string text, float available)
-    {
-        if (string.IsNullOrEmpty(text) || face.Width(text) <= available)
-            return text;
-
-        for (var length = text.Length - 1; length > 0; length--)
-        {
-            var shorter = text[..length] + "...";
-            if (face.Width(shorter) <= available)
-                return shorter;
-        }
-
-        return string.Empty;
     }
 }

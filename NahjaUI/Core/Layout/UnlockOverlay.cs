@@ -224,7 +224,7 @@ internal sealed class UnlockOverlay
 
         // Where to put the panel: under the box (and its tag), or above it when the box is near the bottom.
         var panelWidth = 300f * scale;
-        var estimatedHeight = 150f * scale;
+        var estimatedHeight = 215f * scale;
 
         var minX = viewport.Pos.X + panelWidth * 0.5f;
         var maxX = Math.Max(minX, viewport.Pos.X + viewport.Size.X - panelWidth * 0.5f);
@@ -254,7 +254,7 @@ internal sealed class UnlockOverlay
 
             ImGui.SetNextItemWidth(fieldWidth);
             var x = data.OffsetX;
-            if (ImGui.InputInt("X", ref x, 1, 10) && !data.Locked)
+            if (ImGui.InputInt("X", ref x, 1, 5) && !data.Locked)
             {
                 data.OffsetX = x;
                 plugin.RequestSave();
@@ -265,11 +265,17 @@ internal sealed class UnlockOverlay
             ImGui.SetNextItemWidth(fieldWidth);
             // Up is plus (the saved value counts downwards, so the sign is turned here).
             var y = -data.OffsetY;
-            if (ImGui.InputInt("Y", ref y, 1, 10) && !data.Locked)
+            if (ImGui.InputInt("Y", ref y, 1, 5) && !data.Locked)
             {
                 data.OffsetY = -y;
                 plugin.RequestSave();
             }
+
+            ImGui.Spacing();
+
+            // When it is shown: a common choice for every element.
+            if (VisibilityControls.Draw(data, fieldWidth * 1.6f))
+                plugin.RequestSave();
 
             ImGui.Spacing();
 

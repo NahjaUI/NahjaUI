@@ -36,7 +36,7 @@ internal sealed class OverlayFonts : IDisposable
     public static IReadOnlyList<int> AvailableSizes { get; } = new[] { 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48 };
 
     // The font sizes that are really built (the letter size asked for is turned into one of these, then drawn exactly).
-    private static readonly int[] BuiltOverlaySizes = { 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72 };
+    private static readonly int[] BuiltOverlaySizes = { 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 34, 36, 40, 42, 46, 48, 52, 56, 60, 64, 72 };
 
     /// <summary>The sizes the menu text can use. They are all prepared.</summary>
     public static IReadOnlyList<int> MenuTextSizes { get; } = new[] { 12, 13, 14, 15, 16, 17, 18, 20 };
@@ -86,7 +86,7 @@ internal sealed class OverlayFonts : IDisposable
 
     /// <summary>
     /// Makes ImGui use the given family and returns a <see cref="TextFace"/> whose letters are exactly <paramref name="capPx"/>
-    /// LOGICAL pixels tall (the height of a capital letter or a digit, NOT the font's line box). So 24 is 24 and 12 is 12 in every frame.
+    /// LOGICAL pixels tall, give or take a fraction of a pixel (the height of a capital letter or a digit, NOT the font's line box): the font is drawn at the size it was built at, so it stays sharp.
     /// Dispose it when done.
     /// </summary>
     public unsafe TextFace PushCap(OverlayFont font, float capPx)
@@ -121,15 +121,29 @@ internal sealed class OverlayFonts : IDisposable
         }
 
         var wantedLine = capPx / ratios.Height;
-        var scope = PushClosest(font, wantedLine);
-        var size = wantedLine * ImGuiHelpers.GlobalScale;
-        return new TextFace(scope, ImGui.GetFont(), size, size * ratios.Top, capPx * ImGuiHelpers.GlobalScale);
+
+        // Same choice as PushClosest, but keeping the LOGICAL size of the font that was chosen.
+        var handle = FindClosest(GetSet(font), wantedLine, out var builtPx);
+        if (handle is null && font != Default)
+            handle = FindClosest(GetSet(Default), wantedLine, out builtPx);
+
+        var scope = handle?.Push();
+
+        // Draw at the size the chosen font was built at (its logical size times the UI scale): any other size stretches the letters
+        // and makes them blurry. The letters end up a little off the wanted height (the built sizes are close to each other, so it is
+        // by a fraction of a pixel). Only while no font is ready yet the wanted size is used.
+        var size = (handle is not null ? builtPx : wantedLine) * ImGuiHelpers.GlobalScale;
+        return new TextFace(scope, ImGui.GetFont(), size, size * ratios.Top, size * ratios.Height);
     }
 
-    private static IFontHandle? FindClosest(IFontHandle[] set, float wantedPx)
+    private static IFontHandle? FindClosest(IFontHandle[] set, float wantedPx) => FindClosest(set, wantedPx, out _);
+
+    // The font closest to the wanted size, and the logical size it was built at (0 when none is ready).
+    private static IFontHandle? FindClosest(IFontHandle[] set, float wantedPx, out float builtPx)
     {
         IFontHandle? best = null;
         var bestDifference = float.MaxValue;
+        builtPx = 0f;
 
         for (var i = 0; i < set.Length; i++)
         {
@@ -141,6 +155,7 @@ internal sealed class OverlayFonts : IDisposable
             {
                 bestDifference = difference;
                 best = set[i];
+                builtPx = Sizes[i];
             }
         }
 

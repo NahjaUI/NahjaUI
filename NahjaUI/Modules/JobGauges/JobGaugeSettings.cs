@@ -33,6 +33,9 @@ public class JobGaugesSettings
 
     public LimitBreakGaugeSettings LimitBreak { get; set; } = new();
 
+    /// <summary>The Limit Break gauge of PvP: its own bar, with its own position and look.</summary>
+    public LimitBreakGaugeSettings LimitBreakPvp { get; set; } = new();
+
     public FrontlineGaugeSettings Frontline { get; set; } = new();
 }
 
@@ -65,9 +68,25 @@ public class WhiteMageGaugeSettings
 
     public Vector4 BloodLilyColor { get; set; } = new(0.95f, 0.35f, 0.55f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 
     public Vector4 GlowColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
 }
@@ -99,9 +118,25 @@ public class BarGaugeSettings
 
     public Vector4 ReadyColor { get; set; } = new(1f, 0.62f, 0.20f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 
     public Vector4 ThresholdColor { get; set; } = new(0f, 0f, 0f, 0.9f);
 }
@@ -168,9 +203,25 @@ public class GunbreakerGaugeSettings
 
     public Vector4 CartridgeColor { get; set; } = new(0.95f, 0.62f, 0.20f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 }
 
 /// <summary>The Scholar gauge: the Aetherflow stacks (three pips) and the Faerie Gauge (a bar; while the Seraph is out it shows her time left).</summary>
@@ -194,9 +245,25 @@ public class ScholarGaugeSettings
 
     public Vector4 SeraphColor { get; set; } = new(1f, 0.88f, 0.55f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 }
 
 /// <summary>The Astrologian gauge: the three cards drawn (Astral or Umbral Draw) and the Crown card (Lord or Lady of Crowns).</summary>
@@ -220,9 +287,25 @@ public class AstrologianGaugeSettings
 
     public Vector4 LadyColor { get; set; } = new(0.50f, 0.95f, 0.60f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 }
 
 /// <summary>The Sage gauge: the Addersgall stacks (one more every 20 seconds) and the Addersting stacks (earned by letting Addersgall overflow).</summary>
@@ -246,9 +329,25 @@ public class SageGaugeSettings
 
     public Vector4 AdderstingColor { get; set; } = new(0.85f, 0.35f, 0.55f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 }
 
 /// <summary>
@@ -285,9 +384,25 @@ public class RedMageGaugeSettings
 
     public Vector4 StackColor { get; set; } = new(0.95f, 0.45f, 0.45f, 1f);
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 
     public Vector4 ThresholdColor { get; set; } = new(0f, 0f, 0f, 0.9f);
 
@@ -319,9 +434,25 @@ public class LimitBreakGaugeSettings
     /// <summary>A full bar (a level you can use).</summary>
     public Vector4 FullColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 }
 
 /// <summary>The gauge of the Frontline window of the game (PvP): one bar from 0 to its maximum, with the number on it.</summary>
@@ -379,9 +510,25 @@ public class ExtraGaugeJobSettings
     /// <summary>The numbers and seconds written on the rows: place, offsets, size, font and colour (same controls as every other text).</summary>
     public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 
     public Vector4 MarkColor { get; set; } = new(0f, 0f, 0f, 0.9f);
 

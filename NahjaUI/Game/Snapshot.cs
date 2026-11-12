@@ -157,8 +157,9 @@ internal sealed record ComboSnapshot(uint Action, float Timer)
 /// <param name="InPvP">In a PvP zone (Frontline, Crystalline Conflict... and the Wolves' Den Pier, where the PvP actions of your job are active): PvE actions, job gauges and the enmity list do not work there.</param>
 /// <param name="InPvPMatch">In a PvP match (Frontline, Crystalline Conflict...), not the Wolves' Den Pier: the Frontline gauge only exists here.</param>
 /// <param name="PartyListWhenSolo">The game's option "show the party list when playing alone" is on (raw value of PartyListSoloOff: 0 = on).</param>
+/// <param name="WeaponDrawn">The player has the weapon out (the character status flag WeaponOut).</param>
 /// <param name="SoloOptionRaw">The raw value of the option (-1 if it could not be read), shown in the settings to check it.</param>
-internal sealed record ContextSnapshot(uint TerritoryId, bool InCombat, bool InDuty, int PartySize, bool PartyListWhenSolo = false, int SoloOptionRaw = -1, bool InPvP = false, bool InPvPMatch = false)
+internal sealed record ContextSnapshot(uint TerritoryId, bool InCombat, bool InDuty, int PartySize, bool PartyListWhenSolo = false, int SoloOptionRaw = -1, bool InPvP = false, bool InPvPMatch = false, bool WeaponDrawn = false)
 {
     public static readonly ContextSnapshot None = new(0, false, false, 0);
 }
@@ -225,7 +226,8 @@ internal sealed record GameSnapshot(
     AstrologianGaugeSnapshot? Astrologian = null,
     SageGaugeSnapshot? Sage = null,
     ExtraGaugeSnapshot? ExtraGauge = null,
-    GcdSnapshot? Gcd = null)
+    GcdSnapshot? Gcd = null,
+    IReadOnlyList<UnitSnapshot?>? Alliance = null)
 {
     public static readonly GameSnapshot Empty = new(
         false, null, null, null, null, Array.Empty<UnitSnapshot>(), ContextSnapshot.None,

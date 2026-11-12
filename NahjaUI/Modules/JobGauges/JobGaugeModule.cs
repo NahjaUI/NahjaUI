@@ -78,6 +78,9 @@ internal sealed partial class JobGaugeModule : IDisposable
 
     internal const uint LimitBreakPageId = 0xFFFF;
 
+    // The page entry of the PvP Limit Break gauge.
+    internal const uint LimitBreakPvpPageId = 0xFFFD;
+
     // The game's own Frontline gauge (PvP). It is not a job: this id is only the page entry.
     private const string NativeFrontline = "PvPFrontlineGauge";
 
@@ -298,6 +301,16 @@ internal sealed partial class JobGaugeModule : IDisposable
             Height = 10
         });
 
+        LimitBreakPvpElement = plugin.Layout.Register("gauge.limitbreak.pvp", "Limit Break gauge (PvP)", new ElementLayout
+        {
+            ScreenAnchor = AnchorPoint.Top,
+            SelfAnchor = AnchorPoint.Top,
+            OffsetX = 0,
+            OffsetY = 56,
+            Width = 156,
+            Height = 10
+        });
+
         FrontlineElement = plugin.Layout.Register("gauge.frontline", "Frontline gauge (PvP)", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
@@ -324,6 +337,8 @@ internal sealed partial class JobGaugeModule : IDisposable
     public LayoutElement FrontlineElement { get; }
 
     public LayoutElement LimitBreakElement { get; }
+
+    public LayoutElement LimitBreakPvpElement { get; }
 
     public LayoutElement DarkBloodElement { get; }
 
@@ -379,6 +394,10 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (windowName == NativeFrontline)
             return plugin.GameData.Current.Context.InPvPMatch && plugin.Configuration.JobGauges.Frontline is { Enabled: true }
                 && plugin.GameData.Current.Frontline is not null;
+
+        // The PvP Limit Break: only while ours is really drawn (the game gave us the gauge), so a failed reading never leaves the screen without one.
+        if (windowName == NativeLimitBreak && plugin.GameData.Current.Context.InPvP)
+            return plugin.Configuration.JobGauges.LimitBreakPvp is { Enabled: true } && plugin.GameData.Current.LimitBreak is not null;
 
         // In PvP the game's gauges are the PvP ones and ours do not apply: the game's stay.
         if (plugin.GameData.Current.Context.InPvP)
@@ -441,6 +460,17 @@ internal sealed partial class JobGaugeModule : IDisposable
                 var frontlineValue = (byte)Math.Clamp(frontlineGauge.Max == 0 ? 0 : frontlineGauge.Value * 100f / frontlineGauge.Max, 0f, 100f);
                 Cover(() => DrawBar(frontline, FrontlineElement, frontlineValue, (int)frontlineGauge.Value), FrontlineElement);
             }
+        }
+
+        // The Limit Break of PvP has its own bar; unlock mode only offers it in PvP.
+        LimitBreakPvpElement.IsHidden = !snapshot.Context.InPvP;
+        var limitBreakPvp = plugin.Configuration.JobGauges.LimitBreakPvp;
+        if (limitBreakPvp.Enabled && (snapshot.Context.InPvP || previewJob == LimitBreakPvpPageId))
+        {
+            var pvpGauge = snapshot.Context.InPvP ? snapshot.LimitBreak : null;
+            pvpGauge ??= previewJob == LimitBreakPvpPageId || plugin.Layout.UnlockMode ? LimitBreakSample : null;
+            if (pvpGauge is not null)
+                Cover(() => DrawLimitBreak(limitBreakPvp, pvpGauge, LimitBreakPvpElement), LimitBreakPvpElement);
         }
 
         if (snapshot.Context.InPvP)
@@ -575,7 +605,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.LimitBreak ?? (previewJob == LimitBreakPageId || unlock ? LimitBreakSample : null);
             if (gauge is not null)
-                Cover(() => DrawLimitBreak(limitBreak, gauge), LimitBreakElement);
+                Cover(() => DrawLimitBreak(limitBreak, gauge, LimitBreakElement), LimitBreakElement);
         }
 
         var redMage = plugin.Configuration.JobGauges.RedMage;
@@ -612,14 +642,14 @@ internal sealed partial class JobGaugeModule : IDisposable
     }
 
     // As many bars as the content has (1 to 3), side by side: each one fills from the left; a full bar has the "full" colour. The level (LB1...) is written over it.
-    private void DrawLimitBreak(LimitBreakGaugeSettings settings, LimitBreakSnapshot gauge)
+    private void DrawLimitBreak(LimitBreakGaugeSettings settings, LimitBreakSnapshot gauge, LayoutElement element)
     {
-        if (gauge.BarUnits == 0)
+        if (gauge.BarUnits == 0 || !LayoutManager.IsShownNow(element))
             return;
 
         var drawList = ImGui.GetBackgroundDrawList();
         var scale = ImGuiHelpers.GlobalScale;
-        var (pos, size) = LayoutManager.GetRect(LimitBreakElement.Layout);
+        var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;
 
@@ -669,7 +699,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     {
         DrawBar(settings, DarkBloodElement, gauge.Blood);
 
-        if (!settings.ShowDarkside)
+        if (!settings.ShowDarkside || !LayoutManager.IsShownNow(DarksideElement))
             return;
 
         var drawList = ImGui.GetBackgroundDrawList();
@@ -713,6 +743,9 @@ internal sealed partial class JobGaugeModule : IDisposable
     // The Cartridges: three pips side by side.
     private void DrawGunbreaker(GunbreakerGaugeSettings settings, GunbreakerGaugeSnapshot gauge)
     {
+        if (!LayoutManager.IsShownNow(GunbreakerElement))
+            return;
+
         const int count = 3;
         var drawList = ImGui.GetBackgroundDrawList();
         var (pos, size) = LayoutManager.GetRect(GunbreakerElement.Layout);
@@ -758,6 +791,9 @@ internal sealed partial class JobGaugeModule : IDisposable
     // One mana bar: rounded, filled from the left, optional mark at 50, optional number.
     private void DrawMana(ImDrawListPtr drawList, RedMageGaugeSettings settings, LayoutElement element, int value, Vector4 color, bool frame)
     {
+        if (!LayoutManager.IsShownNow(element))
+            return;
+
         var scale = ImGuiHelpers.GlobalScale;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
@@ -800,6 +836,9 @@ internal sealed partial class JobGaugeModule : IDisposable
     // The Mana Stacks: three pips side by side.
     private void DrawStacks(ImDrawListPtr drawList, RedMageGaugeSettings settings, int filled)
     {
+        if (!LayoutManager.IsShownNow(RedStackElement))
+            return;
+
         const int count = 3;
         var (pos, size) = LayoutManager.GetRect(RedStackElement.Layout);
         var scale = ImGuiHelpers.GlobalScale;
@@ -829,6 +868,9 @@ internal sealed partial class JobGaugeModule : IDisposable
     // One rounded bar from 0 to 100, with an optional mark at 50 and the number in the middle.
     private void DrawBar(BarGaugeSettings settings, LayoutElement element, byte gaugeValue, int? shownNumber = null)
     {
+        if (!LayoutManager.IsShownNow(element))
+            return;
+
         var drawList = ImGui.GetBackgroundDrawList();
         var scale = ImGuiHelpers.GlobalScale;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
@@ -883,15 +925,17 @@ internal sealed partial class JobGaugeModule : IDisposable
         var progress = lilies >= 3 ? 0f : Math.Clamp(gauge.LilyTimerMs / LilyIntervalMs, 0f, 1f);
 
         var (lilyPos, lilySize) = LayoutManager.GetRect(LilyElement.Layout);
-        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, lilyPos, lilySize, lilies, progress, settings.LilyColor, false);
+        var lilyShown = LayoutManager.IsShownNow(LilyElement);
+        if (lilyShown)
+            DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, lilyPos, lilySize, lilies, progress, settings.LilyColor, false);
 
-        if (settings.ShowTimer && lilies < 3 && progress > 0f)
+        if (lilyShown && settings.ShowTimer && lilies < 3 && progress > 0f)
         {
             var secondsLeft = (int)MathF.Ceiling((1f - progress) * LilyIntervalMs / 1000f);
             DrawPipText(drawList, settings.Text, settings.GapPx, lilyPos, lilySize, lilies, secondsLeft.ToString());
         }
 
-        if (!settings.ShowBloodLilies)
+        if (!settings.ShowBloodLilies || !LayoutManager.IsShownNow(BloodLilyElement))
             return;
 
         var blood = Math.Min((int)gauge.BloodLily, 3);
@@ -976,8 +1020,9 @@ internal sealed partial class JobGaugeModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
 
         var (flowPos, flowSize) = LayoutManager.GetRect(AetherflowElement.Layout);
-        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, flowPos, flowSize,
-            Math.Min((int)gauge.Aetherflow, 3), 0f, settings.AetherflowColor, false);
+        if (LayoutManager.IsShownNow(AetherflowElement))
+            DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, flowPos, flowSize,
+                Math.Min((int)gauge.Aetherflow, 3), 0f, settings.AetherflowColor, false);
 
         // While the Seraph is out the Faerie Gauge is hers: the bar shows the time she has left.
         var seraph = gauge.SeraphMs > 0;
@@ -1012,16 +1057,18 @@ internal sealed partial class JobGaugeModule : IDisposable
         var progress = stacks >= 3 ? 0f : Math.Clamp(gauge.AddersgallMs / intervalMs, 0f, 1f);
 
         var (gallPos, gallSize) = LayoutManager.GetRect(AddersgallElement.Layout);
-        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, gallPos, gallSize,
-            stacks, progress, settings.AddersgallColor, false);
+        var gallShown = LayoutManager.IsShownNow(AddersgallElement);
+        if (gallShown)
+            DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, default, gallPos, gallSize,
+                stacks, progress, settings.AddersgallColor, false);
 
-        if (settings.ShowTimer && stacks < 3 && progress > 0f)
+        if (gallShown && settings.ShowTimer && stacks < 3 && progress > 0f)
         {
             var secondsLeft = (int)MathF.Ceiling((1f - progress) * intervalMs / 1000f);
             DrawPipText(drawList, settings.Text, settings.GapPx, gallPos, gallSize, stacks, secondsLeft.ToString());
         }
 
-        if (!settings.ShowAddersting)
+        if (!settings.ShowAddersting || !LayoutManager.IsShownNow(AdderstingElement))
             return;
 
         var (stingPos, stingSize) = LayoutManager.GetRect(AdderstingElement.Layout);
@@ -1032,6 +1079,9 @@ internal sealed partial class JobGaugeModule : IDisposable
     // Slots side by side inside the box of the element; a slot with a colour is full, one without is empty.
     private static void DrawSlots(ImDrawListPtr drawList, LayoutElement element, int gapPx, int roundingPx, Vector4 backgroundColor, Vector4 borderColor, Vector4?[] slots)
     {
+        if (!LayoutManager.IsShownNow(element))
+            return;
+
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var scale = ImGuiHelpers.GlobalScale;
         var gap = MathF.Round(gapPx * scale);
@@ -1059,6 +1109,9 @@ internal sealed partial class JobGaugeModule : IDisposable
     // One rounded bar filled from the left (0 to 1), with an optional text on it.
     private void DrawFillBar(ImDrawListPtr drawList, LayoutElement element, int roundingPx, Vector4 backgroundColor, Vector4 borderColor, Vector4 color, float fraction, string? text, FrameTextSettings textSettings)
     {
+        if (!LayoutManager.IsShownNow(element))
+            return;
+
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;

@@ -1410,3 +1410,34 @@ Still to do (medium/minor of the audit): separate vs combined "Hide the game's X
 
 ## README
 - `README.md` written at the repo root (English): what it is, install through the custom repository, first steps (`/nui`, `/nui unlock`, trackers presets), how to report (GitHub issues), build, credits (AGPL v3 per LICENSE.md, Saira OFL, Square Enix disclaimer). Discord is not mentioned until it exists.
+
+## Show when: combat and weapon conditions for every layout element (written 2026-11-11, NOT compiled or tested yet)
+- Decided with the owner: the condition lives in the Layout system, not in the page of each module (same idea as the shared colors: fewer options per page). It is edited in two places: the Layout page (element editor, "Show this element") and the unlock mode panel (two combo boxes under the X/Y fields). Both call `VisibilityControls.Draw`.
+- Data: `ElementLayout.ShowInCombat` (Always / InCombat / OutOfCombat) and `ElementLayout.ShowWithWeapon` (Always / Drawn / Sheathed). Both must be true. They are NOT part of the position (`CopyPositionFrom` does not copy them), so they are not saved per job.
+- Rule: `LayoutManager.IsShown(element)` (instance) and `LayoutManager.IsShownNow(element)` (static, for static drawing helpers). Always true while unlock mode is on or the element is selected on the Layout page, so it can be placed. The context comes from `ContextSnapshot` (`InCombat`, new `WeaponDrawn` = `StatusFlags.WeaponOut` of the local player, read in `GameDataProvider`).
+- Wired in: HUD bars (frames and player MP), enmity list, party list, progress bars (player, target, GCD), status effects groups, job gauges (every part, extra gauges too), trackers (single trackers and groups; a group's condition applies to all its trackers). A hidden HUD bar does not bring the game's own bar back (the game's bar stays hidden while ours is enabled).
+- NOT covered: nameplates (they are not layout elements; they follow the game's own options), the tooltip.
+- To verify in game: that `StatusFlags.WeaponOut` is the right flag (weapon drawn/sheathed), and that the combos fit in the unlock panel.
+- The Layout page list of elements is now alphabetical (case-insensitive by name).
+- Tester asked for nameplates that NahjaUI enables by itself when the game's own plates are off. Decision: NOT done. NahjaUI does not override or duplicate what the game already offers unless there is a very good reason; keeping the game's settings as close to normal as possible means that when the plugin goes down (patch days) the player does not have to configure the interface again. Nameplates keep following the game's options.
+- Tester also asked for a global UI scale (1440p, enmity list hard to read). Open: ask which UI scale he uses in the game; for now the enmity list has its own text and bar sizes. A global scale would touch every use of `ImGuiHelpers.GlobalScale`.
+
+## Trackers: the "Combat" load condition is gone (2026-11-11, not compiled or tested yet)
+- Removed `TrackerCombatMode`, `TrackerLoadConditions.Combat`, its combo box on the Load conditions card (cards one line shorter) and its check in `TrackerEngine.IsLoaded`. Nothing in the presets used it. Combat and weapon conditions now exist only as the "show when" of the layout element (a tracker, or its group). No migration: saved values of the old field are ignored.
+- Job gauges were already layout elements, so they got the same "show when" with the layout change (checked).
+
+## Blurry overlay text (tester eryk, 2026-11-11, not tested yet)
+- Cause found in `OverlayFonts.PushCap`: the font chosen was the closest BUILT size, but the text was drawn at `wantedLine * GlobalScale`, a different size, so the letters were stretched a few percent (blur). Now `TextFace` draws at the size the font was built at (`ImFontPtr.FontSize`), and the letter height is `ratios.Height * size` (a fraction of a pixel off the asked height). Added built sizes 9, 11, 22, 26, 34, 40, 46, 52, 60 so the difference stays small. Only while no font is ready the old wanted size is used.
+- To verify in game: text of the HP bars, enmity list, nameplates, trackers and progress bars is sharp; letters have the size the page says (a little more or less is expected).
+
+## Enmity list cut at the top-left corner (tester eryk, 2026-11-11): NOT fixed, cause unknown
+- No code reason found: the list draws on the background draw list inside `GameCover.Draw` (clips only around game windows that cover it, with a margin of 400 px). Hypothesis: a game window near the corner is treated as a cover and cuts the list. Next step: ask the tester to press "Copy the names of the windows cut" (diagnostic of the cover) with the list at the corner, and a screenshot.
+
+## Correction: overlay text was tiny after the blur fix (2026-11-11, not compiled or tested yet)
+- The first blur fix drew at `ImFontPtr.FontSize`. In game (owner, 4K) all overlay texts came out about half size: that value is the LOGICAL size of the font, not the size in screen pixels (the old code, which worked, drew at logical size times `ImGuiHelpers.GlobalScale`).
+- Now `OverlayFonts.PushCap` keeps the logical size of the font it chose (`FindClosest(..., out builtPx)`) and draws at `builtPx * GlobalScale`. That is the size the font was built at, so no stretching, and the same scale the old code used. Lesson: never read the drawing size from `FontSize`; take it from the size table times the UI scale.
+- Assumption to verify in game: a font built at N logical px is built by Dalamud at N times the UI scale. If text is still blurry at UI scale above 1 (the owner's 4K), the assumption is wrong and the sizes need rechecking.
+
+## Enmity list cut by the alliance lists (tester eryk, 2026-11-11, not compiled or tested yet)
+- The tester found that the game's alliance lists (`_AllianceList1`, `_AllianceList2`), switched on in the HUD layout but not shown (not in an alliance), still counted in `GameWindowCover` as a covering window and cut our enmity list (names started cut, "Gurangatch" looked like "ngatch").
+- Fix: `GameWindowCover.Update` skips every window whose name starts with `_AllianceList`. It is a fix for this window only: other windows that are "visible but empty" could behave the same; the diagnostic "Copy the names of the windows cut" was removed from the published build, so a new case needs it back for a moment.

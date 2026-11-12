@@ -9,6 +9,22 @@ namespace NahjaUI.Core.Layout;
 /// Meaning: the point <see cref="SelfAnchor"/> of the element is placed at the point
 /// <see cref="ScreenAnchor"/> of the screen, moved by (<see cref="OffsetX"/>, <see cref="OffsetY"/>).
 /// </summary>
+/// <summary>When an element is shown, with respect to combat.</summary>
+public enum ShowCombat
+{
+    Always,
+    InCombat,
+    OutOfCombat
+}
+
+/// <summary>When an element is shown, with respect to the weapon.</summary>
+public enum ShowWeapon
+{
+    Always,
+    Drawn,
+    Sheathed
+}
+
 [Serializable]
 public class ElementLayout
 {
@@ -22,6 +38,15 @@ public class ElementLayout
     public int Width { get; set; } = 100;
     public int Height { get; set; } = 30;
     public bool Locked { get; set; }
+
+    /// <summary>Show only in combat or only out of combat (Always = no condition). Both conditions must be true. Not part of the position, so it is not saved per job.</summary>
+    public ShowCombat ShowInCombat { get; set; } = ShowCombat.Always;
+
+    /// <summary>Show only with the weapon drawn or only with it sheathed (Always = no condition).</summary>
+    public ShowWeapon ShowWithWeapon { get; set; } = ShowWeapon.Always;
+
+    /// <summary>True when the element has no condition at all.</summary>
+    public bool HasNoCondition => ShowInCombat == ShowCombat.Always && ShowWithWeapon == ShowWeapon.Always;
 
     public ElementLayout Clone() => (ElementLayout)MemberwiseClone();
 

@@ -132,8 +132,10 @@ internal sealed class NamePlateEditor
 
             settings.WidthPx = Number("Width (px)", settings.WidthPx, 1, 4000, 2, 10);
             settings.HeightPx = Number("Height (px)", settings.HeightPx, 1, 1000, 2, 10);
-            ColorRow("Background color", settings.BarBackgroundColor, false, v => settings.BarBackgroundColor = v);
-            ColorRow("Border color", settings.BarBorderColor, true, v => settings.BarBorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder("bgbd15", "Background color", "Border color",
+                settings.CustomBarBackground, settings.BarBackgroundColor, onBg => settings.CustomBarBackground = onBg, colBg => settings.BarBackgroundColor = colBg,
+                settings.CustomBarBorder, settings.BarBorderColor, onBd => settings.CustomBarBorder = onBd, colBd => settings.BarBorderColor = colBd))
+                plugin.RequestSave();
             ImGui.TextColored(Theme.TextMuted, "The color of the HP is the game's own (set in the game).");
         });
 
@@ -148,9 +150,9 @@ internal sealed class NamePlateEditor
                 plugin.RequestSave();
             }
 
-            settings.NameOffsetX = Number("Offset X (px)", settings.NameOffsetX, -300, 300, 1, 5);
+            settings.NameOffsetX = Number("Offset X (px)", settings.NameOffsetX, -500, 500, 1, 5);
             // Up is plus: the saved value counts downwards, so the sign is turned here.
-            settings.NameOffsetY = -Number("Offset Y (px)", -settings.NameOffsetY, -300, 300, 1, 5);
+            settings.NameOffsetY = -Number("Offset Y (px)", -settings.NameOffsetY, -500, 500, 1, 5);
 
             if (ImGui.BeginCombo("Text size (px)", $"{settings.NameSize} px", ImGuiComboFlags.None))
             {
@@ -176,15 +178,15 @@ internal sealed class NamePlateEditor
             if (Check("Show the game's icon next to the name", settings.ShowNameIcon, out var showIcon))
                 settings.ShowNameIcon = showIcon;
 
-            settings.NameIconSizePx = Number("Icon size (px)", settings.NameIconSizePx, 8, 64, 1, 4);
-            settings.NameIconGapPx = Number("Space icon - name (px)", settings.NameIconGapPx, 0, 30, 1, 2);
+            settings.NameIconSizePx = Slide("Icon size (px)", settings.NameIconSizePx, 8, 64);
+            settings.NameIconGapPx = Number("Space icon - name (px)", settings.NameIconGapPx, 0, 30, 1, 5);
 
             if (Check("Show the game's icon above the plate", settings.ShowMarkerIcon, out var showMarker))
                 settings.ShowMarkerIcon = showMarker;
 
-            settings.MarkerIconSizePx = Number("Top icon size (px)", settings.MarkerIconSizePx, 12, 128, 1, 4);
-            settings.MarkerOffsetX = Number("Top icon offset X (px)", settings.MarkerOffsetX, -300, 300, 1, 5);
-            settings.MarkerOffsetY = -Number("Top icon offset Y (px)", -settings.MarkerOffsetY, -300, 300, 1, 5);
+            settings.MarkerIconSizePx = Slide("Top icon size (px)", settings.MarkerIconSizePx, 12, 128);
+            settings.MarkerOffsetX = Number("Top icon offset X (px)", settings.MarkerOffsetX, -500, 500, 1, 5);
+            settings.MarkerOffsetY = -Number("Top icon offset Y (px)", -settings.MarkerOffsetY, -500, 500, 1, 5);
 
             // Which plates show a name and how it is written (full name, surname, initials...) are the game's own options.
             ImGui.TextColored(Theme.TextMuted, "When the name shows, how it is written and whether the title shows (it joins the name): set in the game.");
@@ -227,47 +229,33 @@ internal sealed class NamePlateEditor
             if (Check("Show the progress bar", settings.ShowProgressBar, out var showProgressBar))
                 settings.ShowProgressBar = showProgressBar;
 
-            var side = settings.ProgressBarPosition;
-            if (EnumCombo("Progress bar position", ref side, option => option switch
-                {
-                    NahjaUI.Modules.EnmityList.ProgressBarSide.Right => "Right of the bar",
-                    NahjaUI.Modules.EnmityList.ProgressBarSide.Left => "Left of the bar",
-                    _ => "Under the bar"
-                }))
+            var barAnchor = settings.ProgressBarBarAnchor;
+            if (EnumCombo("Progress bar anchor on the bar", ref barAnchor, point => point.Label()))
             {
-                settings.ProgressBarPosition = side;
+                settings.ProgressBarBarAnchor = barAnchor;
                 plugin.RequestSave();
             }
 
-            var progressBarWidth = settings.ProgressBarWidthPx;
-            if (ImGui.SliderInt("Progress bar width (px, 0 = same as the HP bar)", ref progressBarWidth, 0, 600))
+            var selfAnchor = settings.ProgressBarSelfAnchor;
+            if (EnumCombo("Progress bar anchor of the progress bar", ref selfAnchor, point => point.Label()))
             {
-                settings.ProgressBarWidthPx = progressBarWidth;
+                settings.ProgressBarSelfAnchor = selfAnchor;
                 plugin.RequestSave();
             }
 
-            var progressBarHeight = settings.ProgressBarHeightPx;
-            if (ImGui.SliderInt("Progress bar height (px)", ref progressBarHeight, 6, 30))
-            {
-                settings.ProgressBarHeightPx = progressBarHeight;
-                plugin.RequestSave();
-            }
+            settings.ProgressBarWidthPx = Number("Progress bar width (px, 0 = same as the HP bar)", settings.ProgressBarWidthPx, 0, 4000, 2, 10);
+            settings.ProgressBarHeightPx = Number("Progress bar height (px)", settings.ProgressBarHeightPx, 1, 1000, 2, 10);
 
-            var progressBarGap = settings.ProgressBarGapPx;
-            if (ImGui.SliderInt("Space between HP bar and progress bar (px)", ref progressBarGap, 0, 40))
-            {
-                settings.ProgressBarGapPx = progressBarGap;
-                plugin.RequestSave();
-            }
-
-            settings.ProgressBarOffsetX = Number("Progress bar offset X (px)", settings.ProgressBarOffsetX, -300, 300, 1, 5);
+            settings.ProgressBarOffsetX = Number("Progress bar offset X (px)", settings.ProgressBarOffsetX, -500, 500, 1, 5);
             // Up is plus: the saved value counts downwards, so the sign is turned here.
-            settings.ProgressBarOffsetY = -Number("Progress bar offset Y (px)", -settings.ProgressBarOffsetY, -300, 300, 1, 5);
+            settings.ProgressBarOffsetY = -Number("Progress bar offset Y (px)", -settings.ProgressBarOffsetY, -500, 500, 1, 5);
 
             ColorRow("Color when it can be interrupted", settings.ProgressBarColor, true, v => settings.ProgressBarColor = v);
             ColorRow("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, true, v => settings.ProgressBarUninterruptibleColor = v);
-            ColorRow("Background color", settings.ProgressBarBackgroundColor, false, v => settings.ProgressBarBackgroundColor = v);
-            ColorRow("Border color", settings.ProgressBarBorderColor, true, v => settings.ProgressBarBorderColor = v);
+            if (HudBarEditor.BackgroundAndBorder("bgbd16", "Background color", "Border color",
+                settings.CustomProgressBarBackground, settings.ProgressBarBackgroundColor, onBg => settings.CustomProgressBarBackground = onBg, colBg => settings.ProgressBarBackgroundColor = colBg,
+                settings.CustomProgressBarBorder, settings.ProgressBarBorderColor, onBd => settings.CustomProgressBarBorder = onBd, colBd => settings.ProgressBarBorderColor = colBd))
+                plugin.RequestSave();
         });
 
         Widgets.Card("##card_np_progress_bar_name", 12, () =>
@@ -304,8 +292,8 @@ internal sealed class NamePlateEditor
 
         if (kind != NamePlateRelation.Other && ImGui.BeginTabItem("Status icons"))
         {
-        plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enhancements", "Enhancements", settings.Enhancements, true, canDispel: !kind.IsEnemy());
-        plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, canDispel: !kind.IsEnemy());
+        plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enhancements", "Enhancements", settings.Enhancements, true);
+        plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enfeeblements", "Enfeeblements", settings.Enfeeblements, false);
 
             ImGui.EndTabItem();
         }
@@ -340,6 +328,16 @@ internal sealed class NamePlateEditor
             plugin.RequestSave();
 
         return changed;
+    }
+
+    // A single size (a square or a dot): a slider.
+    private int Slide(string label, int current, int min, int max)
+    {
+        var value = current;
+        if (ImGui.SliderInt(label, ref value, min, max))
+            plugin.RequestSave();
+
+        return value;
     }
 
     private int Number(string label, int current, int min, int max, int step, int fastStep)

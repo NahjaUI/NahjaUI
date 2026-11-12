@@ -306,7 +306,7 @@ internal sealed class HudBarModule : IDisposable
     // One frame: the real unit when there is one, a sample while the settings are open or in unlock mode, else nothing.
     private void DrawUnit(HudBarSettings settings, LayoutElement element, UnitSnapshot? unit, UnitSnapshot sample, bool isPlayerFrame, bool preview)
     {
-        if (!settings.Enabled)
+        if (!settings.Enabled || !plugin.Layout.IsShown(element))
             return;
 
         var isReal = unit is not null;
@@ -408,6 +408,9 @@ internal sealed class HudBarModule : IDisposable
     // The MP bar of the player (CP for crafters, GP for gatherers): its own bar, in its own box of the Layout.
     private void DrawPlayerMp(HudBarSettings settings, UnitSnapshot? unit, bool preview)
     {
+        if (!plugin.Layout.IsShown(MpElement))
+            return;
+
         float fraction;
         uint mp, maxMp;
 
@@ -482,15 +485,19 @@ internal sealed class HudBarModule : IDisposable
             drawList.AddRect(pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         // The texts are drawn last, over everything, and may stick out of the bar.
+        // The name is shortened with "..." when it runs into the HP text (and when it starts inside the bar and would go out of it).
         var name = UnitTextFormatter.FormatName(unit.Name, settings.NameFormat, unit.IsPlayer, settings.NameFormatOnlyPlayers);
-        DrawText(drawList, name, settings.Name, pos, size);
 
         // No HP number for things that have no HP.
+        string? hpText = null;
         if (barShown && (hasHp || unit.Kind == UnitKind.Character))
-        {
-            var hpText = UnitTextFormatter.FormatValue(settings, unit.Hp, unit.MaxHp);
+            hpText = UnitTextFormatter.FormatValue(settings, unit.Hp, unit.MaxHp);
+
+        var hpArea = hpText is null ? null : MeasureText(hpText, settings.Hp, pos, size);
+        DrawText(drawList, name, settings.Name, pos, size, fitInBox: true, avoid: hpArea);
+
+        if (hpText is not null)
             DrawText(drawList, hpText, settings.Hp, pos, size);
-        }
     }
 
     // The shield is as tall as the bar and follows its rounded corners.
@@ -586,9 +593,37 @@ internal sealed class HudBarModule : IDisposable
         drawList.AddRect(min, max, ImGui.GetColorU32(settings.MpBorderColor), rounding, ImDrawFlags.None, thickness);
     }
 
+    // Where the top left corner of a text goes: the same point of the text is placed on the anchor of the box, then the offset moves it.
+    // Horizontally the same point of text and box meet; vertically the CENTRE of the letters goes on the anchor line.
+    private static Vector2 PlaceText(FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize, Vector2 textSize, float scale)
+    {
+        var fraction = settings.Anchor.Fraction();
+        var pos = boxPos + boxSize * fraction - new Vector2(textSize.X * fraction.X, textSize.Y * 0.5f) + new Vector2(settings.OffsetX, settings.OffsetY) * scale;
+        return new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
+    }
+
+    /// <summary>The area a text would take (null when it is off or empty). Another text can use it to keep away from it.</summary>
+    internal (Vector2 Min, Vector2 Max)? MeasureText(string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize, OverlayFont font = OverlayFont.NahjaDisplay)
+    {
+        if (!settings.Enabled || string.IsNullOrEmpty(text))
+            return null;
+
+        using (var face = plugin.Fonts.PushCap(font, settings.TextSize))
+        {
+            var textSize = face.Measure(text);
+            var pos = PlaceText(settings, boxPos, boxSize, textSize, ImGuiHelpers.GlobalScale);
+            return (pos, pos + textSize);
+        }
+    }
+
     // Draws a text attached to a point of the bar: the same point of the text is placed on it, then the offset moves it.
     // White (or the chosen colour) with a black outline, readable over any bar colour and over the game behind it.
-    internal void DrawText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize, OverlayFont font = OverlayFont.NahjaDisplay)
+    // With <fitInBox> a text is shortened and ends in "..." (if not even the dots fit, nothing is drawn) when:
+    //  - it runs into the area <avoid> (another text), always; and
+    //  - it goes out of the box at the left or the right, but only if it STARTS inside the box (its point of the bar, moved by the
+    //    offsets, is inside the box). A text the user put outside the box on purpose is never cut for that.
+    internal void DrawText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 boxPos, Vector2 boxSize, OverlayFont font = OverlayFont.NahjaDisplay,
+        bool fitInBox = false, (Vector2 Min, Vector2 Max)? avoid = null)
     {
         if (!settings.Enabled || string.IsNullOrEmpty(text))
             return;
@@ -600,11 +635,47 @@ internal sealed class HudBarModule : IDisposable
         using (var face = plugin.Fonts.PushCap(font, settings.TextSize))
         {
             var textSize = face.Measure(text);
-            var fraction = settings.Anchor.Fraction();
+            var pos = PlaceText(settings, boxPos, boxSize, textSize, scale);
 
-            // Horizontally the same point of text and box meet; vertically the CENTRE of the letters goes on the anchor line.
-            var pos = boxPos + boxSize * fraction - new Vector2(textSize.X * fraction.X, textSize.Y * 0.5f) + new Vector2(settings.OffsetX, settings.OffsetY) * scale;
-            pos = new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
+            if (fitInBox)
+            {
+                var gap = MathF.Round(4f * scale);
+
+                // Does the text start inside the box? Its point of the box, moved by the offsets, is the start.
+                var startPoint = boxPos + boxSize * settings.Anchor.Fraction() + new Vector2(settings.OffsetX, settings.OffsetY) * scale;
+                var startsInside = startPoint.X >= boxPos.X && startPoint.X <= boxPos.X + boxSize.X
+                                   && startPoint.Y >= boxPos.Y && startPoint.Y <= boxPos.Y + boxSize.Y;
+                var cut = text.Length;
+
+                while (true)
+                {
+                    var candidate = cut >= text.Length ? text : text.Substring(0, cut) + "...";
+                    var candidateSize = face.Measure(candidate);
+                    var candidatePos = PlaceText(settings, boxPos, boxSize, candidateSize, scale);
+
+                    var fits = !startsInside || (candidatePos.X >= boxPos.X && candidatePos.X + candidateSize.X <= boxPos.X + boxSize.X);
+
+                    if (fits && avoid is { } area)
+                    {
+                        var overlapsX = candidatePos.X < area.Max.X + gap && candidatePos.X + candidateSize.X > area.Min.X - gap;
+                        var overlapsY = candidatePos.Y < area.Max.Y && candidatePos.Y + candidateSize.Y > area.Min.Y;
+                        fits = !(overlapsX && overlapsY);
+                    }
+
+                    if (fits)
+                    {
+                        text = candidate;
+                        pos = candidatePos;
+                        break;
+                    }
+
+                    // Not even the three dots fit: nothing is drawn.
+                    if (cut == 0)
+                        return;
+
+                    cut--;
+                }
+            }
 
             face.Draw(drawList, pos, text, ImGui.GetColorU32(settings.Color));
         }

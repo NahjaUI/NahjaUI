@@ -46,9 +46,25 @@ public class ProgressBarSettings
 
     public Vector4 BarColor { get; set; }
 
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
 
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
 
     /// <summary>
     /// Marks the point from which you can move without losing the cast (slidecasting). Your own bar only.
@@ -100,13 +116,29 @@ public class GcdBarSettings
 
 
     public Vector4 BarColor { get; set; } = new(0.85f, 0.85f, 0.92f, 1f);
-    public Vector4 BackgroundColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBackground;
-    public Vector4 BorderColor { get; set; } = NahjaUI.Core.Ui.Theme.BarBorder;
+    private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
+    public bool CustomBackground { get; set; }
+
+    // The background color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BackgroundColor
+    {
+        get => CustomBackground ? backgroundColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Background;
+        set => backgroundColorValue = value;
+    }
+    private Vector4 borderColorValue = NahjaUI.Core.Ui.Theme.BarBorder;
+    public bool CustomBorder { get; set; }
+
+    // The border color of Appearance, unless "Custom" is on. What is saved is the color in use.
+    public Vector4 BorderColor
+    {
+        get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
+        set => borderColorValue = value;
+    }
     public Vector4 QueueColor { get; set; } = new(0.40f, 0.78f, 1f, 1f);
     public Vector4 WeaveColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
 }
 
-/// <summary>The two progress bars.</summary>
+/// <summary>The progress bars: yours, the target's and the focus's (plus the global cooldown bar).</summary>
 [Serializable]
 public class ProgressBarsSettings
 {
@@ -116,4 +148,7 @@ public class ProgressBarsSettings
     public GcdBarSettings Gcd { get; set; } = new();
 
     public ProgressBarSettings Target { get; set; } = new() { BarColor = NahjaUI.Core.Ui.Theme.ProgressBarRed };
+
+    // Same as the target's: red while the cast can be interrupted, the violet of yours when it cannot. Off until the user turns it on.
+    public ProgressBarSettings Focus { get; set; } = new() { Enabled = false, BarColor = NahjaUI.Core.Ui.Theme.ProgressBarRed };
 }

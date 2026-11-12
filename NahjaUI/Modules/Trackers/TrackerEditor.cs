@@ -1144,7 +1144,7 @@ internal sealed class TrackerEditor
             }
 
             var spacing = definition.Spacing;
-            if (ImGui.InputInt("Space between icons (px)", ref spacing, 1, 4))
+            if (ImGui.InputInt("Space between icons (px)", ref spacing, 1, 5))
             {
                 definition.Spacing = Math.Clamp(spacing, 0, 128);
                 plugin.RequestSave();
@@ -2304,16 +2304,9 @@ internal sealed class TrackerEditor
         var isGroup = group is not null;
         var changed = false;
 
-        Widgets.Card(isGroup ? "##card_group_load" : "##card_tracker_load", isGroup ? 11 : 9, () =>
+        Widgets.Card(isGroup ? "##card_group_load" : "##card_tracker_load", isGroup ? 10 : 8, () =>
         {
             Widgets.SectionLabel(isGroup ? "Load conditions (every tracker in the group)" : "Load conditions");
-
-            var combat = definition.Load.Combat;
-            if (EnumCombo("Combat", ref combat, CombatLabel))
-            {
-                definition.Load.Combat = combat;
-                changed = true;
-            }
 
             var where = definition.Load.Where;
             if (EnumCombo("Content", ref where, PvpLabel))
@@ -2444,14 +2437,6 @@ internal sealed class TrackerEditor
         TrackerPvpMode.PveOnly => "Only in PvE (not in PvP)",
         TrackerPvpMode.PvpOnly => "Only in PvP",
         _ => "Everywhere (PvE and PvP)"
-    };
-
-    private static string CombatLabel(TrackerCombatMode mode) => mode switch
-    {
-        TrackerCombatMode.Any => "Always",
-        TrackerCombatMode.InCombat => "Only in combat",
-        TrackerCombatMode.OutOfCombat => "Only out of combat",
-        _ => mode.ToString()
     };
 
     private static string AnchorLabel(AnchorPoint point) => point.Label();

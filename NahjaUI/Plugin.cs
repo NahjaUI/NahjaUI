@@ -17,6 +17,7 @@ using NahjaUI.Modules.NamePlates;
 using NahjaUI.Modules.StatusEffects;
 using NahjaUI.Modules.Tooltip;
 using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.AllianceList;
 using NahjaUI.Modules.HudBars;
 using NahjaUI.Windows;
 
@@ -73,6 +74,8 @@ public sealed class Plugin : IDalamudPlugin
     internal StatusEffectsEditor StatusEffectsEditorPage { get; init; }
     internal FiltersEditor FiltersEditorPage { get; init; }
     internal PartyListModule PartyListSystem { get; init; }
+    internal AllianceListModule AllianceListSystem { get; init; }
+    internal AllianceListEditor AllianceListEditorPage { get; init; }
     internal NamePlateModule NamePlateSystem { get; init; }
     internal NamePlateEditor NamePlateEditorPage { get; init; }
     internal TooltipEditor TooltipEditorPage { get; init; }
@@ -110,6 +113,7 @@ public sealed class Plugin : IDalamudPlugin
         NahjaUI.Core.Ui.GlobalColors.Source = () => Configuration.Colors ??= new NahjaUI.Core.Ui.GlobalColors();
 
         Layout = new LayoutManager(Configuration);
+        Layout.ContextSource = () => GameData.Current.Context;
         Fonts = new OverlayFonts();
         TrackerSystem = new TrackerEngine(this);
         try
@@ -144,6 +148,8 @@ public sealed class Plugin : IDalamudPlugin
         StatusEffectsEditorPage = new StatusEffectsEditor(this);
         FiltersEditorPage = new FiltersEditor(this);
         PartyListSystem = new PartyListModule(this);
+        AllianceListSystem = new AllianceListModule(this);
+        AllianceListEditorPage = new AllianceListEditor(this);
         NamePlateSystem = new NamePlateModule(this);
         NamePlateEditorPage = new NamePlateEditor(this);
         TooltipEditorPage = new TooltipEditor(this);
@@ -189,6 +195,7 @@ public sealed class Plugin : IDalamudPlugin
         Safely(() => HudBarSystem.Dispose());
         Safely(() => StatusEffectsSystem.Dispose());
         Safely(() => PartyListSystem.Dispose());
+        Safely(() => AllianceListSystem.Dispose());
         Safely(() => NamePlateSystem.Dispose());
         Safely(() => EnmityListSystem.Dispose());
         Safely(() => GameData.Dispose());
@@ -221,6 +228,7 @@ public sealed class Plugin : IDalamudPlugin
         Guard("HUD bars", HudBarSystem.Draw);
         Guard("status effects", StatusEffectsSystem.Draw);
         Guard("party list", PartyListSystem.Draw);
+        Guard("alliance list", AllianceListSystem.Draw);
         Guard("enmity list", EnmityListSystem.Draw);
         Guard("trackers", TrackerSystem.Draw);
         Guard("progress bars", ProgressBarSystem.Draw);

@@ -4,6 +4,7 @@ using System.Numerics;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.AllianceList;
 
 namespace NahjaUI.Modules.HudBars;
 
@@ -150,6 +151,9 @@ public class HudBarsSettings
 
     /// <summary>The party list: one bar per member. Its look is a normal frame look, the rest is only about the party.</summary>
     public PartyListSettings Party { get; set; } = new();
+
+    /// <summary>The alliance list: one grid with the members of the other parties of the alliance.</summary>
+    public AllianceListSettings Alliance { get; set; } = new();
 
     /// <summary>The colour of each role, shared by every frame (the HP bars set to the colour of the role, and the stripe of the party).</summary>
     public Vector4 TankColor { get; set; } = new(0.31f, 0.55f, 0.88f, 1f);

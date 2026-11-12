@@ -174,7 +174,6 @@ internal static class Widgets
         }
     }
 
-    /// <summary>Small muted title in capitals that opens a group of settings.</summary>
     /// <summary>Tooltip for the checkbox just drawn: what "Enabled" does for an element the game also draws.</summary>
     public static void EnabledHint(string? extra = null)
     {
@@ -182,6 +181,14 @@ internal static class Widgets
             ImGui.SetTooltip(extra is null ? "Draws NahjaUI's version and hides the game's." : $"Draws NahjaUI's version and hides the game's.\n{extra}");
     }
 
+    /// <summary>Tooltip for the "Enabled" checkbox of an element that has no game version to hide.</summary>
+    public static void EnabledHintOnly(string text)
+    {
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(text);
+    }
+
+    /// <summary>Small muted title in capitals that opens a group of settings.</summary>
     public static void SectionLabel(string text)
     {
         // The first title of a card is its header: clicking it folds or opens the card.
