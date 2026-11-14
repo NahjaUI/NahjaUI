@@ -181,7 +181,10 @@ public class DarkKnightGaugeSettings : BarGaugeSettings
     public bool ShowLivingShadow { get; set; } = true;
 
     /// <summary>The Living Shadow seconds: placed on the right of the Darkside bar by default.</summary>
-    public FrameTextSettings LivingShadowText { get; set; } = new() { Anchor = AnchorPoint.Right, OffsetX = -6, TextSize = 9, Color = new Vector4(0.90f, 0.55f, 1f, 1f) };
+    public FrameTextSettings LivingShadowText { get; set; } = new() { Anchor = AnchorPoint.Right, OffsetX = -6, TextSize = 9, CustomColor = true, Color = new Vector4(0.90f, 0.55f, 1f, 1f) };
+
+    /// <summary>The seconds of Darkside on its bar: its own place, size, offsets and color (the number of the Blood bar is <c>Text</c>).</summary>
+    public FrameTextSettings DarksideText { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9 };
 
     /// <summary>Frame the Darkside bar while Dark Arts is active.</summary>
     public bool ShowDarkArts { get; set; } = true;
@@ -433,6 +436,9 @@ public class LimitBreakGaugeSettings
 
     /// <summary>A full bar (a level you can use).</summary>
     public Vector4 FullColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
+
+    /// <summary>The border of a full bar: it shows at a glance that the level can be used (it contrasts with the gold and the orange of the fill).</summary>
+    public Vector4 ReadyFrameColor { get; set; } = new(0.30f, 0.85f, 1f, 1f);
 
     private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
     public bool CustomBackground { get; set; }

@@ -319,20 +319,11 @@ internal sealed class PartyListModule : IDisposable
 
         }
 
-        drawList.AddRect(pos, max, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, thickness);
+        // The ring of the member you have targeted is the border itself painted in the ring color (Appearance > Target ring color).
+        drawList.AddRect(pos, max, ImGui.GetColorU32(selected ? plugin.Configuration.TargetRingColor : look.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (!member.IsCompanion && ShowsMp(settings.MpMode, member) && member.MaxMp > 0)
             DrawMpBar(drawList, settings, member, pos, size);
-
-        // The ring of the member you have targeted. It is always on and its color is the one of the whole interface
-        // (Appearance > Target ring color). A line is centered on its rectangle: pushing the rectangle out by half the line makes
-        // the ring start exactly where the bar ends (no gap of screen between them).
-        if (selected)
-        {
-            var ringWidth = thickness * 2f;
-            var grow = new Vector2(ringWidth / 2f, ringWidth / 2f);
-            drawList.AddRect(pos - grow, max + grow, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
-        }
 
         // The texts last, over everything (the ring too: a name at the very top of the bar must not be cut by it).
         // A member who is away (offline, in another area, too far) or dead is faded, and his name is replaced by what is happening.

@@ -1138,7 +1138,7 @@ internal sealed class HudBarEditor
 
     // A color of the Appearance page, or its own when "Custom color" is on. Turning it on starts from the color in use, so nothing jumps.
     // Returns true when something changed (the caller saves).
-    internal static bool SharedColor(string id, string label, bool custom, Vector4 effective, bool alpha, Action<bool> setCustom, Action<Vector4> setColor)
+    internal static bool SharedColor(string id, string label, bool custom, Vector4 effective, bool alpha, Action<bool> setCustom, Action<Vector4> setColor, Vector4? original = null)
     {
         var changed = false;
         var on = custom;
@@ -1159,7 +1159,7 @@ internal sealed class HudBarEditor
 
         var value = effective;
         ImGui.Indent();
-        if (Widgets.ColorSetting($"{label}##{id}", ref value, null, alpha))
+        if (Widgets.ColorSetting($"{label}##{id}", ref value, original, alpha))
         {
             setColor(value);
             changed = true;
@@ -1325,7 +1325,8 @@ internal sealed class HudBarEditor
     }
 
     // The point of the bar, the two offsets, the size, the font and the colour of one text.
-    internal static bool TextControls(FrameTextSettings text)
+    // defaultColor: the color the text starts with when it has its own one (it gets a reset button back to it).
+    internal static bool TextControls(FrameTextSettings text, Vector4? defaultColor = null)
     {
         var changed = false;
 
@@ -1365,7 +1366,7 @@ internal sealed class HudBarEditor
             ImGui.EndCombo();
         }
 
-        if (SharedColor("text", "Text color", text.CustomColor, text.Color, false, on => text.CustomColor = on, c => text.Color = c))
+        if (SharedColor("text", "Text color", text.CustomColor, text.Color, false, on => text.CustomColor = on, c => text.Color = c, defaultColor))
             changed = true;
 
         return changed;

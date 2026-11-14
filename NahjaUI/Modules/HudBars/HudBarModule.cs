@@ -72,6 +72,18 @@ internal sealed class HudBarModule : IDisposable
             Height = 8
         });
 
+        // In PvP there are no job gauges: the MP bar goes on top of the global cooldown bar (1 px apart, like the other stacked bars).
+        // Like every bar of the column, it has its own place for each job (the presets set it above the bar of that job).
+        MpPvpElement = plugin.Layout.Register("hudbar.player.mp.pvp", "Player MP bar (PvP)", new ElementLayout
+        {
+            ScreenAnchor = AnchorPoint.Center,
+            SelfAnchor = AnchorPoint.Top,
+            OffsetX = 0,
+            OffsetY = 224,
+            Width = 240,
+            Height = 6
+        });
+
         // The target takes the mirrored place of the player's frame. The small ones sit under and over it, at its right.
         TargetElement = plugin.Layout.Register("hudbar.target", "Target frame", new ElementLayout
         {
@@ -115,6 +127,8 @@ internal sealed class HudBarModule : IDisposable
     public LayoutElement FocusElement { get; }
 
     public LayoutElement MpElement { get; }
+
+    public LayoutElement MpPvpElement { get; }
 
     /// <summary>
     /// Set by the settings page every frame it is open: the frame then shows sample values when the real unit is not
@@ -276,7 +290,7 @@ internal sealed class HudBarModule : IDisposable
         hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
         var preview = PreviewRequested || plugin.Layout.UnlockMode
-            || plugin.Layout.IsPreviewing(PlayerElement.Id) || plugin.Layout.IsPreviewing(MpElement.Id) || plugin.Layout.IsPreviewing(TargetElement.Id)
+            || plugin.Layout.IsPreviewing(PlayerElement.Id) || plugin.Layout.IsPreviewing(MpElement.Id) || plugin.Layout.IsPreviewing(MpPvpElement.Id) || plugin.Layout.IsPreviewing(TargetElement.Id)
             || plugin.Layout.IsPreviewing(TargetOfTargetElement.Id) || plugin.Layout.IsPreviewing(FocusElement.Id);
         PreviewRequested = false;
         PreviewActive = preview;
@@ -290,13 +304,21 @@ internal sealed class HudBarModule : IDisposable
         var mpOn = frames.Player.Enabled && (player is null || frames.Player.IsMpOn(player.JobId));
 
         PlayerElement.IsHidden = player is not null && !hpOn;
-        MpElement.IsHidden = player is not null && !mpOn;
+
+        // In PvP (no job gauges) the MP bar of every job is shown, in its own box on top of the global cooldown bar; in PvE it is the usual one.
+        var inPvp = snapshot.Context.InPvP;
+        MpElement.IsHidden = inPvp || (player is not null && !mpOn);
+        MpPvpElement.IsHidden = !inPvp;
 
         if (hpOn)
             DrawUnit(frames.Player, PlayerElement, snapshot.Player, SamplePlayer, true, preview);
 
-        if (mpOn)
-            DrawPlayerMp(frames.Player, snapshot.Player, preview);
+        // (The box of PvP is also drawn while it is selected in the Layout page, so it can be placed outside PvP.)
+        if (frames.Player.Enabled && (inPvp || plugin.Layout.IsPreviewing(MpPvpElement.Id)))
+            DrawPlayerMp(frames.Player, MpPvpElement, snapshot.Player, preview);
+
+        if (mpOn && !inPvp)
+            DrawPlayerMp(frames.Player, MpElement, snapshot.Player, preview);
 
         DrawUnit(frames.Target, TargetElement, snapshot.Target, SampleTarget, false, preview);
         DrawUnit(frames.TargetOfTarget, TargetOfTargetElement, snapshot.TargetOfTarget, SampleTargetOfTarget, false, preview);
@@ -406,9 +428,9 @@ internal sealed class HudBarModule : IDisposable
     }
 
     // The MP bar of the player (CP for crafters, GP for gatherers): its own bar, in its own box of the Layout.
-    private void DrawPlayerMp(HudBarSettings settings, UnitSnapshot? unit, bool preview)
+    private void DrawPlayerMp(HudBarSettings settings, LayoutElement element, UnitSnapshot? unit, bool preview)
     {
-        if (!plugin.Layout.IsShown(MpElement))
+        if (!plugin.Layout.IsShown(element))
             return;
 
         float fraction;
@@ -432,7 +454,7 @@ internal sealed class HudBarModule : IDisposable
         }
 
         var scale = ImGuiHelpers.GlobalScale;
-        var (pos, size) = LayoutManager.GetRect(MpElement.Layout);
+        var (pos, size) = LayoutManager.GetRect(element.Layout);
         var drawList = ImGui.GetBackgroundDrawList();
         var thickness = MathF.Max(1f, MathF.Round(scale));
 

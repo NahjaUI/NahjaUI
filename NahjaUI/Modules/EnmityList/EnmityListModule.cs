@@ -224,16 +224,8 @@ internal sealed class EnmityListModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
-
-        if (isTarget)
-        {
-            // A line is centered on its rectangle: the rectangle is pushed out by half the line so the ring starts exactly where
-            // the bar ends (no gap of screen showing between the bar and the ring).
-            var ringWidth = thickness * 2f;
-            var ring = new Vector2(ringWidth / 2f, ringWidth / 2f);
-            drawList.AddRect(pos - ring, max + ring, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
-        }
+        // The target ring is the border painted in the ring color.
+        drawList.AddRect(pos, max, ImGui.GetColorU32(isTarget ? plugin.Configuration.TargetRingColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         // The dot: one color when the enemy is attacking you, another when it is attacking someone else.
         if (settings.ShowEnmityDot)

@@ -737,6 +737,7 @@ internal sealed class TrackerEditor
         switch (rule.Kind)
         {
             case ConditionKind.AbilityHighlighted:
+            case ConditionKind.AbilityUsable:
                 return "Activated";
             case ConditionKind.AbilityOnCooldown:
             case ConditionKind.AbilityOffCooldown:
@@ -1228,7 +1229,7 @@ internal sealed class TrackerEditor
         { ConditionKind.StatusPresent, ConditionKind.StatusMissing };
 
     private static readonly ConditionKind[] AbilityConditions =
-        { ConditionKind.AbilityHighlighted, ConditionKind.AbilityOnCooldown, ConditionKind.AbilityOffCooldown, ConditionKind.AbilityFull, ConditionKind.AbilityNotFull };
+        { ConditionKind.AbilityHighlighted, ConditionKind.AbilityOnCooldown, ConditionKind.AbilityOffCooldown, ConditionKind.AbilityFull, ConditionKind.AbilityNotFull, ConditionKind.AbilityUsable };
 
     // An effect of a trigger: a plain checkbox, applied whenever the trigger matches.
     private bool EffectCheckbox(string label, bool value)
@@ -1247,6 +1248,7 @@ internal sealed class TrackerEditor
         ConditionKind.AbilityOnCooldown => "On cooldown",
         ConditionKind.AbilityOffCooldown => "Off cooldown",
         ConditionKind.AbilityFull => "Full of charges",
+        ConditionKind.AbilityUsable => "Highlighted and off cooldown",
         _ => "Not full of charges"
     };
 
@@ -1411,6 +1413,7 @@ internal sealed class TrackerEditor
             ConditionKind.AbilityOnCooldown => "ability, on cooldown",
             ConditionKind.AbilityOffCooldown => "ability, off cooldown",
             ConditionKind.AbilityFull => "ability, full of charges",
+            ConditionKind.AbilityUsable => "ability, highlighted and off cooldown",
             _ => "ability, not full of charges"
         };
 
@@ -2045,6 +2048,7 @@ internal sealed class TrackerEditor
                 {
                     source.Source = TextSourceOf(option, false);
                     search.Query = string.Empty;
+                    search.Dismissed = false;
                     plugin.RequestSave();
                 }
             }
@@ -2106,18 +2110,50 @@ internal sealed class TrackerEditor
             else
                 ImGui.Text($"Selected: {GameNames.StatusName(source.StatusId)} ({source.StatusId})");
 
+            // The box starts with the name of the status already chosen.
+            if (!search.Initialized)
+            {
+                search.Initialized = true;
+
+                if (source.StatusId != 0)
+                {
+                    search.Query = GameNames.StatusName(source.StatusId);
+                    search.Dismissed = true;
+                }
+            }
+
             var query = search.Query;
             if (ImGui.InputText("Search status by name", ref query, 64))
+            {
                 search.Query = query;
+                search.Dismissed = false;
+            }
+
+            var active = ImGui.IsItemActive();
+            if (ImGui.IsItemActivated())
+                search.Dismissed = false;
+
+            // The matches show while the box has the focus (or the mouse is over them, so a click still lands), and not after one was picked.
+            if (search.Dismissed || !(active || search.ResultsHovered) || search.Statuses.Count == 0)
+            {
+                search.ResultsHovered = false;
+                return;
+            }
+
+            var top = ImGui.GetCursorScreenPos().Y;
 
             foreach (var result in search.Statuses)
             {
                 if (ImGui.Selectable($"{result.Name} ({result.Id})##text_status_{result.Id}", source.StatusId == result.Id))
                 {
                     source.StatusId = result.Id;
+                    search.Query = result.Name;
+                    search.Dismissed = true;
                     plugin.RequestSave();
                 }
             }
+
+            search.ResultsHovered = SearchResultsHovered(search, top);
         }
         else if (needsAbility)
         {
@@ -2126,19 +2162,62 @@ internal sealed class TrackerEditor
             else
                 ImGui.Text($"Selected: {GameNames.ActionName(source.ActionId)} ({source.ActionId})");
 
+            // The box starts with the name of the ability already chosen.
+            if (!search.Initialized)
+            {
+                search.Initialized = true;
+
+                if (source.ActionId != 0)
+                {
+                    search.Query = GameNames.ActionName(source.ActionId);
+                    search.Dismissed = true;
+                }
+            }
+
             var query = search.Query;
             if (ImGui.InputText("Search ability by name", ref query, 64))
+            {
                 search.Query = query;
+                search.Dismissed = false;
+            }
+
+            var active = ImGui.IsItemActive();
+            if (ImGui.IsItemActivated())
+                search.Dismissed = false;
+
+            // The matches show while the box has the focus (or the mouse is over them, so a click still lands), and not after one was picked.
+            if (search.Dismissed || !(active || search.ResultsHovered) || search.Actions.Count == 0)
+            {
+                search.ResultsHovered = false;
+                return;
+            }
+
+            var top = ImGui.GetCursorScreenPos().Y;
 
             foreach (var result in search.Actions)
             {
                 if (ImGui.Selectable($"{result.Name} ({result.Id})   {result.RecastSeconds:0}s##text_action_{result.Id}", source.ActionId == result.Id))
                 {
                     source.ActionId = result.Id;
+                    search.Query = result.Name;
+                    search.Dismissed = true;
                     plugin.RequestSave();
                 }
             }
+
+            search.ResultsHovered = SearchResultsHovered(search, top);
         }
+    }
+
+    // Is the mouse over the list of matches that was just drawn (from y = top down to the cursor)? The list then stays open so a click lands.
+    private static bool SearchResultsHovered(TextSearch search, float top)
+    {
+        var bottom = ImGui.GetCursorScreenPos().Y;
+        var mouse = ImGui.GetMousePos();
+        var windowX = ImGui.GetWindowPos().X;
+        return !search.Dismissed
+            && mouse.Y >= top && mouse.Y <= bottom
+            && mouse.X >= windowX && mouse.X <= windowX + ImGui.GetWindowSize().X;
     }
 
     // ---------------------------------------------------------------- display

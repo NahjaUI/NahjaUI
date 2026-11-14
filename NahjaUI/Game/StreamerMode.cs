@@ -54,10 +54,34 @@ internal static class StreamerMode
     /// <summary>Set every frame from the configuration.</summary>
     public static bool Enabled { get; set; }
 
+    private static int seed;
+
+    /// <summary>Set every frame from the configuration. A different number gives every real name a different invented one.</summary>
+    public static int Seed
+    {
+        get => seed;
+        set
+        {
+            if (value == seed)
+                return;
+
+            lock (Gate)
+            {
+                seed = value;
+                Aliases.Clear();
+                Used.Clear();
+            }
+        }
+    }
+
     /// <summary>The name to show: the real one, or its alias when streamer mode is on and the unit is a player character.</summary>
     public static string Name(string name, bool isPlayer)
     {
         if (!Enabled || !isPlayer || string.IsNullOrWhiteSpace(name))
+            return name;
+
+        // In a Frontline the game does not give the name of an enemy player, only its job: that is not a name to hide.
+        if (IsJobName(name))
             return name;
 
         lock (Gate)
@@ -70,6 +94,34 @@ internal static class StreamerMode
             }
 
             return alias;
+        }
+    }
+
+    // The names of the jobs (in the language of the game and in English). A real character name always has a first and a last name, so none of them can be one.
+    private static HashSet<string>? jobNames;
+
+    private static bool IsJobName(string name)
+    {
+        lock (Gate)
+        {
+            if (jobNames is null)
+            {
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>())
+                {
+                    var local = row.Name.ToString();
+                    if (local.Length > 0)
+                        names.Add(local);
+
+                    var english = row.NameEnglish.ToString();
+                    if (english.Length > 0)
+                        names.Add(english);
+                }
+
+                jobNames = names;
+            }
+
+            return jobNames.Contains(name.Trim());
         }
     }
 
@@ -103,7 +155,7 @@ internal static class StreamerMode
     // FNV-1a: the same text gives the same number in every session (string.GetHashCode does not).
     private static uint Hash(string text)
     {
-        var hash = 2166136261u;
+        var hash = 2166136261u ^ ((uint)seed * 2654435761u);
         foreach (var c in text)
             hash = (hash ^ c) * 16777619u;
 

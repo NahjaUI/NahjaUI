@@ -26,9 +26,28 @@ internal sealed unsafe class GameWindowCover
     private const int MaxDepth = 4;
 
     // Windows that are never cut around (the speech balloons over the characters, for example). More names can be added here.
-    private static readonly HashSet<string> NeverCut = new() { "Balloon", "_Balloon", "BalloonText", "_BalloonText" };
+    // The chat panels 1 to 3 are the extra chat windows: the game keeps them "visible" even when you do not use them, and one of them
+    // cut the status icons of a party list in the middle of the screen. The first panel (ChatLogPanel_0) is the real chat and still cuts.
+    private static readonly HashSet<string> NeverCut = new()
+    {
+        "Balloon", "_Balloon", "BalloonText", "_BalloonText",
+        "ChatLogPanel_1", "ChatLogPanel_2", "ChatLogPanel_3",
+        // The line of text in the middle of the screen ("You obtain...", "The void crystal begins to glow"): its text node is as wide as
+        // the whole screen (about 1460 px) even when the sentence is short, and it cut the bottom of the party list.
+        "_WideText"
+    };
 
     private readonly List<(Vector2 Min, Vector2 Max)> rects = new();
+
+    // The name of the window of each rectangle (only to show them while looking for the one that cuts something).
+    private readonly List<string> rectNames = new();
+
+    /// <summary>Draws the border and the name of every area that is being cut, and the border of each part that paints inside it. Only for finding which window cuts something ("/nui covers").</summary>
+    public bool ShowAreas { get; set; }
+
+    // The parts (images, texts...) that make up the cut windows, kept only while ShowAreas is on.
+    private readonly List<(Vector2 Min, Vector2 Max, bool IsText)> debugNodes = new();
+    private readonly List<(Vector2 Min, Vector2 Max, bool IsText)> currentNodes = new();
     private int nodesSeen;
 
     /// <summary>True while at least one covering window is on the screen.</summary>
@@ -44,6 +63,8 @@ internal sealed unsafe class GameWindowCover
     public void Update(Configuration configuration)
     {
         rects.Clear();
+        rectNames.Clear();
+        debugNodes.Clear();
 
         try
         {
@@ -83,6 +104,7 @@ internal sealed unsafe class GameWindowCover
                     continue;
 
                 var box = new Box { Min = new Vector2(float.MaxValue), Max = new Vector2(float.MinValue) };
+                currentNodes.Clear();
                 Collect(&unit->UldManager, unit->Scale, 0, new Vector2(float.MinValue), new Vector2(float.MaxValue), ref box);
 
                 if (box.Max.X <= box.Min.X || box.Max.Y <= box.Min.Y)
@@ -125,12 +147,41 @@ internal sealed unsafe class GameWindowCover
                     continue;
 
                 rects.Add((box.Min, box.Max));
+                rectNames.Add(name);
+
+                if (ShowAreas)
+                    debugNodes.AddRange(currentNodes);
             }
         }
         catch
         {
             // If the windows cannot be read, nothing is cut.
             rects.Clear();
+            rectNames.Clear();
+            debugNodes.Clear();
+        }
+    }
+
+    /// <summary>Draws the areas that are cut, each with the name of its window (when <see cref="ShowAreas"/> is on).</summary>
+    public void DrawAreas()
+    {
+        if (!ShowAreas)
+            return;
+
+        var drawList = ImGui.GetForegroundDrawList();
+        var color = ImGui.GetColorU32(new Vector4(1f, 0.2f, 0.8f, 1f));
+
+        // Each part that paints inside a cut window: texts in yellow, images and backgrounds in cyan.
+        var imageColor = ImGui.GetColorU32(new Vector4(0.2f, 1f, 1f, 0.9f));
+        var textColor = ImGui.GetColorU32(new Vector4(1f, 0.9f, 0.2f, 0.9f));
+        foreach (var (nodeMin, nodeMax, isText) in debugNodes)
+            drawList.AddRect(nodeMin, nodeMax, isText ? textColor : imageColor, 0f, ImDrawFlags.None, 1f);
+
+        for (var i = 0; i < rects.Count && i < rectNames.Count; i++)
+        {
+            var (min, max) = rects[i];
+            drawList.AddRect(min, max, color, 0f, ImDrawFlags.None, 2f);
+            drawList.AddText(min + new Vector2(4f, 2f), color, $"{rectNames[i]}  ({max.X - min.X:0}x{max.Y - min.Y:0})");
         }
     }
 
@@ -208,6 +259,9 @@ internal sealed unsafe class GameWindowCover
                 box.Min = Vector2.Min(box.Min, min);
                 box.Max = Vector2.Max(box.Max, max);
                 box.Painted++;
+
+                if (ShowAreas)
+                    currentNodes.Add((min, max, type == NodeType.Text));
                 box.MaxAlpha2 = Math.Max(box.MaxAlpha2, node->Alpha_2);
                 box.MaxColorA = Math.Max(box.MaxColorA, node->Color.A);
             }

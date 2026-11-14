@@ -206,17 +206,26 @@ internal sealed class LayoutManager
 
     // ---------------------------------------------------------------- one position for each job
 
-    // The job whose position each element currently shows.
+    // The key whose position each element currently shows.
     private readonly Dictionary<string, uint> loadedFor = new();
+
+    /// <summary>A position "for each job" is saved under a key: the job id in PvE, and the job id plus this number in PvP.</summary>
+    public const uint PvpKeyOffset = 1000;
+
+    /// <summary>The key of a job's position in PvE or in PvP (0, the base, when no job is known).</summary>
+    public static uint KeyOf(uint jobId, bool pvp) => jobId != 0 && pvp ? jobId + PvpKeyOffset : jobId;
+
+    /// <summary>The key (job and zone) the positions show right now.</summary>
+    public uint CurrentKey { get; private set; }
 
     /// <summary>True when the element keeps a different position for each job.</summary>
     public bool IsPerJob(string id) => config.JobLayouts.ContainsKey(id);
 
     /// <summary>
     /// Turns "a position for each job" on or off for an element. On: the current position becomes the base (what a job that
-    /// was never moved starts from) and the position of the job being played. Off: the element keeps what it shows now.
+    /// was never moved starts from) and the position of the key being played (job and zone). Off: the element keeps what it shows now.
     /// </summary>
-    public void SetPerJob(LayoutElement element, bool on, uint jobId)
+    public void SetPerJob(LayoutElement element, bool on, uint key)
     {
         if (!on)
         {
@@ -226,19 +235,23 @@ internal sealed class LayoutManager
         }
 
         var jobs = new Dictionary<uint, ElementLayout> { [0] = element.Layout.Clone() };
-        if (jobId != 0)
-            jobs[jobId] = element.Layout.Clone();
+        if (key != 0)
+            jobs[key] = element.Layout.Clone();
 
         config.JobLayouts[element.Id] = jobs;
-        loadedFor[element.Id] = jobId;
+        loadedFor[element.Id] = key;
     }
 
     /// <summary>
-    /// Call once per frame with the job being played (0 when not known). The elements with a position for each job show
-    /// the one of that job when the job changes; while the job stays, what is moved or edited is stored for that job.
+    /// Call once per frame with the job being played (0 when not known) and whether it is in PvP. The elements with a position for
+    /// each job show the one of that job and zone when either changes; while they stay, what is moved or edited is stored for them.
+    /// A job that was never moved in PvP starts from its position in PvE.
     /// </summary>
-    public void SyncJob(uint jobId)
+    public void SyncJob(uint jobId, bool pvp)
     {
+        var key = KeyOf(jobId, pvp);
+        CurrentKey = key;
+
         if (jobId == 0 || config.JobLayouts.Count == 0)
             return;
 
@@ -247,25 +260,30 @@ internal sealed class LayoutManager
             if (!config.JobLayouts.TryGetValue(element.Id, out var jobs))
                 continue;
 
-            if (!loadedFor.TryGetValue(element.Id, out var loaded) || loaded != jobId)
+            if (!loadedFor.TryGetValue(element.Id, out var loaded) || loaded != key)
             {
-                // A different job (or the first frame): show its position, or the base one if it never had its own.
-                if (!jobs.TryGetValue(jobId, out var own))
+                // A different job or zone (or the first frame): show its position; if it never had its own, the one of the job in PvE
+                // (for PvP), and the base one after that.
+                if (!jobs.TryGetValue(key, out var own))
                 {
-                    own = jobs.TryGetValue(0, out var baseLayout) ? baseLayout.Clone() : element.Layout.Clone();
-                    jobs[jobId] = own;
+                    if (pvp && jobs.TryGetValue(jobId, out var pveLayout))
+                        own = pveLayout.Clone();
+                    else
+                        own = jobs.TryGetValue(0, out var baseLayout) ? baseLayout.Clone() : element.Layout.Clone();
+
+                    jobs[key] = own;
                 }
 
                 element.Layout.CopyPositionFrom(own);
-                loadedFor[element.Id] = jobId;
+                loadedFor[element.Id] = key;
             }
             else
             {
-                // The same job: keep its saved position equal to what is shown (moved by hand or edited).
-                if (!jobs.TryGetValue(jobId, out var own))
+                // The same job and zone: keep its saved position equal to what is shown (moved by hand or edited).
+                if (!jobs.TryGetValue(key, out var own))
                 {
                     own = element.Layout.Clone();
-                    jobs[jobId] = own;
+                    jobs[key] = own;
                 }
 
                 own.CopyPositionFrom(element.Layout);

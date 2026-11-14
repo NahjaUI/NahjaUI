@@ -113,6 +113,12 @@ internal sealed class NamePlateModule : IDisposable
                     {
                         gameMarkerIcons[gameObject.GameObjectId] = handler.MarkerIconId;
                     }
+                    else if (gameMarkerIcons.TryGetValue(gameObject.GameObjectId, out var known) && known != 0 && NativeMarkerIcon(gameObject) == 0)
+                    {
+                        // The game cleared the mark on the object (a quest was turned in) without refreshing the plate: our copy would
+                        // keep painting it forever, so it is dropped here.
+                        gameMarkerIcons[gameObject.GameObjectId] = 0;
+                    }
                 }
             }
 
@@ -142,6 +148,15 @@ internal sealed class NamePlateModule : IDisposable
             if (style.ShowMarkerIcon)
                 handler.MarkerIconId = 0;
         }
+    }
+
+    // The icon the game itself keeps on the object (it is not the plate's copy, so our own zero never touches it).
+    private static unsafe uint NativeMarkerIcon(Dalamud.Game.ClientState.Objects.Types.IGameObject gameObject)
+    {
+        if (gameObject.Address == IntPtr.Zero)
+            return 0;
+
+        return ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)gameObject.Address)->NamePlateIconId;
     }
 
     // Which kind of plate this is (the same kinds as the ones of the game snapshot).

@@ -40,7 +40,9 @@ internal static class DefensiveFilters
             "Expedient", "Seraphic Veil", "Fey Illumination", "Aquaveil", "Taurochole", "Krasis", "Zoe", "Philosophia", "Macrocosmos",
             // Role actions of the DPS (the first ones are on your party; Feint, Addle, Reprisal and Dismantled are on the enemy)
             "Troubadour", "Tactician", "Shield Samba", "Magick Barrier", "Tengentsu", "Tengentsu's Foresight",
-            "Feint", "Addle", "Reprisal", "Dismantled"
+            // "+Reprisal": the game table has more than one status with that name and the lowest id is an old one that never appears
+            // on the enemy; the "+" takes all of them (the one that is really on the enemy, and any other that a trait could add).
+            "Feint", "Addle", "+Reprisal", "Dismantled"
         }),
         new(ShieldsId, "Shields", new[]
         {
@@ -58,8 +60,9 @@ internal static class DefensiveFilters
         // The "+" means every status with that name (the Dancer and the partner have a Closed Position each, with different ids).
         new(DancePartnerId, "Dance Partner", new[] { "+Closed Position", "+Dance Partner" }),
         new(MovementId, "Movement", new[] { "Sprint", "Peloton", "Jog" }),
-        // The enfeeblements a job has to keep on the enemy all the time during its rotation (the damage over time of each job and the
-        // ones that work like it). The "+" is every status with that name; the old names are for the low levels.
+        // ONLY the damage over time that a job has to keep on the enemy all the time (100% uptime, renewed over and over, the ones the
+        // trackers paint red when they are missing). A damage over time that is applied by pressing its cooldown (Sonic Break, Bow Shock)
+        // does not belong here. The "+" is every status with that name; the old names are for the low levels.
         new(RotationId, "Rotation upkeep", new[]
         {
             "+Dia", "+Aero II", "+Aero",                                     // White Mage
@@ -71,8 +74,7 @@ internal static class DefensiveFilters
             "+Death's Design",                                               // Reaper
             "+Stormbite", "+Windbite", "+Caustic Bite", "+Venomous Bite",    // Bard
             "+High Thunder", "+Thunder III", "+Thunder",                     // Black Mage
-            "+Demolish",                                                     // Monk
-            "+Sonic Break", "+Bow Shock"                                     // Gunbreaker
+            "+Demolish"                                                      // Monk
         })
     };
 

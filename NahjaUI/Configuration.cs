@@ -40,8 +40,11 @@ public class Configuration : IPluginConfiguration
     [Newtonsoft.Json.JsonIgnore]
     public string ServerBarIconNow => "Tank";
 
-    /// <summary>Streamer mode: the names of player characters are replaced by "Player 1", "Player 2"... in everything NahjaUI draws.</summary>
+    /// <summary>Streamer mode: the names of player characters are replaced by names of Final Fantasy characters in everything NahjaUI draws.</summary>
     public bool StreamerMode { get; set; }
+
+    /// <summary>Which set of invented names streamer mode gives. A new number (the "Change names" button) gives everyone a different name.</summary>
+    public int StreamerSeed { get; set; }
 
     // Page selected in the sidebar of the main window.
     public string SelectedPage { get; set; } = "General";

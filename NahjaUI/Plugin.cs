@@ -217,14 +217,16 @@ public sealed class Plugin : IDalamudPlugin
         Guard("layout", () =>
         {
             var currentSnapshot = GameData.Current;
-            Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u);
+            Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u, currentSnapshot.Context.InPvP);
         });
 
         // Which game windows cover the screen right now (the frames are not drawn over them).
         Guard("window cover", () => GameCover.Update(Configuration));
         StreamerMode.Enabled = Configuration.StreamerMode;
+        StreamerMode.Seed = Configuration.StreamerSeed;
 
         Guard("windows", WindowSystem.Draw);
+        Guard("cover areas", GameCover.DrawAreas);
 
         // Drawn first, so the nameplates stay under every frame (the player's, the target's, the enemies', the party's).
         Guard("nameplates", NamePlateSystem.Draw);
@@ -324,9 +326,17 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        if (args.Trim().ToLowerInvariant() == "unlock")
+        var argument = args.Trim().ToLowerInvariant();
+        if (argument == "unlock")
         {
             Layout.UnlockMode = !Layout.UnlockMode;
+            return;
+        }
+
+        // Shows the areas of the game's windows that NahjaUI cuts around (to find which window cuts a frame); use it again to hide them.
+        if (argument == "covers")
+        {
+            GameCover.ShowAreas = !GameCover.ShowAreas;
             return;
         }
 

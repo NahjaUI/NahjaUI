@@ -800,8 +800,16 @@ internal sealed class TrackerEngine
     {
         ConditionKind.StatusPresent or ConditionKind.StatusMissing => MatchStatus(rule, snapshot, player),
         ConditionKind.AbilityHighlighted => MatchActivated(rule, snapshot),
+        ConditionKind.AbilityUsable => MatchUsable(rule, snapshot),
         _ => MatchCooldown(rule, snapshot)
     };
+
+    // The game highlights it AND it is not on its own cooldown: the game keeps the highlight while the ability recharges, so this is what "can be used now" means.
+    private static TrackerState MatchUsable(TrackerRule rule, GameSnapshot snapshot)
+    {
+        var state = MatchActivated(rule, snapshot);
+        return state.Visible && state.Remaining > 0f ? TrackerState.Hidden : state;
+    }
 
     // An ability the game turns on right now: it glows, or the button of the first action of its chain has changed into it.
     private static TrackerState MatchActivated(TrackerRule rule, GameSnapshot snapshot)

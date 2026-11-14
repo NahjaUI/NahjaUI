@@ -254,16 +254,10 @@ internal sealed class AllianceListModule : IDisposable
             drawList.AddImage(texture.Handle, iconMin, iconMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
         }
 
-        drawList.AddRect(pos, max, ImGui.GetColorU32(GlobalColors.Current.Border), rounding, ImDrawFlags.None, thickness);
-
-        // The target ring, like the party list.
+        // The target ring, like the party list: the border painted in the ring color.
         var targetId = plugin.GameData.Current.Target?.EntityId;
-        if (member.EntityId != 0 && targetId is not null && member.EntityId == targetId)
-        {
-            var ringWidth = thickness * 2f;
-            var grow = new Vector2(ringWidth / 2f, ringWidth / 2f);
-            drawList.AddRect(pos - grow, max + grow, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
-        }
+        var isTargeted = member.EntityId != 0 && targetId is not null && member.EntityId == targetId;
+        drawList.AddRect(pos, max, ImGui.GetColorU32(isTargeted ? plugin.Configuration.TargetRingColor : GlobalColors.Current.Border), rounding, ImDrawFlags.None, thickness);
 
         // With the Raise icon on him the text is left out: the cell is too small for both.
         if (dead && !raiseReady)

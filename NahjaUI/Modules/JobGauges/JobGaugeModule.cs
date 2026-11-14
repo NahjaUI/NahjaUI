@@ -313,12 +313,14 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         FrontlineElement = plugin.Layout.Register("gauge.frontline", "Frontline gauge (PvP)", new ElementLayout
         {
+            // In PvP there are no job gauges: it works as one, on top of the MP bar of PvP (1 px apart, like the other stacked bars).
+            // The presets set its place for each job.
             ScreenAnchor = AnchorPoint.Center,
-            SelfAnchor = AnchorPoint.Center,
-            OffsetX = -230,
-            OffsetY = 250,
-            Width = 120,
-            Height = 12
+            SelfAnchor = AnchorPoint.Top,
+            OffsetX = 0,
+            OffsetY = 217,
+            Width = 240,
+            Height = 6
         });
 
         RegisterExtraElements();
@@ -686,7 +688,8 @@ internal sealed partial class JobGaugeModule : IDisposable
                 drawList.PopClipRect();
             }
 
-            drawList.AddRect(a, b, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+            // A full bar (a level you can use) has its own border color.
+            drawList.AddRect(a, b, ImGui.GetColorU32(fill >= 1f ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
         }
 
         if (settings.ShowLevel && fullBars >= 1)
@@ -725,17 +728,13 @@ internal sealed partial class JobGaugeModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
-
-        if (settings.ShowDarkArts && gauge.DarkArts)
-        {
-            var outside = new Vector2(thickness, thickness);
-            drawList.AddRect(pos - outside, end + outside, ImGui.GetColorU32(settings.DarkArtsColor), rounding + thickness, ImDrawFlags.None, thickness);
-        }
+        // Dark Arts is the border painted in its color: it never leaves the bar.
+        var darkArts = settings.ShowDarkArts && gauge.DarkArts;
+        drawList.AddRect(pos, end, ImGui.GetColorU32(darkArts ? settings.DarkArtsColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (settings.ShowDarksideSeconds && gauge.DarksideMs > 0)
         {
-            DrawCenteredText(drawList, settings.Text, pos, size, ((int)MathF.Ceiling(gauge.DarksideMs / 1000f)).ToString());
+            DrawCenteredText(drawList, settings.DarksideText, pos, size, ((int)MathF.Ceiling(gauge.DarksideMs / 1000f)).ToString());
         }
 
         if (settings.ShowLivingShadow && gauge.LivingShadowMs > 0)
@@ -821,13 +820,8 @@ internal sealed partial class JobGaugeModule : IDisposable
             drawList.AddLine(new Vector2(x, pos.Y), new Vector2(x, end.Y), ImGui.GetColorU32(settings.ThresholdColor), thickness);
         }
 
-        drawList.AddRect(pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
-
-        if (frame)
-        {
-            var outside = new Vector2(thickness, thickness);
-            drawList.AddRect(pos - outside, end + outside, ImGui.GetColorU32(settings.ReadyFrameColor), rounding + thickness, ImDrawFlags.None, thickness);
-        }
+        // The ready frame is the border painted in its color.
+        drawList.AddRect(pos, end, ImGui.GetColorU32(frame ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (settings.ShowNumbers)
         {
@@ -988,14 +982,8 @@ internal sealed partial class JobGaugeModule : IDisposable
                     drawList.AddRectFilled(a, new Vector2(right, b.Y), partialFill, rounding);
             }
 
-            drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
-
-            // A frame just outside the pip when the gauge is full.
-            if (glow)
-            {
-                var outside = new Vector2(thickness, thickness);
-                drawList.AddRect(a - outside, b + outside, glowColor, rounding + thickness, ImDrawFlags.None, thickness);
-            }
+            // When the gauge is full the pip's own border is painted in the frame color.
+            drawList.AddRect(a, b, glow ? glowColor : border, rounding, ImDrawFlags.None, thickness);
         }
     }
 

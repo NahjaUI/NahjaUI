@@ -159,13 +159,13 @@ internal static class JobSetups
         }
         else
         {
-            rotation = builder.Row(rotationName, 6, false);
+            rotation = builder.Row(rotationName, 6);
             job.Rotation(builder, rotation);
 
-            cooldowns = builder.Row(cooldownsName, 3, true);
+            cooldowns = builder.Row(cooldownsName, 3);
             job.Cooldowns(builder, cooldowns);
 
-            defensives = builder.Row(defensivesName, 3, true);
+            defensives = builder.Row(defensivesName, 3);
             job.Defensives(builder, defensives);
 
             // A job without defensive abilities (Dragoon, Viper) has no such row.
@@ -178,6 +178,7 @@ internal static class JobSetups
 
             // The movement abilities without damage (Shadowstride, Aetherial Shift) go next to Sprint in the group "General"
             // (the ones that hit stay in the CDs). They are tracked here, before the safety net below, so they are not added twice.
+            // They never light up: they are almost always ready, so a glow would be on all the time.
             if (job.Moves is not null)
             {
                 var general = Find("General") ?? CreateGeneral(plugin, engine, builder);
@@ -186,7 +187,7 @@ internal static class JobSetups
                 foreach (var move in job.Moves)
                 {
                     var stores = known.Any(info => info.Name == move.Name && (info.MaxCharges > 1 || ActionManager.GetMaxCharges(info.Id, 100) > 1));
-                    builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: move.Name != "Peloton");
+                    builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: false);
                     PutInJobOrder(engine, general, job.Id);
                 }
             }
@@ -221,7 +222,7 @@ internal static class JobSetups
             {
                 roleIsNew = true;
                 var shared = new TrackerPresets.Builder(engine, role.Jobs);
-                roleRow = shared.Row(role.Name, 3, false);
+                roleRow = shared.Row(role.Name, 3);
                 role.Fill(shared, roleRow);
                 shared.Finish();
                 builder.Add(shared.Count, shared.Missing);
@@ -310,6 +311,32 @@ internal static class JobSetups
             y += isBar ? slot.Height : slot.Element.Layout.Height;
             aboveIsBar = isBar;
             first = false;
+        }
+
+        // PvP has its own column (its own positions for the job, see LayoutManager.KeyOf), from the same top: the Rotation row, then 6 px
+        // below it the Frontline gauge, the MP bar of PvP, the global cooldown bar and the progress bar, 1 px apart. There are no job gauges
+        // and no CDs rows in PvP, so nothing else is in between.
+        var pvpKey = LayoutManager.KeyOf(job.Id, true);
+        var pvpTop = rotation is null ? TopY : TopY + rotation.Element.Layout.Height + 6;
+        var pvpColumn = new (LayoutElement Element, int Height)[]
+        {
+            (plugin.JobGaugeSystem.FrontlineElement, 6),
+            (plugin.HudBarSystem.MpPvpElement, 6),
+            (plugin.ProgressBarSystem.GcdElement, 6),
+            (plugin.ProgressBarSystem.PlayerElement, 18)
+        };
+
+        foreach (var (pvpElement, pvpHeight) in pvpColumn)
+        {
+            var barTop = pvpTop;
+            PlaceForJob(plugin, pvpElement, pvpKey, layout =>
+            {
+                TrackerPresets.Builder.AttachToScreenTop(layout, barTop);
+                layout.Width = 240;
+                layout.Height = pvpHeight;
+            });
+
+            pvpTop += pvpHeight + BarGap;
         }
 
         builder.Finish();
@@ -435,7 +462,7 @@ internal static class JobSetups
     private static TrackerGroupRuntime CreateGeneral(Plugin plugin, TrackerEngine engine, TrackerPresets.Builder report)
     {
         var all = new TrackerPresets.Builder(engine);
-        var group = all.Row("General", 3, true);
+        var group = all.Row("General", 3);
         group.Definition.Growth = GroupGrowth.ToLeft;
 
         var frame = plugin.HudBarSystem.PlayerElement.Layout;
@@ -462,105 +489,24 @@ internal static class JobSetups
         return manager == null ? -1 : manager->GetRecastGroup((int)ActionType.Action, actionId);
     }
 
-    // Deletes a group with its trackers (to rebuild a job that was set up by hand in an older style). True when it existed.
-    private static bool RemoveOldGroup(TrackerEngine engine, string name)
-    {
-        var group = engine.Groups.FirstOrDefault(g => g.Definition.Name == name);
-        if (group is null)
-            return false;
-
-        foreach (var member in engine.MembersOf(group).ToList())
-            engine.Remove(member);
-
-        engine.RemoveGroup(group);
-        return true;
-    }
-
-    // ---------------------------------------------------------------- PvP
-
-    private const string WarriorPvpRotation = "WAR PvP Rotation";
-    private const string WarriorPvpCooldowns = "WAR PvP CDs";
-    private const string WarriorPvpRole = "WAR PvP Role";
-
-    /// <summary>The same column as the PvE setups, for PvP: Rotation, CDs, Role/common actions. The trackers load only in PvP.</summary>
-    public static string ApplyPvp(Plugin plugin, TrackerEngine engine, string jobName)
-    {
-        if (jobName != "Warrior")
-            return "Unknown job.";
-
-        const uint warrior = 21;
-        var replaced = new[] { WarriorPvpRotation, WarriorPvpCooldowns, WarriorPvpRole }.Count(name => RemoveOldGroup(engine, name));
-
-        var b = new TrackerPresets.Builder(engine, warrior) { Pvp = true };
-
-        // Rotation: the steps of the combo while the game highlights them, and what unlocks the follow-up actions.
-        var rotation = b.Row(WarriorPvpRotation, 6, false);
-        b.Step(rotation, "Maim");
-        b.Step(rotation, "Storm's Path");
-        b.Enhancement(rotation, "Primal Ruination Ready");
-        b.Enhancement(rotation, "Inner Chaos Ready");
-        b.Enhancement(rotation, "Chaotic Cyclone Ready");
-        b.Enhancement(rotation, "Wrathful");
-        b.Enhancement(rotation, "Burgeoning Fury", stacks: true);
-        b.Enhancement(rotation, "Inner Release");
-
-        // Cooldowns: effect time while active, otherwise the recharge.
-        var cooldowns = b.Row(WarriorPvpCooldowns, 3, true);
-        b.Cd(cooldowns, "Primal Rend", new[] { "Primal Rend" });
-        b.Cd(cooldowns, "Onslaught", new[] { "Onslaught" });
-        b.Cd(cooldowns, "Orogeny", new[] { "Orogeny" });
-        b.Cd(cooldowns, "Blota", new[] { "Blota" });
-        b.Cd(cooldowns, "Bloodwhetting", new[] { "Bloodwhetting" }, new[] { "Bloodwhetting" });
-
-        // Role actions and the common actions of PvP.
-        var role = b.Row(WarriorPvpRole, 3, true);
-        b.Cd(role, "Rampart", new[] { "Rampart" }, new[] { "Rampart" });
-        b.Cd(role, "Rampage", new[] { "Rampage" });
-        b.Cd(role, "Full Swing", new[] { "Full Swing" });
-        b.Cd(role, "Guard", new[] { "Guard" }, new[] { "Guard" });
-        b.Cd(role, "Purify", new[] { "Purify" });
-        b.Cd(role, "Recuperate", new[] { "Recuperate" });
-        b.Cd(role, "Standard-issue Elixir", new[] { "Standard-issue Elixir" });
-
-        b.Finish();
-
-        // The column: Rotation at the same height as in PvE, the rest under it (each at its own height).
-        var rowTop = TopY;
-        foreach (var row in new[] { rotation, cooldowns, role })
-        {
-            TrackerPresets.Builder.AttachToScreenTop(row.Element.Layout, rowTop);
-            rowTop += row.Element.Layout.Height + 6;
-        }
-
-        plugin.RequestSave();
-
-        var report = $"Warrior PvP setup added: {b.Count} trackers in 3 rows (they only load in PvP).";
-        if (replaced > 0)
-            report += $" The old {replaced} PvP group(s) were replaced.";
-
-        if (b.Missing.Count > 0)
-            report += $" Not found in the game data, so those triggers do nothing: {string.Join(", ", b.Missing)}.";
-
-        return report;
-    }
-
-    // An element shared by all jobs (the progress bar, the MP bar, the Tank Role row) gets its own position for this job.
-    private static void PlaceForJob(Plugin plugin, LayoutElement element, uint jobId, Action<ElementLayout> place)
+    // An element shared by all jobs (the progress bar, the MP bar, the Tank Role row) gets its own position for this job and zone
+    // (the key is LayoutManager.KeyOf: the job in PvE, or the job in PvP).
+    private static void PlaceForJob(Plugin plugin, LayoutElement element, uint key, Action<ElementLayout> place)
     {
         if (!plugin.Layout.IsPerJob(element.Id))
             plugin.Layout.SetPerJob(element, true, 0);
 
         var jobs = plugin.Configuration.JobLayouts[element.Id];
-        if (!jobs.TryGetValue(jobId, out var layout))
+        if (!jobs.TryGetValue(key, out var layout))
         {
             layout = (jobs.TryGetValue(0, out var baseLayout) ? baseLayout : element.Layout).Clone();
-            jobs[jobId] = layout;
+            jobs[key] = layout;
         }
 
         place(layout);
 
-        // If this is the job being played, the element shows its position now (and would save it back over ours).
-        if (plugin.GameData.Current.Player?.JobId == jobId)
+        // If this is the job and zone being played, the element shows its position now (and would save it back over ours).
+        if (plugin.Layout.CurrentKey == key)
             element.Layout.CopyPositionFrom(layout);
     }
 
@@ -722,10 +668,10 @@ internal static class JobSetups
     private static void DarkKnightRotation(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The priority of The Balance guide: Disesteem (the Scorn status) and the Scarlet Delirium chain (Comeuppance and Torcleaver are
-        // the same button, and Impalement is its AoE form) go under the enhancements, then the combo. Bloodspiller and Edge of Shadow have no
+        // the same button) go under the enhancements, then the combo. Bloodspiller and Edge of Shadow have no
         // glow of their own and the gauge shows when to spend them.
         b.Enhancement(row, "Scorn");
-        b.Step(row, "Scarlet Delirium");
+        b.Chain(row, "Delirium", "Scarlet Delirium", "Comeuppance", "Torcleaver");
 
         foreach (var step in new[] { "Souleater", "Syphon Strike", "Stalwart Soul" })
             b.Step(row, step);
@@ -733,29 +679,34 @@ internal static class JobSetups
 
     private static void DarkKnightCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // The ones tied to the Blood gauge first, then the rest from the longest cooldown to the shortest.
-        b.Cd(row, "Delirium", new[] { "Delirium" }, new[] { "Delirium" }, effectStacks: true);
-        b.Cd(row, "Blood Weapon", new[] { "Blood Weapon" }, new[] { "Blood Weapon" }, effectStacks: true);
-        b.Cd(row, "Living Shadow", new[] { "Living Shadow" });
-        b.Cd(row, "Salted Earth", new[] { "Salted Earth" }, new[] { "Salted Earth" });
-        b.Cd(row, "Carve and Spit", new[] { "Abyssal Drain", "Carve and Spit" });
-        b.Cd(row, "Shadowbringer", new[] { "Shadowbringer" }, charges: true);
+        // The one tied to the Blood gauge first, then the rest from the longest cooldown to the shortest. No abilities light up here (no glow).
+        // The game turns the button of Blood Weapon into Delirium by itself: one ability, and an effect for each version.
+        // Its icon is shown while the effect is on, and the effect counts its stacks.
+        b.Cd(row, "Delirium", new[] { "Blood Weapon" }, new[] { "Delirium", "Blood Weapon" }, glow: false, effectStacks: true, abilityIcon: true);
+        b.Cd(row, "Living Shadow", new[] { "Living Shadow" }, glow: false);
+        b.Cd(row, "Salted Earth", new[] { "Salted Earth" }, new[] { "Salted Earth" }, glow: false, followUp: "Salt and Darkness");
+
+        // Carve and Spit and Abyssal Drain are two buttons that share their cooldown: only the single-target one is tracked
+        // (like Upheaval for the Warrior, which has Orogeny as its AoE twin).
+        b.Cd(row, "Carve and Spit", new[] { "Carve and Spit" }, glow: false);
+        b.Cd(row, "Shadowbringer", new[] { "Shadowbringer" }, charges: true, glow: false);
     }
 
     private static void DarkKnightDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Living Dead", new[] { "Living Dead" }, new[] { "Living Dead", "Walking Dead" });
+        b.Cd(row, "Living Dead", new[] { "Living Dead" }, new[] { "Living Dead", "Walking Dead" }, glow: false);
 
-        // It spends MP.
-        b.Cd(row, "The Blackest Night", new[] { "The Blackest Night" }, new[] { "Blackest Night" });
+        // It spends MP, but the game does not light it (no spender). Another Dark Knight can put it on you: only the one applied by you counts.
+        b.Cd(row, "The Blackest Night", new[] { "The Blackest Night" }, new[] { "Blackest Night" }, glow: false, effectOnlyMine: true);
 
-        // The one that also covers the party.
-        b.Cd(row, "Dark Missionary", new[] { "Dark Missionary" }, new[] { "Dark Missionary" });
+        // The one that also covers the party. Another Dark Knight can put it on you: only the one applied by you counts.
+        b.Cd(row, "Dark Missionary", new[] { "Dark Missionary" }, new[] { "Dark Missionary" }, glow: false, effectOnlyMine: true);
 
-        // The individual ones.
-        b.Cd(row, "Shadowed Vigil", new[] { "Shadow Wall", "Shadowed Vigil" }, new[] { "Shadow Wall", "Shadowed Vigil" });
-        b.Cd(row, "Dark Mind", new[] { "Dark Mind" }, new[] { "Dark Mind" });
-        b.Cd(row, "Oblation", new[] { "Oblation" }, new[] { "Oblation" }, charges: true);
+        // The individual ones. The game turns Shadow Wall into Shadowed Vigil by itself: one ability, and an effect for each version.
+        // Another Dark Knight can put Oblation on you: only the one applied by you counts.
+        b.Cd(row, "Shadowed Vigil", new[] { "Shadow Wall" }, new[] { "Shadow Wall", "Shadowed Vigil" }, glow: false);
+        b.Cd(row, "Dark Mind", new[] { "Dark Mind" }, new[] { "Dark Mind" }, glow: false);
+        b.Cd(row, "Oblation", new[] { "Oblation" }, new[] { "Oblation" }, charges: true, glow: false, effectOnlyMine: true);
     }
 
     // ---- Gunbreaker (the Cartridges are in the gauge)
@@ -780,7 +731,7 @@ internal static class JobSetups
         b.Cd(row, "No Mercy", new[] { "No Mercy" }, new[] { "No Mercy" });
         b.Cd(row, "Double Down", new[] { "Double Down" });
         b.Cd(row, "Bow Shock", new[] { "Bow Shock" }, new[] { "Bow Shock" });
-        b.Cd(row, "Gnashing Fang", new[] { "Gnashing Fang" }, charges: true);
+        b.Cd(row, "Gnashing Fang", new[] { "Gnashing Fang" }, charges: true, glow: false, spender: true);
         b.Cd(row, "Blasting Zone", new[] { "Danger Zone", "Blasting Zone" });
     }
 

@@ -206,7 +206,7 @@ internal sealed class JobGaugeEditor
 
     private void DrawLimitBreak(LimitBreakGaugeSettings settings, LayoutElement element, string id, string title)
     {
-        Widgets.Card($"##card_gauge_{id}", 20, () =>
+        Widgets.Card($"##card_gauge_{id}", 21, () =>
         {
             Widgets.SectionLabel(title);
 
@@ -258,6 +258,13 @@ internal sealed class JobGaugeEditor
             if (Widgets.ColorSetting($"Full bar color##{id}", ref full, Widgets.Default(settings).FullColor))
             {
                 settings.FullColor = full;
+                plugin.RequestSave();
+            }
+
+            var readyFrame = settings.ReadyFrameColor;
+            if (Widgets.ColorSetting($"Border of a full bar##{id}", ref readyFrame, Widgets.Default(settings).ReadyFrameColor))
+            {
+                settings.ReadyFrameColor = readyFrame;
                 plugin.RequestSave();
             }
 
@@ -526,17 +533,28 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
+            ImGui.TextColored(Theme.TextMuted, "Blood bar number");
             ImGui.PushID("gaugeText");
             if (HudBarEditor.TextControls(settings.Text))
                 plugin.RequestSave();
             ImGui.PopID();
+
+            if (settings.ShowDarksideSeconds)
+            {
+                ImGui.Spacing();
+                ImGui.TextColored(Theme.TextMuted, "Darkside bar seconds");
+                ImGui.PushID("darksideText");
+                if (HudBarEditor.TextControls(settings.DarksideText))
+                    plugin.RequestSave();
+                ImGui.PopID();
+            }
 
             if (settings.ShowLivingShadow)
             {
                 ImGui.Spacing();
                 ImGui.TextColored(Theme.TextMuted, "Living Shadow seconds");
                 ImGui.PushID("livingShadowText");
-                if (HudBarEditor.TextControls(settings.LivingShadowText))
+                if (HudBarEditor.TextControls(settings.LivingShadowText, Widgets.Default(settings).LivingShadowText.Color))
                     plugin.RequestSave();
                 ImGui.PopID();
             }

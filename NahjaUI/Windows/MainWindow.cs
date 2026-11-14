@@ -531,7 +531,17 @@ public class MainWindow : Window, IDisposable
             }
 
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("The names of player characters are shown as Player 1, Player 2... in everything NahjaUI draws. The game's own windows (chat, its own lists) are not changed.");
+                ImGui.SetTooltip("The names of player characters are replaced by names of Final Fantasy characters in everything NahjaUI draws. The game's own windows (chat, its own lists) are not changed.");
+
+            ImGui.SameLine();
+            if (ImGui.Button("Change names"))
+            {
+                config.StreamerSeed = Random.Shared.Next(1, int.MaxValue);
+                plugin.RequestSave();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Gives everyone a different invented name, yours included.");
 
             ImGui.Spacing();
             if (ImGui.Button("Reset window"))
@@ -707,15 +717,18 @@ public class MainWindow : Window, IDisposable
         var perJob = plugin.Layout.IsPerJob(element.Id);
         if (ImGui.Checkbox("A different position for each job", ref perJob))
         {
-            plugin.Layout.SetPerJob(element, perJob, CurrentJobId());
+            plugin.Layout.SetPerJob(element, perJob, plugin.Layout.CurrentKey);
             plugin.RequestSave();
         }
 
         if (perJob)
         {
-            var jobId = CurrentJobId();
+            // PvE and PvP have each their own position for a job.
+            var key = plugin.Layout.CurrentKey;
+            var inPvp = key >= LayoutManager.PvpKeyOffset;
+            var jobId = inPvp ? key - LayoutManager.PvpKeyOffset : key;
             var jobName = jobId == 0 ? "no job" : GameNames.JobAbbreviation(jobId);
-            ImGui.TextColored(Theme.TextMuted, $"What you change here is saved for {jobName}. Jobs you have not moved it on start from where it was when you turned this on.");
+            ImGui.TextColored(Theme.TextMuted, $"What you change here is saved for {jobName} in {(inPvp ? "PvP" : "PvE")}. A job you have not moved it on starts from where it was when you turned this on (in PvP, from its position in PvE).");
         }
 
         ImGui.Spacing();
@@ -737,12 +750,6 @@ public class MainWindow : Window, IDisposable
             element.ResetToDefaults();
             plugin.RequestSave();
         }
-    }
-
-    private uint CurrentJobId()
-    {
-        var snapshot = plugin.GameData.Current;
-        return snapshot.IsLoggedIn ? snapshot.Player?.JobId ?? 0u : 0u;
     }
 
     private static bool AnchorCombo(string label, ref AnchorPoint value)

@@ -18,15 +18,12 @@ internal static class TrackerPresets
     /// <summary>The preset of a job, or null when it has none (yet).</summary>
     public static string? NameForJob(uint jobId) => JobSetups.NameOfJob(jobId);
 
-    // Every job with a setup, in the order of the game's job list, and then the PvP ones.
-    public static readonly string[] Names = JobSetups.Names.Append("Warrior (PvP)").ToArray();
+    // Every job with a setup, in the order of the game's job list.
+    public static readonly string[] Names = JobSetups.Names.ToArray();
 
     /// <summary>Creates the groups and trackers of a preset. Returns a short report to show to the user.</summary>
     public static string Apply(TrackerEngine engine, string name)
     {
-        if (name == "Warrior (PvP)")
-            return JobSetups.ApplyPvp(engine.Plugin, engine, "Warrior");
-
         return JobSetups.Names.Contains(name) ? JobSetups.Apply(engine.Plugin, engine, name) : "Unknown preset.";
     }
 
@@ -39,8 +36,6 @@ internal static class TrackerPresets
         private readonly List<uint> jobIds;
         private readonly List<TrackerGroupRuntime> groups = new();
 
-        // The rows whose recharging abilities show the sweep.
-        private readonly HashSet<TrackerGroupRuntime> sweepRows = new();
 
         /// <summary>The trackers are for PvP: they load only there and look up the PvP version of every action and status.</summary>
         public bool Pvp { get; init; }
@@ -82,7 +77,7 @@ internal static class TrackerPresets
         }
 
         /// <summary>A row of icons (32x24, rounded, trimmed, growing from the centre). Its place in the column is set afterwards.</summary>
-        public TrackerGroupRuntime Row(string name, int spacing, bool sweep)
+        public TrackerGroupRuntime Row(string name, int spacing)
         {
             var group = engine.AddGroup();
             var definition = group.Definition;
@@ -93,8 +88,6 @@ internal static class TrackerPresets
             definition.IconHeight = 24;
 
             var template = definition.Template ??= new TrackerDefinition();
-            if (sweep)
-                sweepRows.Add(group);
             template.Load.JobIds = new List<uint>(jobIds);
             template.Load.Where = Where;
 
@@ -136,6 +129,30 @@ internal static class TrackerPresets
                 rule.Texts.Add(TimeText());
 
             tracker.Rules.Add(rule);
+        }
+
+        // The steps of a chain that is always the same button (Scarlet Delirium, Comeuppance, Torcleaver): ONE tracker.
+        // The game lights the first step all the time (and the button in its normal form, Bloodspiller, glows with gauge), so the first step
+        // cannot be read from the game's highlight. Instead: the later steps are read from the combo of the game (like Confiteor), newest first,
+        // and the first step is shown while the status that enables the chain is on you (with the icon of the first step). The icon then follows the button.
+        public void Chain(TrackerGroupRuntime group, string enablingStatus, params string[] stepNames)
+        {
+            var tracker = NewTracker(group, stepNames[0]);
+
+            for (var i = stepNames.Length - 1; i >= 1; i--)
+            {
+                var id = FindAction(stepNames[i], jobId, Pvp);
+                if (id == 0)
+                    Missing.Add($"ability \"{stepNames[i]}\"");
+                else
+                    TrackedActions.Add(id);
+
+                tracker.Rules.Add(new TrackerRule { Kind = ConditionKind.AbilityHighlighted, ActionId = id, Glow = true });
+            }
+
+            var first = StatusRule(enablingStatus, glow: true);
+            UseAbilityIcon(first, stepNames[0]);
+            tracker.Rules.Add(first);
         }
 
         // The stance of a tank (Iron Will, Defiance, Grit, Royal Guard): shown only while it is off (red and dimmed), no text.
@@ -214,11 +231,34 @@ internal static class TrackerPresets
             tracker.Rules.Add(missing);
         }
 
-        // An ability: while its effect is on you, the time of the effect; otherwise its cooldown (dimmed while it cannot be used).
+        // An ability: while its follow-up can be used, the follow-up; while its effect is on you, the time of the effect; otherwise its cooldown (dimmed while it cannot be used).
         // Alternative names (an ability that is replaced at a higher level) go newest first: the engine skips the ones not learned.
-        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false, bool spender = false, bool effectOnlyMine = false)
+        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false, bool spender = false, bool effectOnlyMine = false, string? followUp = null)
         {
             var tracker = NewTracker(group, trackerName);
+
+            // followUp: another ability with its own cooldown that the game lights up after this one (Salt and Darkness after Salted Earth).
+            // While it can be used it is shown first, with glow; the rest of the time the tracker is the main ability (its effect, then its cooldown).
+            if (followUp is not null)
+            {
+                // It glows: it is the one to press now (it can be used once for each cast of the main ability).
+                var follow = AbilityRule(followUp, ConditionKind.AbilityUsable);
+                follow.Glow = true;
+                tracker.Rules.Add(follow);
+
+                // Its own cooldown does not matter (it can only be used inside the window of the effect of the main ability): the text is the time left of that effect.
+                var window = effects?.FirstOrDefault();
+                if (window is not null)
+                {
+                    var windowId = StatusRule(window, glow: false).StatusId;
+                    if (windowId != 0)
+                    {
+                        var text = TimeText();
+                        text.Sources[0] = new TrackerTextSource { Source = TextSource.StatusTime, StatusId = windowId };
+                        follow.Texts.Add(text);
+                    }
+                }
+            }
 
             foreach (var effect in effects ?? Array.Empty<string>())
             {
@@ -235,6 +275,14 @@ internal static class TrackerPresets
 
                 if (effectStacks)
                     effectRule.Texts.Add(StacksText());
+
+                // An ability with charges (Oblation): while its effect is on, the charges still shown are the ones of the ability.
+                else if (charges)
+                {
+                    var chargesText = StacksText();
+                    chargesText.Sources[0] = new TrackerTextSource { Source = TextSource.AbilityCharges, ActionId = FindAction(abilities[0], jobId, Pvp) };
+                    effectRule.Texts.Add(chargesText);
+                }
 
                 tracker.Rules.Add(effectRule);
             }
@@ -262,14 +310,19 @@ internal static class TrackerPresets
 
                 var onCooldown = AbilityRule(abilityName, ConditionKind.AbilityOnCooldown);
                 onCooldown.Dim = true;
-                onCooldown.Sweep = sweepRows.Contains(group);
                 AddCooldownTexts(onCooldown, charges);
                 tracker.Rules.Add(onCooldown);
 
                 // spender: the ability costs gauge and the game lights its button only while there is enough. Lit = shown as it is (no glow);
                 // ready but not lit = not enough gauge: dimmed.
+                // With charges the lit one also shows them (and the recharge time while one is coming back).
                 if (spender)
-                    tracker.Rules.Add(AbilityRule(abilityName, ConditionKind.AbilityHighlighted));
+                {
+                    var lit = AbilityRule(abilityName, ConditionKind.AbilityHighlighted);
+                    if (charges)
+                        AddCooldownTexts(lit, charges);
+                    tracker.Rules.Add(lit);
+                }
 
                 // Ready: no text (only the charges of an ability that has them: with all of them, nothing else is drawn).
                 var offCooldown = AbilityRule(abilityName, ConditionKind.AbilityOffCooldown);
@@ -304,7 +357,6 @@ internal static class TrackerPresets
 
             var rule = AbilityRule(spellName, ConditionKind.AbilityOnCooldown);
             rule.Dim = true;
-            rule.Sweep = sweepRows.Contains(group);
             rule.Texts.Add(TimeText());
             tracker.Rules.Add(rule);
         }

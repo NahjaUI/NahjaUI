@@ -65,7 +65,10 @@ public enum ConditionKind
     AbilityFull,
 
     /// <summary>An ability with several charges: at least one is still recharging.</summary>
-    AbilityNotFull
+    AbilityNotFull,
+
+    /// <summary>The game highlights the ability and it is not on cooldown (a follow-up ability that has its own cooldown, like Salt and Darkness).</summary>
+    AbilityUsable
 }
 
 /// <summary>
