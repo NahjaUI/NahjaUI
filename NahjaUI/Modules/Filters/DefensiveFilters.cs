@@ -34,7 +34,7 @@ internal static class DefensiveFilters
             "Rampart", "Sentinel", "Guardian", "Vengeance", "Damnation", "Shadow Wall", "Shadowed Vigil", "Dark Mind", "Dark Missionary",
             "Camouflage", "Nebula", "Great Nebula", "Heart of Light", "Heart of Stone", "Heart of Corundum", "Sheltron", "Holy Sheltron",
             "Knight's Resolve", "Passage of Arms", "Intervention", "Cover", "Oblation", "Raw Intuition", "Bloodwhetting", "Stem the Flow",
-            "Nascent Flash", "Nascent Glint", "Aurora", "Clarity of Corundum", "Catharsis of Corundum", "Arm's Length",
+            "Nascent Flash", "Nascent Glint", "Aurora", "Clarity of Corundum", "Catharsis of Corundum", "Arm's Length", "Bulwark",
             // Healers
             "Sacred Soil", "Kerachole", "Holos", "Collective Unconscious", "Exaltation", "Neutral Sect", "Temperance", "Divine Grace",
             "Expedient", "Seraphic Veil", "Fey Illumination", "Aquaveil", "Taurochole", "Krasis", "Zoe", "Philosophia", "Macrocosmos",
@@ -233,6 +233,10 @@ internal static class DefensiveFilters
             if (name.Length > 0 && !ids.ContainsKey(name))
                 ids[name] = row.RowId;
         }
+
+        // The ids checked in the game win over the lowest one of the name (an old status can share the name).
+        foreach (var pair in NahjaUI.Modules.Trackers.TrackerPresets.ConfirmedStatusIds)
+            ids[pair.Key] = pair.Value;
 
         return ids;
     }

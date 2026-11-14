@@ -30,25 +30,33 @@ internal sealed class ProgressBarEditor
 
         if (ImGui.BeginTabItem("Player Progress Bar"))
         {
-            DrawBar("Player progress bar", "##card_progressbar_player", settings.Player, plugin.ProgressBarSystem.PlayerElement, false);
+            using (Widgets.TabBody("##pb_body_player"))
+                DrawBar("Player progress bar", "##card_progressbar_player", settings.Player, plugin.ProgressBarSystem.PlayerElement, false);
+
             ImGui.EndTabItem();
         }
 
         if (ImGui.BeginTabItem("Target Progress Bar"))
         {
-            DrawBar("Target progress bar", "##card_progressbar_target", settings.Target, plugin.ProgressBarSystem.TargetElement, true);
+            using (Widgets.TabBody("##pb_body_target"))
+                DrawBar("Target progress bar", "##card_progressbar_target", settings.Target, plugin.ProgressBarSystem.TargetElement, true);
+
             ImGui.EndTabItem();
         }
 
         if (ImGui.BeginTabItem("Focus Progress Bar"))
         {
-            DrawBar("Focus progress bar", "##card_progressbar_focus", settings.Focus, plugin.ProgressBarSystem.FocusElement, true, true);
+            using (Widgets.TabBody("##pb_body_focus"))
+                DrawBar("Focus progress bar", "##card_progressbar_focus", settings.Focus, plugin.ProgressBarSystem.FocusElement, true, true);
+
             ImGui.EndTabItem();
         }
 
         if (ImGui.BeginTabItem("Global Cooldown Bar"))
         {
-            DrawGcd(settings.Gcd, plugin.ProgressBarSystem.GcdElement);
+            using (Widgets.TabBody("##pb_body_gcd"))
+                DrawGcd(settings.Gcd, plugin.ProgressBarSystem.GcdElement);
+
             ImGui.EndTabItem();
         }
 
@@ -116,9 +124,9 @@ internal sealed class ProgressBarEditor
 
             ImGui.Spacing();
 
-            ColorRow("Bar color##gcd", settings.BarColor, c => settings.BarColor = c, true);
-            ColorRow("Queue window color", settings.QueueColor, c => settings.QueueColor = c, true);
-            ColorRow("Weave limit color", settings.WeaveColor, c => settings.WeaveColor = c, true);
+            ColorRow("Bar color##gcd", settings.BarColor, c => settings.BarColor = c, true, Widgets.Default(settings).BarColor);
+            ColorRow("Queue window color", settings.QueueColor, c => settings.QueueColor = c, true, Widgets.Default(settings).QueueColor);
+            ColorRow("Weave limit color", settings.WeaveColor, c => settings.WeaveColor = c, true, Widgets.Default(settings).WeaveColor);
             if (HudBarEditor.BackgroundAndBorder("bgbd12", "Background color", "Border color",
                 settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
                 settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
@@ -126,17 +134,21 @@ internal sealed class ProgressBarEditor
         });
     }
 
-    private void ColorRow(string label, Vector4 value, Action<Vector4> set, bool noAlpha)
+    private void ColorRow(string label, Vector4 value, Action<Vector4> set, bool noAlpha, Vector4 original)
     {
-        if (ImGui.ColorEdit4(label, ref value, noAlpha ? ImGuiColorEditFlags.NoAlpha : ImGuiColorEditFlags.None))
+        if (Widgets.ColorSetting(label, ref value, original, !noAlpha))
         {
-            set(noAlpha ? new Vector4(value.X, value.Y, value.Z, 1f) : value);
+            set(value);
             plugin.RequestSave();
         }
     }
 
     private void DrawBar(string title, string cardId, ProgressBarSettings settings, LayoutElement element, bool isTarget, bool isFocus = false)
     {
+        // What "Reset" of a color goes back to: the player's, the target's and the focus's bars start with different colors.
+        var defaults = Widgets.Default(plugin.Configuration.ProgressBars);
+        var original = isFocus ? defaults.Focus : isTarget ? defaults.Target : defaults.Player;
+
 
         Widgets.Card(cardId, isTarget ? 20 : 22, () =>
         {
@@ -203,9 +215,9 @@ internal sealed class ProgressBarEditor
                 ImGui.TextColored(Theme.TextMuted, "gives a little extra that the game does not report: raise it only if you test it.");
 
                 var slideColor = settings.SlideCastColor;
-                if (ImGui.ColorEdit4("Slidecast color", ref slideColor, ImGuiColorEditFlags.NoAlpha))
+                if (Widgets.ColorSetting("Slidecast color", ref slideColor, original.SlideCastColor))
                 {
-                    settings.SlideCastColor = new Vector4(slideColor.X, slideColor.Y, slideColor.Z, 1f);
+                    settings.SlideCastColor = slideColor;
                     plugin.RequestSave();
                 }
             }
@@ -213,18 +225,18 @@ internal sealed class ProgressBarEditor
             ImGui.Spacing();
 
             var barColor = settings.BarColor;
-            if (ImGui.ColorEdit4(isTarget ? "Color when it can be interrupted" : "Bar color", ref barColor, ImGuiColorEditFlags.NoAlpha))
+            if (Widgets.ColorSetting(isTarget ? "Color when it can be interrupted" : "Bar color", ref barColor, original.BarColor))
             {
-                settings.BarColor = new Vector4(barColor.X, barColor.Y, barColor.Z, 1f);
+                settings.BarColor = barColor;
                 plugin.RequestSave();
             }
 
             if (isTarget)
             {
                 var uninterruptible = settings.UninterruptibleColor;
-                if (ImGui.ColorEdit4("Color when it cannot be interrupted", ref uninterruptible, ImGuiColorEditFlags.NoAlpha))
+                if (Widgets.ColorSetting("Color when it cannot be interrupted", ref uninterruptible, original.UninterruptibleColor))
                 {
-                    settings.UninterruptibleColor = new Vector4(uninterruptible.X, uninterruptible.Y, uninterruptible.Z, 1f);
+                    settings.UninterruptibleColor = uninterruptible;
                     plugin.RequestSave();
                 }
             }

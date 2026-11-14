@@ -23,22 +23,6 @@ internal sealed class NamePlateEditor
     {
         var master = plugin.Configuration.NamePlates;
 
-        Widgets.Card("##card_np_general", 6, () =>
-        {
-            Widgets.SectionLabel("Nameplates");
-
-            if (Check("Enabled", master.Enabled, out var enabled))
-            {
-                master.Enabled = enabled;
-                Plugin.NamePlateGui.RequestRedraw();
-            }
-            Widgets.EnabledHint();
-
-            if (Check("Always show the HP bar of my target", master.ShowBarOnTarget, out var barOnTarget))
-                master.ShowBarOnTarget = barOnTarget;
-
-        });
-
         if (!ImGui.BeginTabBar("##np_kinds"))
             return;
 
@@ -61,23 +45,28 @@ internal sealed class NamePlateEditor
 
         ImGui.PushID($"kind{(int)kind}");
 
+        // This body only holds the card and the sub-tabs, which scroll their own bodies.
+        var kindBody = Widgets.TabBody($"##np_body_kind{(int)kind}", false);
+
         Widgets.Card("##card_np_kind", 4, () =>
         {
             Widgets.SectionLabel(title);
 
-            if (Check("Use NahjaUI plates for these", style.Active, out var active))
+            if (Check("Enabled", style.Active, out var active))
             {
                 style.Active = active;
                 Plugin.NamePlateGui.RequestRedraw();
             }
 
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Off: the game's own plate is left as it is.");
+            // Off: the game's own plate of this kind is left as it is.
+            Widgets.EnabledHint();
 
             DrawCopyButton(style, kind);
         });
 
         DrawStyle(style, kind);
+
+        kindBody.Dispose();
 
         ImGui.PopID();
         ImGui.EndTabItem();
@@ -118,13 +107,9 @@ internal sealed class NamePlateEditor
         ImGui.EndCombo();
     }
 
-    private void DrawStyle(NamePlateStyle settings, NamePlateRelation kind)
+    // The cards of the Plate tab: HP bar, name and level.
+    private void DrawPlateCards(NamePlateStyle settings, NamePlateRelation kind, NamePlateStyle original)
     {
-        if (!ImGui.BeginTabBar("##np_sub_tabs"))
-            return;
-
-        if (ImGui.BeginTabItem("Plate"))
-        {
         if (kind != NamePlateRelation.Other)
         Widgets.Card("##card_np_hp", 9, () =>
         {
@@ -169,9 +154,9 @@ internal sealed class NamePlateEditor
             }
 
             var nameColor = settings.NameColor;
-            if (ImGui.ColorEdit4("Text color", ref nameColor, ImGuiColorEditFlags.NoAlpha))
+            if (Widgets.ColorSetting("Text color", ref nameColor, original.NameColor))
             {
-                settings.NameColor = new Vector4(nameColor.X, nameColor.Y, nameColor.Z, 1f);
+                settings.NameColor = nameColor;
                 plugin.RequestSave();
             }
 
@@ -205,9 +190,9 @@ internal sealed class NamePlateEditor
             }
 
             var levelColor = settings.LevelColor;
-            if (ImGui.ColorEdit4("Level color", ref levelColor, ImGuiColorEditFlags.NoAlpha))
+            if (Widgets.ColorSetting("Level color", ref levelColor, original.LevelColor))
             {
-                settings.LevelColor = new Vector4(levelColor.X, levelColor.Y, levelColor.Z, 1f);
+                settings.LevelColor = levelColor;
                 plugin.RequestSave();
             }
 
@@ -216,12 +201,37 @@ internal sealed class NamePlateEditor
 
             ImGui.TextColored(Theme.TextMuted, "The level is written right after the name.");
         });
+    }
+
+    private void DrawStyle(NamePlateStyle settings, NamePlateRelation kind)
+    {
+        // What "Reset" of a color goes back to: each kind of plate starts with its own colors.
+        var original = Widgets.Default(plugin.Configuration.NamePlates).StyleOf(kind);
+
+        // "Others" has only the plate cards (no progress bar, no status icons): there is nothing to choose between, so no tabs.
+        if (kind == NamePlateRelation.Other)
+        {
+            using (Widgets.TabBody("##np_body_plate"))
+                DrawPlateCards(settings, kind, original);
+
+            return;
+        }
+
+        if (!ImGui.BeginTabBar("##np_sub_tabs"))
+            return;
+
+        if (ImGui.BeginTabItem("Plate"))
+        {
+            using (Widgets.TabBody("##np_body_plate"))
+                DrawPlateCards(settings, kind, original);
 
             ImGui.EndTabItem();
         }
 
-        if (kind != NamePlateRelation.Other && ImGui.BeginTabItem("Progress bar"))
+        if (ImGui.BeginTabItem("Progress bar"))
         {
+        var progressBody = Widgets.TabBody("##np_body_progress");
+
         Widgets.Card("##card_np_progress_bar", 15, () =>
         {
             Widgets.SectionLabel("Progress bar");
@@ -250,8 +260,8 @@ internal sealed class NamePlateEditor
             // Up is plus: the saved value counts downwards, so the sign is turned here.
             settings.ProgressBarOffsetY = -Number("Progress bar offset Y (px)", -settings.ProgressBarOffsetY, -500, 500, 1, 5);
 
-            ColorRow("Color when it can be interrupted", settings.ProgressBarColor, true, v => settings.ProgressBarColor = v);
-            ColorRow("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, true, v => settings.ProgressBarUninterruptibleColor = v);
+            ColorRow("Color when it can be interrupted", settings.ProgressBarColor, true, v => settings.ProgressBarColor = v, original.ProgressBarColor);
+            ColorRow("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, true, v => settings.ProgressBarUninterruptibleColor = v, original.ProgressBarUninterruptibleColor);
             if (HudBarEditor.BackgroundAndBorder("bgbd16", "Background color", "Border color",
                 settings.CustomProgressBarBackground, settings.ProgressBarBackgroundColor, onBg => settings.CustomProgressBarBackground = onBg, colBg => settings.ProgressBarBackgroundColor = colBg,
                 settings.CustomProgressBarBorder, settings.ProgressBarBorderColor, onBd => settings.CustomProgressBarBorder = onBd, colBd => settings.ProgressBarBorderColor = colBd))
@@ -287,14 +297,18 @@ internal sealed class NamePlateEditor
                 plugin.RequestSave();
         });
 
+            progressBody.Dispose();
             ImGui.EndTabItem();
         }
 
-        if (kind != NamePlateRelation.Other && ImGui.BeginTabItem("Status icons"))
+        if (ImGui.BeginTabItem("Status icons"))
         {
+        var statusBody = Widgets.TabBody("##np_body_status");
+
         plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enhancements", "Enhancements", settings.Enhancements, true);
         plugin.HudBarEditorPage.DrawStatusRowCard("##card_np_enfeeblements", "Enfeeblements", settings.Enfeeblements, false);
 
+            statusBody.Dispose();
             ImGui.EndTabItem();
         }
 
@@ -302,12 +316,12 @@ internal sealed class NamePlateEditor
     }
 
     // A color of the progress bar, with the same control as the Progress bars page (with or without the transparency slider).
-    private void ColorRow(string label, Vector4 current, bool opaque, Action<Vector4> apply)
+    private void ColorRow(string label, Vector4 current, bool opaque, Action<Vector4> apply, Vector4 original)
     {
         var value = current;
-        if (ImGui.ColorEdit4(label, ref value, opaque ? ImGuiColorEditFlags.NoAlpha : ImGuiColorEditFlags.None))
+        if (Widgets.ColorSetting(label, ref value, original, !opaque))
         {
-            apply(opaque ? new Vector4(value.X, value.Y, value.Z, 1f) : value);
+            apply(value);
             plugin.RequestSave();
         }
     }

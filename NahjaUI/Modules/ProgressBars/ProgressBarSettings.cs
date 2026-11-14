@@ -134,8 +134,9 @@ public class GcdBarSettings
         get => CustomBorder ? borderColorValue : NahjaUI.Core.Ui.GlobalColors.Current.Border;
         set => borderColorValue = value;
     }
-    public Vector4 QueueColor { get; set; } = new(0.40f, 0.78f, 1f, 1f);
-    public Vector4 WeaveColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
+    // The queue window is the same idea as the slidecast window (gold); the weave limit is a warning line (the red of the bars).
+    public Vector4 QueueColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
+    public Vector4 WeaveColor { get; set; } = NahjaUI.Core.Ui.Theme.ProgressBarRed;
 }
 
 /// <summary>The progress bars: yours, the target's and the focus's (plus the global cooldown bar).</summary>

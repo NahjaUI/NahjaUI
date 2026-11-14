@@ -1,0 +1,22 @@
+{
+  "Author": "Sandro",
+  "Name": "NahjaUI",
+  "InternalName": "NahjaUI",
+  "Punchline": "A complete, modular interface for Final Fantasy XIV.",
+  "Description": "NahjaUI gives the game a clean, consistent interface that you build piece by piece. Switch on only what you want: everything else stays exactly as the game made it.\n\nHUD bars: your parameter bar, target, target of target, focus target and party list.\nProgress bars: your casts and your target's, with a slidecast marker, plus a global cooldown bar that shows the queue and weave windows.\nJob gauges, status effects, nameplates and enmity list, each one with its own style.\nTrackers: pick the enhancements, enfeeblements and cooldowns you want to see. Every job comes with ready-made presets.\nProfiles: save, copy and share your whole setup.\n\nType /nui to open it.",
+  "Tags": [
+    "ui",
+    "hud",
+    "trackers",
+    "nameplates",
+    "party list",
+    "job gauges",
+    "progress bar",
+    "cooldowns"
+  ],
+  "CategoryTags": [
+    "UI",
+    "HUD"
+  ],
+  "Changelog": "Warrior presets for rotation, cooldowns and defensives. Cleaner menus: Status effects, Nameplates, HUD bars and Enmity list now share the same Frame / Progress bar / Status icons tabs. One fixed fade for out-of-range or untargetable units instead of many opacity sliders. Global cooldown bar: new queue and weave colours. Limit Break bars keep their size with 1, 2 or 3 bars; Frontline gauge uses the Limit Break colour. Party and alliance tooltips match the plugin style. Layout page: the Unlock elements button stays pinned at the top."
+}

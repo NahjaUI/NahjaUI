@@ -39,6 +39,9 @@ internal static class TrackerPresets
         private readonly List<uint> jobIds;
         private readonly List<TrackerGroupRuntime> groups = new();
 
+        // The rows whose recharging abilities show the sweep.
+        private readonly HashSet<TrackerGroupRuntime> sweepRows = new();
+
         /// <summary>The trackers are for PvP: they load only there and look up the PvP version of every action and status.</summary>
         public bool Pvp { get; init; }
 
@@ -90,7 +93,8 @@ internal static class TrackerPresets
             definition.IconHeight = 24;
 
             var template = definition.Template ??= new TrackerDefinition();
-            template.ShowCooldownSweep = sweep;
+            if (sweep)
+                sweepRows.Add(group);
             template.Load.JobIds = new List<uint>(jobIds);
             template.Load.Where = Where;
 
@@ -118,14 +122,20 @@ internal static class TrackerPresets
         // A step of a combo: shown only while the game makes it glow (its button changes into it). No text.
         // A step that the game upgrades by level (Rage of Halone into Royal Authority) is ONE tracker: it follows the lowest ability (the game
         // upgrades the button by itself) and is named like the newest one (shownName).
-        public void Step(TrackerGroupRuntime group, string abilityName, string? shownName = null)
+        public void Step(TrackerGroupRuntime group, string abilityName, string? shownName = null, bool withTime = false)
         {
             var tracker = NewTracker(group, shownName ?? abilityName);
             var id = FindAction(abilityName, jobId, Pvp);
             if (id == 0)
                 Missing.Add($"ability \"{abilityName}\"");
 
-            tracker.Rules.Add(new TrackerRule { Kind = ConditionKind.AbilityHighlighted, ActionId = id, Glow = true });
+            var rule = new TrackerRule { Kind = ConditionKind.AbilityHighlighted, ActionId = id, Glow = true };
+
+            // withTime: the time of the ability is drawn over the icon while the game lights it (Goring Blade).
+            if (withTime)
+                rule.Texts.Add(TimeText());
+
+            tracker.Rules.Add(rule);
         }
 
         // The stance of a tank (Iron Will, Defiance, Grit, Royal Guard): shown only while it is off (red and dimmed), no text.
@@ -206,13 +216,16 @@ internal static class TrackerPresets
 
         // An ability: while its effect is on you, the time of the effect; otherwise its cooldown (dimmed while it cannot be used).
         // Alternative names (an ability that is replaced at a higher level) go newest first: the engine skips the ones not learned.
-        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false)
+        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false, bool spender = false, bool effectOnlyMine = false)
         {
             var tracker = NewTracker(group, trackerName);
 
             foreach (var effect in effects ?? Array.Empty<string>())
             {
                 var effectRule = StatusRule(effect, glow: false);
+
+                // effectOnlyMine: the effect counts only if you applied it (another player of your job can put the same one on you).
+                effectRule.OnlyMine = effectOnlyMine;
 
                 // abilityIcon: while the effect is on, the icon is the one of the ability (not the one of the status).
                 if (abilityIcon)
@@ -249,11 +262,20 @@ internal static class TrackerPresets
 
                 var onCooldown = AbilityRule(abilityName, ConditionKind.AbilityOnCooldown);
                 onCooldown.Dim = true;
+                onCooldown.Sweep = sweepRows.Contains(group);
                 AddCooldownTexts(onCooldown, charges);
                 tracker.Rules.Add(onCooldown);
 
+                // spender: the ability costs gauge and the game lights its button only while there is enough. Lit = shown as it is (no glow);
+                // ready but not lit = not enough gauge: dimmed.
+                if (spender)
+                    tracker.Rules.Add(AbilityRule(abilityName, ConditionKind.AbilityHighlighted));
+
+                // Ready: no text (only the charges of an ability that has them: with all of them, nothing else is drawn).
                 var offCooldown = AbilityRule(abilityName, ConditionKind.AbilityOffCooldown);
-                AddCooldownTexts(offCooldown, charges);
+                offCooldown.Dim = spender;
+                if (charges)
+                    AddCooldownTexts(offCooldown, charges);
                 tracker.Rules.Add(offCooldown);
             }
         }
@@ -282,6 +304,7 @@ internal static class TrackerPresets
 
             var rule = AbilityRule(spellName, ConditionKind.AbilityOnCooldown);
             rule.Dim = true;
+            rule.Sweep = sweepRows.Contains(group);
             rule.Texts.Add(TimeText());
             tracker.Rules.Add(rule);
         }
@@ -431,10 +454,50 @@ internal static class TrackerPresets
         return actionId != 0 && Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) ? row.ClassJobLevel : 0;
     }
 
+    // The ids of the statuses that were checked in the game, by name (PvE). The filters of statuses use them too.
+    internal static readonly Dictionary<string, uint> ConfirmedStatusIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Rampart"] = 1191,
+        ["Arm's Length"] = 1209,
+        ["Iron Will"] = 79,
+        ["Divine Might"] = 2673,
+        ["Requiescat"] = 1368,
+        ["Fight or Flight"] = 76,
+        ["Hallowed Ground"] = 82,
+        ["Cover"] = 80,
+        ["Sheltron"] = 1856,
+        ["Holy Sheltron"] = 2674,
+        ["Passage of Arms"] = 1175,
+        ["Divine Veil"] = 1362,
+        ["Sentinel"] = 74,
+        ["Guardian"] = 3829,
+        ["Bulwark"] = 77,
+        ["Defiance"] = 91,
+        ["Wrathful"] = 3901,
+        ["Primal Rend Ready"] = 2624,
+        ["Primal Ruination Ready"] = 3834,
+        ["Surging Tempest"] = 2677,
+        ["Berserk"] = 86,
+        ["Inner Release"] = 1177,
+        ["Holmgang"] = 409,
+        ["Shake It Off"] = 1457,
+        ["Nascent Flash"] = 1857,
+        ["Vengeance"] = 89,
+        ["Damnation"] = 3832,
+        ["Thrill of Battle"] = 87,
+        ["Equilibrium"] = 2681,
+        ["Raw Intuition"] = 735,
+        ["Bloodwhetting"] = 2678,
+    };
+
     // The status with exactly this name. Several statuses can share a name (PvP, old versions): the lowest id is taken.
     // For PvP the highest id is taken instead: the PvP version of a status is made after the PvE one of the same name.
     internal static uint FindStatus(string name, bool pvp = false)
     {
+        // Names that the game table repeats (an old status with the same name): the id that really appears on the player.
+        if (!pvp && ConfirmedStatusIds.TryGetValue(name, out var confirmed))
+            return confirmed;
+
         uint found = 0;
         // The names of the presets are English: they are looked up in the English table whatever the language of the game, and the tracker keeps the id.
         foreach (var row in Plugin.DataManager.GetExcelSheet<Status>(Dalamud.Game.ClientLanguage.English))

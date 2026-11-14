@@ -163,8 +163,12 @@ public class MainWindow : Window, IDisposable
 
         ImGui.SameLine();
 
+        // The pages with tabs do not scroll as a whole: each tab scrolls its own body, so the tabs stay in place.
+        var tabbedPage = plugin.Configuration.SelectedPage is "HUD bars" or "Progress bars" or "Nameplates" or "Status effects" or "Enmity list" or "Others" or "Layout";
+        var contentFlags = tabbedPage ? ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse : ImGuiWindowFlags.None;
+
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Background))
-        using (var content = ImRaii.Child("##nui_content", Vector2.Zero, false))
+        using (var content = ImRaii.Child("##nui_content", Vector2.Zero, false, contentFlags))
         {
             if (content.Success)
                 DrawContent(scale);
@@ -343,19 +347,25 @@ public class MainWindow : Window, IDisposable
                 {
                     if (ImGui.BeginTabItem("Limit Break"))
                     {
-                        plugin.JobGaugeEditorPage.DrawLimitBreakPage();
+                        using (Widgets.TabBody("##others_body_lb"))
+                            plugin.JobGaugeEditorPage.DrawLimitBreakPage();
+
                         ImGui.EndTabItem();
                     }
 
                     if (ImGui.BeginTabItem("Limit Break (PvP)"))
                     {
-                        plugin.JobGaugeEditorPage.DrawLimitBreakPvpPage();
+                        using (Widgets.TabBody("##others_body_lbpvp"))
+                            plugin.JobGaugeEditorPage.DrawLimitBreakPvpPage();
+
                         ImGui.EndTabItem();
                     }
 
                     if (ImGui.BeginTabItem("Frontline gauge"))
                     {
-                        plugin.JobGaugeEditorPage.DrawFrontlinePage();
+                        using (Widgets.TabBody("##others_body_fl"))
+                            plugin.JobGaugeEditorPage.DrawFrontlinePage();
+
                         ImGui.EndTabItem();
                     }
 
@@ -582,43 +592,45 @@ public class MainWindow : Window, IDisposable
         var layout = plugin.Layout;
         layout.MarkLayoutPageOpen();
 
+        // The explanation and the button stay pinned at the top; the rest of the page scrolls under them.
         Widgets.Callout(
             "##callout_unlock",
             "Unlock mode shows every element as a box you can drag. Select one to get X/Y fields next to it for exact positions. Positions are saved automatically.",
             Theme.Info,
-            3);
-
-        Widgets.Card("##card_positioning", 2, () =>
-        {
-            Widgets.SectionLabel("Positioning");
-
-            if (Widgets.PrimaryButton("Unlock elements"))
-                layout.UnlockMode = true;
-        });
-
-        // Alphabetical, so an element is found by its name.
-        var movable = layout.Positionable.OrderBy(element => element.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-
-        Widgets.Card("##card_elements", movable.Count + 2, () =>
-        {
-            Widgets.SectionLabel("Elements");
-
-            foreach (var element in movable)
+            4,
+            () =>
             {
-                var listName = layout.IsPerJob(element.Id) ? element.Name + "  (per job)" : element.Name;
-                if (ImGui.Selectable(listName + "##" + element.Id, layout.SelectedId == element.Id))
-                    layout.SelectedId = element.Id;
-            }
-        });
+                ImGui.Spacing();
+                if (Widgets.PrimaryButton("Unlock elements"))
+                    layout.UnlockMode = true;
+            });
 
-        var selected = layout.SelectedElement;
-        if (selected is null)
+        using (Widgets.TabBody("##layout_body"))
         {
-            ImGui.TextColored(Theme.TextMuted, "Select an element to edit its position and size.");
-            return;
-        }
+            // Alphabetical, so an element is found by its name.
+            var movable = layout.Positionable.OrderBy(element => element.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 
-        Widgets.Card("##card_editor", 20, () => DrawElementEditor(selected));
+            Widgets.Card("##card_elements", movable.Count + 2, () =>
+            {
+                Widgets.SectionLabel("Elements");
+
+                foreach (var element in movable)
+                {
+                    var listName = layout.IsPerJob(element.Id) ? element.Name + "  (per job)" : element.Name;
+                    if (ImGui.Selectable(listName + "##" + element.Id, layout.SelectedId == element.Id))
+                        layout.SelectedId = element.Id;
+                }
+            });
+
+            var selected = layout.SelectedElement;
+            if (selected is null)
+            {
+                ImGui.TextColored(Theme.TextMuted, "Select an element to edit its position and size.");
+                return;
+            }
+
+            Widgets.Card("##card_editor", 20, () => DrawElementEditor(selected));
+        }
     }
 
     private void DrawElementEditor(LayoutElement element)

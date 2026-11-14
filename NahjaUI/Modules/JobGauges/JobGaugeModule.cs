@@ -642,6 +642,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     }
 
     // As many bars as the content has (1 to 3), side by side: each one fills from the left; a full bar has the "full" colour. The level (LB1...) is written over it.
+    // The width of the box is the width of THREE bars: with one or two bars each keeps the size it would have with three, and they stay centered in the box.
     private void DrawLimitBreak(LimitBreakGaugeSettings settings, LimitBreakSnapshot gauge, LayoutElement element)
     {
         if (gauge.BarUnits == 0 || !LayoutManager.IsShownNow(element))
@@ -658,7 +659,8 @@ internal sealed partial class JobGaugeModule : IDisposable
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
-        var barWidth = MathF.Floor((size.X - gap * (bars - 1)) / bars);
+        const int MaxBars = 3;
+        var barWidth = MathF.Floor((size.X - gap * (MaxBars - 1)) / MaxBars);
         if (barWidth < 1f)
             return;
 

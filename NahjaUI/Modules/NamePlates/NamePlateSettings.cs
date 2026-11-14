@@ -27,10 +27,9 @@ public enum NamePlateLevelMode
 [Serializable]
 public class NamePlateSettings
 {
-    public bool Enabled { get; set; } = false;
-
-    /// <summary>The plate of the target always shows its HP bar, even when the game's options would show only the name (or nothing).</summary>
-    public bool ShowBarOnTarget { get; set; } = true;
+    /// <summary>The module works while at least one kind of plate is enabled (each kind has its own switch in its tab).</summary>
+    [JsonIgnore]
+    public bool Enabled => Self.Active || Party.Active || OtherPlayers.Active || FriendlyNpcs.Active || EnemyNpcs.Active || EnemyPlayers.Active || OtherPlates.Active;
 
     public NamePlateStyle Self { get; set; } = NamePlateStyle.Create(NamePlateRelation.Self);
     public NamePlateStyle Party { get; set; } = NamePlateStyle.Create(NamePlateRelation.Party);

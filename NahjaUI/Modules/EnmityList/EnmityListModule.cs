@@ -22,11 +22,6 @@ internal sealed class EnmityListModule : IDisposable
     // The game's own enmity list.
     private const string NativeList = "_EnemyList";
 
-    // How see-through a row of an enemy that cannot be targeted is (the game does about half).
-    private const float UntargetableAlpha = 0.5f;
-
-    // How see-through a row of an enemy that is listed but out of range is (a lighter fade than the closed phase; an estimate).
-    private const float OutOfRangeAlpha = 0.7f;
     private static readonly string[] NativeLists = { NativeList };
 
     // What the preview shows when no real enemy is fighting you.
@@ -282,10 +277,9 @@ internal sealed class EnmityListModule : IDisposable
             sampleRow ? Modules.HudBars.StatusRowRenderer.PreviewEnfeeblements : unit.Statuses,
             sampleRow, playerId, pos, size, "enemy", friendly: false);
 
-        if (untargetable)
-            DrawListFade.FadeSince(drawList, fadeMark, UntargetableAlpha);
-        else if (outOfRange)
-            DrawListFade.FadeSince(drawList, fadeMark, OutOfRangeAlpha);
+        // One fade for both: an enemy that cannot be targeted or is out of range (the same value as every other faded thing).
+        if (untargetable || outOfRange)
+            DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
     }
 
     // Where the cast of a bar goes: a point of the cast on a point of the bar, then moved by the offsets (plus Y is up in the page, saved downwards).

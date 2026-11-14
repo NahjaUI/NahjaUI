@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.2.0.0</Version>
+    <Version>0.3.0.0</Version>
     <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
     <Author>Nahja Stark</Author>
     <Name>NahjaUI</Name>
@@ -23,6 +23,11 @@ Type /nui to open it.</Description>
   <!-- The icon of the plugin list: Dalamud looks for "images\icon.png" next to the .dll. -->
   <ItemGroup>
     <Content Include="images\icon.png" Link="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The interface a new install starts from (see Core\Profiles\DefaultConfiguration.cs). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Defaults\DefaultConfiguration.json" LogicalName="DefaultConfiguration.json" />
   </ItemGroup>
 
   <!-- The licence of the embedded font (SIL OFL) travels with the plugin. -->

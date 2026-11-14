@@ -53,15 +53,6 @@ internal sealed class HudBarEditor
 
     private const int JobsPerRow = 6;
 
-    private static readonly (string Value, string Label)[] Separators =
-    {
-        (" | ", "Vertical bar ( | )"),
-        (" / ", "Slash ( / )"),
-        (" - ", "Dash ( - )"),
-        (" \u00B7 ", "Dot ( \u00B7 )"),
-        (" ", "Space")
-    };
-
     // The pages of the picker: the HP bar and the MP bar of the player are two separate pages.
     private const int HpPage = 0;
     private const int MpPage = 1;
@@ -118,7 +109,11 @@ internal sealed class HudBarEditor
                 continue;
 
             selectedFrame = i;
-            DrawPage();
+
+            // The pages that only hold sub-tabs (Parameter bar; Target, Focus and Party List with Frame and Status icons) let the sub-tabs scroll their own bodies.
+            using (Widgets.TabBody($"##uf_body_{i}", i is not (HpPage or TargetPage or FocusPage or PartyPage)))
+                DrawPage();
+
             ImGui.EndTabItem();
         }
 
@@ -145,12 +140,19 @@ internal sealed class HudBarEditor
             plugin.PartyListSystem.PreviewRequested = true;
 
             var party = frames.Party;
-            DrawGeneral(party.Look, plugin.PartyListSystem.PartyElement, true);
-            DrawPartyOptions(party);
-            DrawName(party.Look);
-            DrawHp(party.Look);
-            DrawStatusRows("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
-            DrawStatusRows("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch, canOnlyMine: false);
+            DrawFrameTabs("party",
+                () =>
+                {
+                    DrawGeneral(party.Look, plugin.PartyListSystem.PartyElement, true);
+                    DrawPartyOptions(party);
+                    DrawName(party.Look);
+                    DrawHp(party.Look);
+                },
+                () =>
+                {
+                    DrawStatusRows("##card_pf_enhancements", "Enhancements", party.Enhancements, true, enhancementSearch);
+                    DrawStatusRows("##card_pf_enfeeblements", "Enfeeblements", party.Enfeeblements, false, enfeeblementSearch, canOnlyMine: false);
+                });
             return;
         }
 
@@ -171,18 +173,56 @@ internal sealed class HudBarEditor
             return;
         }
 
-        // The same order on every page: general, texts, then the enhancements and enfeeblements.
-        DrawGeneral(settings, element, isPlayer);
-        DrawName(settings);
-        DrawHp(settings);
-
-        // Enhancements and enfeeblements next to the bar (not on the target of target; the player has its own page, "Status effects").
-        if (selectedFrame != TargetOfTargetPage && selectedFrame != HpPage)
+        // The target of target has no status icons: only its cards, without tabs.
+        if (selectedFrame == TargetOfTargetPage)
         {
-            DrawFrameStatusOptions(settings);
-            DrawStatusRows($"##card_uf{selectedFrame}_enhancements", "Enhancements", settings.Enhancements, true, frameEnhancementSearch);
-            DrawStatusRows($"##card_uf{selectedFrame}_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, frameEnfeeblementSearch);
+            DrawGeneral(settings, element, isPlayer);
+            DrawName(settings);
+            DrawHp(settings);
+            return;
         }
+
+        // The same order on every page: the frame (general, texts), then its status icons (enhancements and enfeeblements).
+        // The player has its own page for the statuses, "Status effects".
+        var frame = selectedFrame;
+        DrawFrameTabs($"frame{frame}",
+            () =>
+            {
+                DrawGeneral(settings, element, isPlayer);
+                DrawName(settings);
+                DrawHp(settings);
+            },
+            () =>
+            {
+                DrawFrameStatusOptions(settings);
+                DrawStatusRows($"##card_uf{frame}_enhancements", "Enhancements", settings.Enhancements, true, frameEnhancementSearch);
+                DrawStatusRows($"##card_uf{frame}_enfeeblements", "Enfeeblements", settings.Enfeeblements, false, frameEnfeeblementSearch);
+            });
+    }
+
+    // The two sub-tabs of a frame (the same names as in the nameplates and the enmity list): the frame itself and its status icons.
+    private static void DrawFrameTabs(string id, Action frame, Action statusIcons)
+    {
+        if (!ImGui.BeginTabBar($"##uf_sub_tabs_{id}"))
+            return;
+
+        if (ImGui.BeginTabItem("Frame"))
+        {
+            using (Widgets.TabBody($"##uf_body_{id}_frame"))
+                frame();
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Status icons"))
+        {
+            using (Widgets.TabBody($"##uf_body_{id}_status"))
+                statusIcons();
+
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
     }
 
     // The Parameter bar page (the game's name for the HP and MP bars of the player): one sub-tab for each bar.
@@ -193,16 +233,21 @@ internal sealed class HudBarEditor
 
         if (ImGui.BeginTabItem("HP Bar"))
         {
-            DrawGeneral(settings, element, true);
-            DrawName(settings);
-            DrawHp(settings);
-            DrawHpJobs(settings);
+            using (Widgets.TabBody("##uf_body_hp"))
+            {
+                DrawGeneral(settings, element, true);
+                DrawName(settings);
+                DrawHp(settings);
+            }
+
             ImGui.EndTabItem();
         }
 
         if (ImGui.BeginTabItem("MP Bar"))
         {
-            DrawMp(settings);
+            using (Widgets.TabBody("##uf_body_mp"))
+                DrawMp(settings);
+
             ImGui.EndTabItem();
         }
 
@@ -213,7 +258,7 @@ internal sealed class HudBarEditor
 
     private void DrawGeneral(HudBarSettings settings, LayoutElement element, bool isPlayer)
     {
-        Widgets.Card("##card_uf_general", selectedFrame == TargetOfTargetPage ? 26 : 25, () =>
+        Widgets.Card("##card_uf_general", selectedFrame == TargetOfTargetPage ? 26 : selectedFrame == HpPage ? 29 : 25, () =>
         {
             Widgets.SectionLabel(selectedFrame == PartyPage ? "Party List" : FrameNames[selectedFrame]);
 
@@ -262,11 +307,13 @@ internal sealed class HudBarEditor
 
             ImGui.Spacing();
 
-            var opacity = (int)MathF.Round(settings.ShieldOpacity * 100f);
-            if (ImGui.SliderInt("Shield opacity (%)", ref opacity, 10, 100))
+            // Only your own HP bar can be switched off on some jobs.
+            if (selectedFrame == HpPage)
             {
-                settings.ShieldOpacity = opacity / 100f;
-                plugin.RequestSave();
+                ImGui.Spacing();
+
+                if (DrawJobsMenu("hp", "HP bar", settings.IsHpOn, settings.SetHpOn))
+                    plugin.RequestSave();
             }
         });
     }
@@ -284,26 +331,6 @@ internal sealed class HudBarEditor
                 party.RowSpacingPx = spacing;
                 plugin.RequestSave();
             }
-
-            var awayOpacity = party.AwayOpacityPercent;
-            if (ImGui.SliderInt("Opacity when dead, offline, away or in a cutscene (%)", ref awayOpacity, 10, 100))
-            {
-                party.AwayOpacityPercent = awayOpacity;
-                plugin.RequestSave();
-            }
-
-            var awayTag = party.ShowAwayTag;
-            if (ImGui.Checkbox("Write Dead, Offline, Other area, Out of range or Viewing cutscene instead of the name", ref awayTag))
-            {
-                party.ShowAwayTag = awayTag;
-                plugin.RequestSave();
-            }
-
-            var soloRaw = plugin.GameData.Current.Context.SoloOptionRaw;
-            ImGui.TextColored(Theme.TextMuted, soloRaw < 0
-                ? "The game's option could not be read."
-                : $"Alone, the game shows its party list: {(soloRaw == 0 ? "yes" : "no")} (raw value {soloRaw}).");
-
 
             var showJobIcon = party.ShowJobIcon;
             if (ImGui.Checkbox("Show the job icon", ref showJobIcon))
@@ -1004,13 +1031,13 @@ internal sealed class HudBarEditor
         DrawValueText("##card_uf_hp", "HP", settings, settings.Hp, unit?.Hp ?? 104071u, unit?.MaxHp ?? 140000u);
     }
 
-    // The card of a number text (HP or MP): what it says, separator, decimals, thousands, and the look of the text.
+    // The card of a number text (HP or MP): what it says, decimals, and the look of the text.
     // Both bars use it, so they have exactly the same choices.
     private void DrawValueText(string cardId, string name, IValueTextFormat format, FrameTextSettings text, uint current, uint max)
     {
         var custom = format.HpPreset == HpTextPreset.Custom;
 
-        Widgets.Card(cardId, custom ? 22 : 19, () =>
+        Widgets.Card(cardId, custom ? 19 : 16, () =>
         {
             Widgets.SectionLabel($"{name} text");
 
@@ -1041,40 +1068,17 @@ internal sealed class HudBarEditor
                 ImGui.TextColored(Theme.TextMuted, $"def is the missing {name}.");
             }
 
-            // The separator only matters for the presets that show two things.
-            var separatorLabel = SeparatorLabel(format.Separator);
-            if (ImGui.BeginCombo("Separator", separatorLabel, ImGuiComboFlags.None))
-            {
-                foreach (var (value, label) in Separators)
-                {
-                    if (ImGui.Selectable(label, value == format.Separator))
-                    {
-                        SetSeparator(format, value);
-                        plugin.RequestSave();
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
             var percentDecimals = format.PercentDecimals;
-            if (ImGui.SliderInt("Percentage decimals", ref percentDecimals, 0, 2))
+            if (DecimalsCombo("Percentage decimals", ref percentDecimals, new[] { "0 (87%)", "1 (87.3%)", "2 (87.34%)" }))
             {
                 SetPercentDecimals(format, percentDecimals);
                 plugin.RequestSave();
             }
 
             var abbreviationDecimals = format.AbbreviationDecimals;
-            if (ImGui.SliderInt("Decimals of 738K", ref abbreviationDecimals, 0, 2))
+            if (DecimalsCombo($"{name} decimals", ref abbreviationDecimals, new[] { "0 (738K)", "1 (738.2K)", "2 (738.24K)" }))
             {
                 SetAbbreviationDecimals(format, abbreviationDecimals);
-                plugin.RequestSave();
-            }
-
-            var thousands = format.Thousands;
-            if (EnumCombo("Thousands separator", ref thousands, ThousandsLabel))
-            {
-                SetThousands(format, thousands);
                 plugin.RequestSave();
             }
 
@@ -1091,51 +1095,21 @@ internal sealed class HudBarEditor
     // The two kinds of settings (a frame and the MP text) keep the same properties; the editor writes them through these.
     private static void SetPreset(IValueTextFormat f, HpTextPreset v) { if (f is HudBarSettings u) u.HpPreset = v; else if (f is MpTextSettings m) m.HpPreset = v; }
     private static void SetTemplate(IValueTextFormat f, string v) { if (f is HudBarSettings u) u.CustomTemplate = v; else if (f is MpTextSettings m) m.CustomTemplate = v; }
-    private static void SetSeparator(IValueTextFormat f, string v) { if (f is HudBarSettings u) u.Separator = v; else if (f is MpTextSettings m) m.Separator = v; }
     private static void SetPercentDecimals(IValueTextFormat f, int v) { if (f is HudBarSettings u) u.PercentDecimals = v; else if (f is MpTextSettings m) m.PercentDecimals = v; }
     private static void SetAbbreviationDecimals(IValueTextFormat f, int v) { if (f is HudBarSettings u) u.AbbreviationDecimals = v; else if (f is MpTextSettings m) m.AbbreviationDecimals = v; }
-    private static void SetThousands(IValueTextFormat f, ThousandsSeparator v) { if (f is HudBarSettings u) u.Thousands = v; else if (f is MpTextSettings m) m.Thousands = v; }
 
     // ---------------------------------------------------------------- HP bar and MP bar of the player
-
-    // The jobs where your HP bar is on. Everything is on by default, new jobs included.
-    private void DrawHpJobs(HudBarSettings settings)
-    {
-        Widgets.Card("##card_uf_hp_jobs", 21, () =>
-        {
-            Widgets.SectionLabel("HP bar on each job");
-
-            ImGui.TextColored(Theme.TextMuted, "Click a job to turn its HP bar on or off.");
-
-            if (DrawJobToggles("hp", settings.IsHpOn, settings.SetHpOn))
-                plugin.RequestSave();
-        });
-    }
 
     private void DrawMp(HudBarSettings settings)
     {
         var player = plugin.GameData.Current.Player;
         DrawMpBarCard(settings);
         DrawValueText("##card_uf_mp_text", "MP", settings.MpText, settings.MpText.Text, player?.Mp ?? 8400u, player?.MaxMp ?? 12000u);
-        DrawMpJobs(settings);
-    }
-
-    private void DrawMpJobs(HudBarSettings settings)
-    {
-        Widgets.Card("##card_uf_mp_jobs", 22, () =>
-        {
-            Widgets.SectionLabel("MP bar on each job");
-
-            ImGui.TextColored(Theme.TextMuted, "Click a job to turn its MP bar on or off. Crafters show CP and gatherers GP.");
-
-            if (DrawJobToggles("mp", settings.IsMpOn, settings.SetMpOn))
-                plugin.RequestSave();
-        });
     }
 
     private void DrawMpBarCard(HudBarSettings settings)
     {
-        Widgets.Card("##card_uf_mp", 9, () =>
+        Widgets.Card("##card_uf_mp", 13, () =>
         {
             Widgets.SectionLabel("MP bar");
 
@@ -1154,6 +1128,11 @@ internal sealed class HudBarEditor
                 boxLayout.Height = Math.Clamp(boxHeight, 1, 1000);
                 plugin.RequestSave();
             }
+
+            ImGui.Spacing();
+
+            if (DrawJobsMenu("mp", "MP bar", settings.IsMpOn, settings.SetMpOn, "Crafters show CP and gatherers GP."))
+                plugin.RequestSave();
         });
     }
 
@@ -1180,9 +1159,9 @@ internal sealed class HudBarEditor
 
         var value = effective;
         ImGui.Indent();
-        if (ImGui.ColorEdit4($"{label}##{id}", ref value, alpha ? ImGuiColorEditFlags.None : ImGuiColorEditFlags.NoAlpha))
+        if (Widgets.ColorSetting($"{label}##{id}", ref value, null, alpha))
         {
-            setColor(alpha ? value : new Vector4(value.X, value.Y, value.Z, 1f));
+            setColor(value);
             changed = true;
         }
 
@@ -1200,11 +1179,45 @@ internal sealed class HudBarEditor
         return changed;
     }
 
-    // One button per job, by role, lit when the job is on. All / None for each role.
+    // How many jobs have the bar on, and a button that opens the menu to choose them (the same menu as the trackers).
+    private bool DrawJobsMenu(string key, string name, Func<uint, bool> isOn, Action<uint, bool> setOn, string? note = null)
+    {
+        var total = 0;
+        var on = 0;
+        foreach (var (_, jobs) in RolesWithBeastmaster())
+        {
+            foreach (var jobId in jobs)
+            {
+                total++;
+                if (isOn(jobId))
+                    on++;
+            }
+        }
+
+        ImGui.TextColored(Theme.TextMuted, on == total ? $"The {name} shows on every job." : $"The {name} shows on {on} of {total} jobs.");
+
+        if (note is not null)
+            ImGui.TextColored(Theme.TextMuted, note);
+
+        var changed = false;
+        var popupId = $"##jobs_popup_{key}";
+
+        if (ImGui.Button($"Choose jobs...##{key}"))
+            ImGui.OpenPopup(popupId);
+
+        if (ImGui.BeginPopup(popupId))
+        {
+            changed = DrawJobToggles(key, isOn, setOn);
+            ImGui.EndPopup();
+        }
+
+        return changed;
+    }
+
+    // One checkbox per job, by role. All / None for each role.
     private bool DrawJobToggles(string key, Func<uint, bool> isOn, Action<uint, bool> setOn)
     {
         var changed = false;
-        var buttonWidth = 84f * ImGuiHelpers.GlobalScale;
 
         foreach (var (role, jobs) in RolesWithBeastmaster())
         {
@@ -1228,26 +1241,43 @@ internal sealed class HudBarEditor
                 changed = true;
             }
 
-            for (var i = 0; i < jobs.Length; i++)
+            foreach (var jobId in jobs)
             {
-                var jobId = jobs[i];
                 var on = isOn(jobId);
-
-                ImGui.PushStyleColor(ImGuiCol.Button, on ? Theme.Mix(Theme.Field, Theme.Accent, 0.85f) : Theme.Field);
-                var clicked = ImGui.Button($"{GameNames.JobAbbreviation(jobId)}  {(on ? "on" : "off")}##{key}_job_{jobId}", new Vector2(buttonWidth, 0f));
-                ImGui.PopStyleColor();
-
-                if (clicked)
+                if (ImGui.Checkbox($"{GameNames.JobAbbreviation(jobId)}##{key}_job_{jobId}", ref on))
                 {
-                    setOn(jobId, !on);
+                    setOn(jobId, on);
                     changed = true;
                 }
 
-                if ((i + 1) % 6 != 0 && i < jobs.Length - 1)
-                    ImGui.SameLine();
+                ImGui.SameLine();
             }
 
+            ImGui.NewLine();
             ImGui.Spacing();
+        }
+
+        return changed;
+    }
+
+    // A drop-down list with a few numbers (0, 1, 2 decimals), each with an example. The value is the position in the list.
+    private static bool DecimalsCombo(string label, ref int value, string[] options)
+    {
+        var changed = false;
+        var current = Math.Clamp(value, 0, options.Length - 1);
+
+        if (ImGui.BeginCombo(label, options[current], ImGuiComboFlags.None))
+        {
+            for (var i = 0; i < options.Length; i++)
+            {
+                if (ImGui.Selectable(options[i], i == current))
+                {
+                    value = i;
+                    changed = true;
+                }
+            }
+
+            ImGui.EndCombo();
         }
 
         return changed;
@@ -1349,17 +1379,6 @@ internal sealed class HudBarEditor
     };
 
 
-    private static string SeparatorLabel(string value)
-    {
-        foreach (var (separator, label) in Separators)
-        {
-            if (separator == value)
-                return label;
-        }
-
-        return $"\"{value}\"";
-    }
-
     private static string NameFormatLabel(NameFormat format) => format switch
     {
         NameFormat.Full => "Full name (Nahja Stark)",
@@ -1382,15 +1401,6 @@ internal sealed class HudBarEditor
         HpTextPreset.Deficit => $"Missing {name} (-12K)",
         HpTextPreset.Custom => "Custom template",
         _ => preset.ToString()
-    };
-
-    private static string ThousandsLabel(ThousandsSeparator separator) => separator switch
-    {
-        ThousandsSeparator.Comma => "Comma (104,071)",
-        ThousandsSeparator.Dot => "Dot (104.071)",
-        ThousandsSeparator.Space => "Space (104 071)",
-        ThousandsSeparator.None => "None (104071)",
-        _ => separator.ToString()
     };
 
     // A drop-down list for any enum. Returns true when the user picked a different value.

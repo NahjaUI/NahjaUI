@@ -63,12 +63,12 @@ internal sealed class TooltipEditor
             Slider("Maximum width (px)", s.MaxWidthPx, 160, 600, v => s.MaxWidthPx = v);
             Check("The name uses the accent color", s.NameUsesAccent, v => s.NameUsesAccent = v);
             if (!s.NameUsesAccent)
-                Color("Name color", s.NameColor, false, v => s.NameColor = v);
+                Color("Name color", s.NameColor, false, v => s.NameColor = v, Widgets.Default(s).NameColor);
 
-            Color("Description color", s.DescriptionColor, false, v => s.DescriptionColor = v);
-            Color("Details color (ID, who applied it)", s.DetailColor, false, v => s.DetailColor = v);
-            Color("Background color", s.BackgroundColor, true, v => s.BackgroundColor = v);
-            Color("Border color", s.BorderColor, false, v => s.BorderColor = v);
+            Color("Description color", s.DescriptionColor, false, v => s.DescriptionColor = v, Widgets.Default(s).DescriptionColor);
+            Color("Details color (ID, who applied it)", s.DetailColor, false, v => s.DetailColor = v, Widgets.Default(s).DetailColor);
+            Color("Background color", s.BackgroundColor, true, v => s.BackgroundColor = v, Widgets.Default(s).BackgroundColor);
+            Color("Border color", s.BorderColor, false, v => s.BorderColor = v, Widgets.Default(s).BorderColor);
 
             if (ImGui.Button("Reset appearance"))
             {
@@ -127,12 +127,12 @@ internal sealed class TooltipEditor
         }
     }
 
-    private void Color(string label, Vector4 current, bool alpha, Action<Vector4> apply)
+    private void Color(string label, Vector4 current, bool alpha, Action<Vector4> apply, Vector4 original)
     {
         var value = current;
-        if (ImGui.ColorEdit4(label, ref value, alpha ? ImGuiColorEditFlags.None : ImGuiColorEditFlags.NoAlpha))
+        if (Widgets.ColorSetting(label, ref value, original, alpha))
         {
-            apply(alpha ? value : new Vector4(value.X, value.Y, value.Z, 1f));
+            apply(value);
             plugin.RequestSave();
         }
     }

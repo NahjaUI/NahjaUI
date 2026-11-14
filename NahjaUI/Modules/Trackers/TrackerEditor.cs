@@ -218,8 +218,7 @@ internal sealed class TrackerEditor
         var definition = tracker.Definition;
 
         DrawRules(definition, snapshot);
-        DrawDisplay(engine, definition, tracker, null);
-        DrawLoad(engine, definition, snapshot, null);
+        DrawTrackerSettings(definition, tracker);
         DrawDelete(engine, tracker);
     }
 
@@ -1154,9 +1153,8 @@ internal sealed class TrackerEditor
             ImGui.TextColored(Theme.TextMuted, "Drag the trackers in the list on the left to change their order.");
         });
 
-        // The same cards as for one tracker, but what is set here is applied to every tracker of the group.
-        DrawDisplay(engine, template, null, group);
-        DrawLoad(engine, template, snapshot, group);
+        // One card for what is set on the whole group: the icon size and the load conditions are applied to every tracker of it.
+        DrawGroupApply(engine, group, template);
 
         if (pendingDeleteId == definition.Id)
         {
@@ -1283,10 +1281,16 @@ internal sealed class TrackerEditor
 
         ruleRects.Clear();
 
-        // All the triggers live in one card: trigger 1, then "if not" trigger 2, and so on.
+        // All the triggers live in one card: trigger 1, trigger 2, and so on.
         Widgets.Card("##card_tracker_triggers", 22 * definition.Rules.Count + 2, () =>
         {
             Widgets.SectionLabel("Icon triggers");
+
+            if (definition.Rules.Count > 1)
+            {
+                using (ImRaii.PushColor(ImGuiCol.Text, Theme.TextMuted))
+                    ImGui.TextWrapped("Triggers are tried in order. The first one that matches decides the icon; if it does not match, the next one is tried.");
+            }
 
             for (var i = 0; i < definition.Rules.Count; i++)
             {
@@ -1382,14 +1386,35 @@ internal sealed class TrackerEditor
         ruleDragging = false;
     }
 
-    // What a folded trigger shows after its title: what it tracks.
+    // What a folded trigger shows after its title: what it tracks and when it counts ("Requiescat · status on you, present").
     private static string RuleSummary(TrackerRule rule)
     {
         var id = rule.IsAbility ? rule.ActionId : rule.StatusId;
         if (id == 0)
             return "(nothing selected)";
 
-        return rule.IsAbility ? GameNames.ActionName(id) : GameNames.StatusName(id);
+        var name = rule.IsAbility ? GameNames.ActionName(id) : GameNames.StatusName(id);
+
+        var whose = rule.Unit switch
+        {
+            TrackerUnit.Target => "on the target",
+            TrackerUnit.Focus => "on the focus",
+            TrackerUnit.TargetOfTarget => "on the target of the target",
+            _ => "on you"
+        };
+
+        var when = rule.Kind switch
+        {
+            ConditionKind.StatusPresent => $"status {whose}, present",
+            ConditionKind.StatusMissing => $"status {whose}, missing",
+            ConditionKind.AbilityHighlighted => "ability, highlighted",
+            ConditionKind.AbilityOnCooldown => "ability, on cooldown",
+            ConditionKind.AbilityOffCooldown => "ability, off cooldown",
+            ConditionKind.AbilityFull => "ability, full of charges",
+            _ => "ability, not full of charges"
+        };
+
+        return $"{name} · {when}";
     }
 
     private void DrawRuleSection(TrackerDefinition definition, int index, GameSnapshot snapshot, ref int moveFrom, ref int moveTo, ref int remove)
@@ -1417,7 +1442,7 @@ internal sealed class TrackerEditor
             var collapsed = false;
             if (count > 1)
             {
-                var title = index == 0 ? "Trigger 1" : $"If not, trigger {index + 1}";
+                var title = $"Trigger {index + 1}";
                 var headerId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(rule);
                 collapsed = !ImGui.CollapsingHeader($"{title}: {RuleSummary(rule)}###rule_header_{headerId}", ImGuiTreeNodeFlags.DefaultOpen);
             }
@@ -1510,6 +1535,10 @@ internal sealed class TrackerEditor
                 rule.Glow = EffectCheckbox("Glow", rule.Glow);
                 rule.Red = EffectCheckbox("Red", rule.Red);
                 rule.Dim = EffectCheckbox("Dimmed", rule.Dim);
+
+                // The sweep is for the triggers of an ability: it covers the part of the icon that is still recharging.
+                if (rule.IsAbility)
+                    rule.Sweep = EffectCheckbox("Recharge sweep", rule.Sweep);
 
                 ImGui.Spacing();
                 DrawRuleTexts(definition, index, rule);
@@ -1960,9 +1989,9 @@ internal sealed class TrackerEditor
         }
 
         var color = text.Color;
-        if (ImGui.ColorEdit4("Text color", ref color, ImGuiColorEditFlags.NoAlpha))
+        if (Widgets.ColorSetting("Text color", ref color, Widgets.Default(text).Color))
         {
-            text.Color = new Vector4(color.X, color.Y, color.Z, 1f);
+            text.Color = color;
             plugin.RequestSave();
         }
 
@@ -2114,43 +2143,17 @@ internal sealed class TrackerEditor
 
     // ---------------------------------------------------------------- display
 
-    // The display settings of one tracker (runtime given), or of a whole group (group given, definition = its template).
-    // For a group, every change is copied to all the trackers of the group.
-    private void DrawDisplay(TrackerEngine engine, TrackerDefinition definition, TrackerRuntime? runtime, TrackerGroupRuntime? group)
+    // The icon size and the load conditions of one tracker, in one card.
+    private void DrawTrackerSettings(TrackerDefinition definition, TrackerRuntime? runtime)
     {
-        var isGroup = group is not null;
-
-        // A group can hold both kinds of tracker, so it shows every option.
-        var hasAbility = isGroup || definition.Rules.Any(r => r.IsAbility);
-
         // The size of an icon belongs to the layout system (the same size you see in unlock mode).
         var elementLayout = runtime?.Element.Layout;
 
-        var lines = 8 + (isGroup ? 0 : 4) + (hasAbility ? 3 : 0) + (isGroup ? 3 : 0);
-        var changed = false;
-
-        Widgets.Card(isGroup ? "##card_group_display" : "##card_tracker_display", lines, () =>
+        Widgets.Card("##card_tracker_settings", 16, () =>
         {
-            Widgets.SectionLabel(isGroup ? "Display (every tracker in the group)" : "Display");
+            Widgets.SectionLabel("Display and load conditions");
 
-            if (group is not null)
-            {
-                // One size for every tracker of the group at once.
-                var width = group.Definition.IconWidth;
-                if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
-                {
-                    group.Definition.IconWidth = Math.Clamp(width, 1, 512);
-                    changed = true;
-                }
-
-                var height = group.Definition.IconHeight;
-                if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
-                {
-                    group.Definition.IconHeight = Math.Clamp(height, 1, 512);
-                    changed = true;
-                }
-            }
-            else if (elementLayout is not null)
+            if (elementLayout is not null)
             {
                 // Width and height are chosen apart, so the icon does not have to be square. The +/- buttons move by 2 px (10 px with Ctrl).
                 var width = elementLayout.Width;
@@ -2168,39 +2171,62 @@ internal sealed class TrackerEditor
                 }
             }
 
-            if (hasAbility)
-            {
-                ImGui.Spacing();
+            ImGui.Spacing();
+            Widgets.SectionLabel("Load conditions");
 
-                var sweep = definition.ShowCooldownSweep;
-                if (ImGui.Checkbox("Show the recharge sweep", ref sweep))
-                {
-                    definition.ShowCooldownSweep = sweep;
-                    changed = true;
-                }
+            if (DrawLoadContent(definition, "##jobs_popup_tracker"))
+                plugin.RequestSave();
+        });
+    }
+
+    // What is set on a whole group, in one card that starts folded: the icon size and the load conditions are copied to every tracker of
+    // the group (and to the ones that join it later).
+    private void DrawGroupApply(TrackerEngine engine, TrackerGroupRuntime group, TrackerDefinition template)
+    {
+        const string cardId = "##card_group_apply";
+
+        // The first time the card is ever drawn it is folded (the second id remembers that, so a card the user opened stays open).
+        if (Widgets.Collapsed.Add("##card_group_apply_seen"))
+        {
+            Widgets.Collapsed.Add(cardId);
+            Widgets.CollapsedChanged?.Invoke();
+        }
+
+        var changed = false;
+
+        Widgets.Card(cardId, 20, () =>
+        {
+            Widgets.SectionLabel("Apply to every tracker in the group");
+
+            var width = group.Definition.IconWidth;
+            if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
+            {
+                group.Definition.IconWidth = Math.Clamp(width, 1, 512);
+                changed = true;
             }
 
-            if (isGroup)
+            var height = group.Definition.IconHeight;
+            if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
             {
-                ImGui.Spacing();
-                ImGui.TextColored(Theme.TextMuted, "A change here overwrites that setting in every tracker of the group,");
-                ImGui.TextColored(Theme.TextMuted, "and trackers that join the group later take these values too.");
+                group.Definition.IconHeight = Math.Clamp(height, 1, 512);
+                changed = true;
             }
+
+            ImGui.Spacing();
+            Widgets.SectionLabel("Load conditions");
+            changed |= DrawLoadContent(template, "##jobs_popup_group");
+
+            ImGui.Spacing();
+            ImGui.TextColored(Theme.TextMuted, "A change here overwrites that setting in every tracker of the group,");
+            ImGui.TextColored(Theme.TextMuted, "and trackers that join the group later take these values too.");
         });
 
-        if (!changed)
-            return;
-
-        if (group is not null)
+        if (changed)
             engine.ApplyGroupStyle(group);
-        else
-            plugin.RequestSave();
     }
 
     // ---------------------------------------------------------------- load conditions
 
-    // The load conditions of one tracker, or of a whole group (group given, definition = its template).
-    // For a group, every change is copied to all the trackers of the group.
     // The jobs of the game by role, to choose which ones a tracker loads on.
     private static readonly (string Role, uint[] Jobs)[] JobsByRole =
     {
@@ -2240,10 +2266,25 @@ internal sealed class TrackerEditor
         return roles;
     }
 
+    // Every job of the picker.
+    private static List<uint> AllJobIds()
+    {
+        var all = new List<uint>();
+        foreach (var (_, jobs) in RolesWithBeastmaster())
+            all.AddRange(jobs);
+
+        return all;
+    }
+
     // The content of the job menu: a row of checkboxes for each role, with All / None for the whole role.
+    // An empty list means every job, so then every job shows ticked; when all of them end up ticked the list goes back to empty.
     private static bool DrawJobPicker(List<uint> selected)
     {
         var changed = false;
+
+        var allJobs = AllJobIds();
+        if (selected.Count == 0)
+            selected.AddRange(allJobs);
 
         var roles = RolesWithBeastmaster();
 
@@ -2290,82 +2331,74 @@ internal sealed class TrackerEditor
             ImGui.Spacing();
         }
 
-        if (ImGui.Button("Clear (every job)##clear_jobs"))
+        if (ImGui.Button("Every job##clear_jobs"))
         {
             selected.Clear();
             changed = true;
         }
 
+        if (allJobs.TrueForAll(selected.Contains))
+            selected.Clear();
+
         return changed;
     }
 
-    private void DrawLoad(TrackerEngine engine, TrackerDefinition definition, GameSnapshot snapshot, TrackerGroupRuntime? group)
+    // The content of the load conditions (content and jobs) of one tracker or of the template of a group. True when something changed.
+    private bool DrawLoadContent(TrackerDefinition definition, string popupId)
     {
-        var isGroup = group is not null;
         var changed = false;
 
-        Widgets.Card(isGroup ? "##card_group_load" : "##card_tracker_load", isGroup ? 10 : 8, () =>
+        var where = definition.Load.Where;
+        if (EnumCombo("Content", ref where, PvpLabel))
         {
-            Widgets.SectionLabel(isGroup ? "Load conditions (every tracker in the group)" : "Load conditions");
+            definition.Load.Where = where;
+            changed = true;
+        }
 
-            var where = definition.Load.Where;
-            if (EnumCombo("Content", ref where, PvpLabel))
-            {
-                definition.Load.Where = where;
-                changed = true;
-            }
+        ImGui.Spacing();
 
-            ImGui.Spacing();
+        // Every job ticked is the same as no list at all: it is shown as "every job", never as a list of all of them.
+        if (definition.Load.JobIds.Count > 0 && AllJobIds().TrueForAll(definition.Load.JobIds.Contains))
+        {
+            definition.Load.JobIds.Clear();
+            changed = true;
+        }
 
-            if (definition.Load.JobIds.Count == 0)
-                ImGui.TextColored(Theme.TextMuted, "Loads on every job. Add jobs to limit it (click a job to remove it):");
-            else
-                ImGui.TextColored(Theme.TextMuted, "Loads only on these jobs (click a job to remove it):");
-
-            uint? removeJob = null;
-            foreach (var jobId in definition.Load.JobIds)
-            {
-                if (ImGui.SmallButton($"{GameNames.JobAbbreviation(jobId)}  x##job_{jobId}"))
-                    removeJob = jobId;
-
-                ImGui.SameLine();
-            }
-
-            ImGui.NewLine();
-
-            if (removeJob is { } toRemove)
-            {
-                definition.Load.JobIds.Remove(toRemove);
-                changed = true;
-            }
-
-            // A menu to pick any jobs, by role (no need to be playing them).
-            var popupId = isGroup ? "##jobs_popup_group" : "##jobs_popup_tracker";
-            if (ImGui.Button("Choose jobs..."))
-                ImGui.OpenPopup(popupId);
-
-            if (ImGui.BeginPopup(popupId))
-            {
-                if (DrawJobPicker(definition.Load.JobIds))
-                    changed = true;
-
-                ImGui.EndPopup();
-            }
-
-            if (isGroup)
-            {
-                ImGui.Spacing();
-                ImGui.TextColored(Theme.TextMuted, "A change here overwrites the load conditions of every tracker in the group.");
-            }
-        });
-
-        if (!changed)
-            return;
-
-        if (group is not null)
-            engine.ApplyGroupStyle(group);
+        if (definition.Load.JobIds.Count == 0)
+            ImGui.TextColored(Theme.TextMuted, "Loads on every job.");
         else
-            plugin.RequestSave();
+            ImGui.TextColored(Theme.TextMuted, "Loads only on these jobs (click a job to remove it):");
+
+        uint? removeJob = null;
+        foreach (var jobId in definition.Load.JobIds)
+        {
+            if (ImGui.SmallButton($"{GameNames.JobAbbreviation(jobId)}  x##job_{jobId}"))
+                removeJob = jobId;
+
+            ImGui.SameLine();
+        }
+
+        ImGui.NewLine();
+
+        if (removeJob is { } toRemove)
+        {
+            definition.Load.JobIds.Remove(toRemove);
+            changed = true;
+        }
+
+        // A menu to pick any jobs, by role (no need to be playing them).
+        if (ImGui.Button("Choose jobs..."))
+            ImGui.OpenPopup(popupId);
+
+        if (ImGui.BeginPopup(popupId))
+        {
+            if (DrawJobPicker(definition.Load.JobIds))
+                changed = true;
+
+            ImGui.EndPopup();
+        }
+
+        return changed;
     }
 
     // ---------------------------------------------------------------- delete

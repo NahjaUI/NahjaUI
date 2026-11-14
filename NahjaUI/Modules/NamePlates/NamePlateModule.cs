@@ -269,9 +269,8 @@ internal sealed class NamePlateModule : IDisposable
 
         // The target always gets its HP bar, whatever the game's options say (looking at something is asking for more than its name).
         // The name still follows the game.
-        if (isTarget && settings.ShowBarOnTarget)
+        if (isTarget)
             flags |= GameDrawsGauge;
-
 
         // The name and the title the game would have written (players); enemies keep the plain name.
         var displayName = plate.Name;
@@ -473,7 +472,10 @@ internal sealed class NamePlateModule : IDisposable
             drawList.AddImage(markerTexture.Handle, markerMin, markerMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
         }
 
-        if (style.ShowProgressBar && plate.Cast is not null && plate.Cast.TotalTime > 0f)
+        // Text-only plates (Others) never have a progress bar or status icons.
+        var hasExtras = plate.Relation != NamePlateRelation.Other;
+
+        if (hasExtras && style.ShowProgressBar && plate.Cast is not null && plate.Cast.TotalTime > 0f)
         {
             var progressBarHeight = MathF.Round(style.ProgressBarHeightPx * scale);
             var progressBarWidth = style.ProgressBarWidthPx > 0 ? MathF.Round(style.ProgressBarWidthPx * scale) : width;
@@ -489,7 +491,7 @@ internal sealed class NamePlateModule : IDisposable
         }
 
         // The rows of status icons are attached to the HP bar, so they only go with plates that draw one.
-        if (drawBar && plate.Statuses is { Count: > 0 } statuses)
+        if (hasExtras && drawBar && plate.Statuses is { Count: > 0 } statuses)
         {
             var playerId = plugin.GameData.Current.Player?.EntityId ?? 0u;
             var barSize = max - min;

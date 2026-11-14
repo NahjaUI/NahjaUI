@@ -15,8 +15,6 @@ internal sealed class StatusEffectsEditor
 {
     private readonly Plugin plugin;
 
-    private StatusGroupKind selected = StatusGroupKind.Enhancements;
-
     public StatusEffectsEditor(Plugin plugin)
     {
         this.plugin = plugin;
@@ -29,22 +27,39 @@ internal sealed class StatusEffectsEditor
         // While this page is open, the groups are drawn (with samples if there is nothing to show).
         plugin.StatusEffectsSystem.PreviewRequested = true;
 
-        DrawMain(settings);
-        DrawPicker();
+        if (!ImGui.BeginTabBar("##status_tabs"))
+            return;
 
-        var kind = selected;
-        var group = settings.For(kind);
-        DrawGroupCard(group, kind);
-        DrawIconsCard(group.Look, kind);
-        DrawTimeCard(group.Look, kind);
-        DrawStacksCard(group.Look, kind);
+        DrawTab("Enhancements", StatusGroupKind.Enhancements, settings);
+        DrawTab("Enfeeblements", StatusGroupKind.Enfeeblements, settings);
+
+        ImGui.EndTabBar();
+    }
+
+    private void DrawTab(string title, StatusGroupKind kind, StatusEffectsSettings settings)
+    {
+        if (!ImGui.BeginTabItem(title))
+            return;
+
+        using (Widgets.TabBody($"##status_body_{kind}"))
+        {
+            var group = settings.For(kind);
+            DrawMain(settings, kind);
+            DrawGroupCard(group, kind);
+            DrawIconsCard(group.Look, kind);
+            DrawTimeCard(group.Look, kind);
+            DrawStacksCard(group.Look, kind);
+        }
+
+        ImGui.EndTabItem();
     }
 
     // ---------------------------------------------------------------- main switch
 
-    private void DrawMain(StatusEffectsSettings settings)
+    // The same switch is in both tabs (it turns the whole page on or off, not only this group).
+    private void DrawMain(StatusEffectsSettings settings, StatusGroupKind kind)
     {
-        Widgets.Card("##card_status_main", 3, () =>
+        Widgets.Card($"##card_status_main_{kind}", 3, () =>
         {
             Widgets.SectionLabel("Status effects");
 
@@ -59,22 +74,6 @@ internal sealed class StatusEffectsEditor
             ImGui.TextColored(Theme.TextMuted, "Right click on one of your own statuses cancels it, as in the game.");
         });
     }
-
-    // ---------------------------------------------------------------- group picker
-
-    private void DrawPicker()
-    {
-        Widgets.Card("##card_status_picker", 2, () =>
-        {
-            Widgets.SectionLabel("Group");
-
-            var value = selected;
-            if (HudBarEditor.EnumCombo("Group to edit", ref value, GroupLabel))
-                selected = value;
-        });
-    }
-
-    private static string GroupLabel(StatusGroupKind kind) => kind == StatusGroupKind.Enhancements ? "Enhancements" : "Enfeeblements";
 
     // ---------------------------------------------------------------- the group
 

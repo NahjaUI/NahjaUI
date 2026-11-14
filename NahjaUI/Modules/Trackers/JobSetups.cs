@@ -569,13 +569,13 @@ internal static class JobSetups
     private static void TankRole(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // Shirk (the odd one), then the defensive ones, then the crowd control, each from the longest cooldown to the shortest.
-        b.Cd(row, "Shirk", new[] { "Shirk" });
-        b.Cd(row, "Arm's Length", new[] { "Arm's Length" }, new[] { "Arm's Length" });
-        b.Cd(row, "Rampart", new[] { "Rampart" }, new[] { "Rampart" });
-        b.Cd(row, "Reprisal", new[] { "Reprisal" });
-        b.Cd(row, "Provoke", new[] { "Provoke" });
-        b.Cd(row, "Interject", new[] { "Interject" });
-        b.Cd(row, "Low Blow", new[] { "Low Blow" });
+        b.Cd(row, "Shirk", new[] { "Shirk" }, glow: false);
+        b.Cd(row, "Arm's Length", new[] { "Arm's Length" }, new[] { "Arm's Length" }, glow: false);
+        b.Cd(row, "Reprisal", new[] { "Reprisal" }, glow: false);
+        b.Cd(row, "Rampart", new[] { "Rampart" }, new[] { "Rampart" }, glow: false);
+        b.Cd(row, "Provoke", new[] { "Provoke" }, glow: false);
+        b.Cd(row, "Interject", new[] { "Interject" }, glow: false);
+        b.Cd(row, "Low Blow", new[] { "Low Blow" }, glow: false);
     }
 
     private static void HealerRole(TrackerPresets.Builder b, TrackerGroupRuntime row)
@@ -627,7 +627,7 @@ internal static class JobSetups
         // into the next step: one tracker each, named after the button.
         b.Step(row, "Blade of Honor");
         b.Step(row, "Confiteor");
-        b.Step(row, "Goring Blade");
+        b.Step(row, "Goring Blade", withTime: true);
         b.Step(row, "Atonement");
         b.Enhancement(row, "Divine Might");
 
@@ -641,30 +641,35 @@ internal static class JobSetups
 
     private static void PaladinCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // From the longest cooldown to the shortest.
-        b.Cd(row, "Imperator", new[] { "Requiescat", "Imperator" }, new[] { "Requiescat" }, effectStacks: true);
-        b.Cd(row, "Fight or Flight", new[] { "Fight or Flight" }, new[] { "Fight or Flight" });
-        b.Cd(row, "Circle of Scorn", new[] { "Circle of Scorn" });
-        b.Cd(row, "Expiacion", new[] { "Spirits Within", "Expiacion" });
-        b.Cd(row, "Intervene", new[] { "Intervene" }, charges: true);
+        // From the longest cooldown to the shortest. No abilities light up here (no glow): the game turns the button of Requiescat into
+        // Imperator by itself, so one ability is enough; its icon is shown while the effect is on, and the effect counts its stacks.
+        b.Cd(row, "Imperator", new[] { "Requiescat" }, new[] { "Requiescat" }, glow: false, effectStacks: true, abilityIcon: true);
+        b.Cd(row, "Fight or Flight", new[] { "Fight or Flight" }, new[] { "Fight or Flight" }, glow: false);
+        b.Cd(row, "Circle of Scorn", new[] { "Circle of Scorn" }, glow: false);
+        b.Cd(row, "Expiacion", new[] { "Spirits Within" }, glow: false);
+        b.Cd(row, "Intervene", new[] { "Intervene" }, charges: true, glow: false);
     }
 
     private static void PaladinDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // Defensives go from the longest cooldown to the shortest inside each kind: the big one, the ones that spend the gauge,
         // the ones that also cover the party, and the individual ones.
-        b.Cd(row, "Hallowed Ground", new[] { "Hallowed Ground" }, new[] { "Hallowed Ground" });
+        b.Cd(row, "Hallowed Ground", new[] { "Hallowed Ground" }, new[] { "Hallowed Ground" }, glow: false);
 
-        // They cost Oath Gauge and the game makes them glow while there is enough: the gauge already shows that, so no glow.
-        b.Cd(row, "Cover", new[] { "Cover" }, new[] { "Cover" }, glow: false);
-        b.Cd(row, "Intervention", new[] { "Intervention" }, new[] { "Intervention" }, glow: false);
-        b.Cd(row, "Holy Sheltron", new[] { "Sheltron", "Holy Sheltron" }, new[] { "Sheltron", "Holy Sheltron" }, glow: false);
+        // They cost Oath Gauge (spender): dimmed while the game does not light them (not enough gauge), shown as they are when it does.
+        // Cover can be cast on you by another Paladin, so only its effect applied by you counts. Intervention leaves its effect on the target only.
+        b.Cd(row, "Cover", new[] { "Cover" }, new[] { "Cover" }, glow: false, spender: true, effectOnlyMine: true);
+        b.Cd(row, "Intervention", new[] { "Intervention" }, glow: false, spender: true);
+        b.Cd(row, "Holy Sheltron", new[] { "Sheltron" }, new[] { "Sheltron", "Holy Sheltron" }, glow: false, spender: true);
 
-        b.Cd(row, "Passage of Arms", new[] { "Passage of Arms" }, new[] { "Passage of Arms" });
-        b.Cd(row, "Divine Veil", new[] { "Divine Veil" }, new[] { "Divine Veil" });
+        b.Cd(row, "Passage of Arms", new[] { "Passage of Arms" }, new[] { "Passage of Arms" }, glow: false);
 
-        b.Cd(row, "Guardian", new[] { "Sentinel", "Guardian" }, new[] { "Sentinel", "Guardian" });
-        b.Cd(row, "Bulwark", new[] { "Bulwark" }, new[] { "Bulwark" });
+        // Another Paladin can put Divine Veil on you: only the one applied by you counts.
+        b.Cd(row, "Divine Veil", new[] { "Divine Veil" }, new[] { "Divine Veil" }, glow: false, effectOnlyMine: true);
+
+        // The game turns the button of Sentinel into Guardian by itself: one ability, and an effect for each version.
+        b.Cd(row, "Guardian", new[] { "Sentinel" }, new[] { "Sentinel", "Guardian" }, glow: false);
+        b.Cd(row, "Bulwark", new[] { "Bulwark" }, new[] { "Bulwark" }, glow: false);
     }
 
     // ---- Warrior (the owner's own setup, as the model)
@@ -672,39 +677,44 @@ internal static class JobSetups
     private static void WarriorRotation(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The priority of The Balance guide, highest first: Primal Wrath (do not drop it), Primal Rend and then Primal Ruination (20 s),
-        // Surging Tempest up (refresh it with Storm's Eye between 7 and 15 s) and, last, the combo.
+        // the combo and, last, Surging Tempest (the upkeep: always shown, red while it is missing).
         b.Enhancement(row, "Wrathful");
         b.Enhancement(row, "Primal Rend Ready");
         b.Enhancement(row, "Primal Ruination Ready");
-        b.Upkeep(row, "Surging Tempest");
 
         // The steps of a combo go in reverse: the last one first.
         foreach (var step in new[] { "Storm's Path", "Maim", "Mythril Tempest" })
             b.Step(row, step);
+
+        b.Upkeep(row, "Surging Tempest");
     }
 
     private static void WarriorCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // Infuriate first: it is the one tied to the Beast Gauge, like a separate option.
-        b.Cd(row, "Infuriate", new[] { "Infuriate" }, charges: true);
-        b.Cd(row, "Inner Release", new[] { "Berserk", "Inner Release" }, new[] { "Berserk", "Inner Release" }, effectStacks: true);
-        b.Cd(row, "Upheaval", new[] { "Upheaval" });
-        b.Cd(row, "Onslaught", new[] { "Onslaught" }, charges: true);
+        // Infuriate first: it is the one tied to the Beast Gauge, like a separate option. No abilities light up here (no glow).
+        b.Cd(row, "Infuriate", new[] { "Infuriate" }, charges: true, glow: false);
+
+        // The game turns the button of Berserk into Inner Release by itself: one ability, and an effect for each version.
+        // Its icon is shown while the effect is on, and the effect counts its stacks.
+        b.Cd(row, "Inner Release", new[] { "Berserk" }, new[] { "Berserk", "Inner Release" }, glow: false, effectStacks: true, abilityIcon: true);
+        b.Cd(row, "Upheaval", new[] { "Upheaval" }, glow: false);
+        b.Cd(row, "Onslaught", new[] { "Onslaught" }, charges: true, glow: false);
     }
 
     private static void WarriorDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Holmgang", new[] { "Holmgang" }, new[] { "Holmgang" });
+        b.Cd(row, "Holmgang", new[] { "Holmgang" }, new[] { "Holmgang" }, glow: false);
 
-        // The ones that also cover the party.
-        b.Cd(row, "Shake It Off", new[] { "Shake It Off" }, new[] { "Shake It Off" });
-        b.Cd(row, "Nascent Flash", new[] { "Nascent Flash" });
+        // The ones that also cover the party. Another Warrior can put Shake It Off on you: only the one applied by you counts.
+        b.Cd(row, "Shake It Off", new[] { "Shake It Off" }, new[] { "Shake It Off" }, glow: false, effectOnlyMine: true);
+        b.Cd(row, "Nascent Flash", new[] { "Nascent Flash" }, new[] { "Nascent Flash" }, glow: false);
 
-        // The individual ones.
-        b.Cd(row, "Damnation", new[] { "Vengeance", "Damnation" }, new[] { "Vengeance", "Damnation" });
-        b.Cd(row, "Thrill of Battle", new[] { "Thrill of Battle" }, new[] { "Thrill of Battle" });
-        b.Cd(row, "Equilibrium", new[] { "Equilibrium" });
-        b.Cd(row, "Bloodwhetting", new[] { "Raw Intuition", "Bloodwhetting" }, new[] { "Raw Intuition", "Bloodwhetting" });
+        // The individual ones. The game turns Vengeance into Damnation and Raw Intuition into Bloodwhetting by itself: one ability each,
+        // and an effect for each version.
+        b.Cd(row, "Damnation", new[] { "Vengeance" }, new[] { "Vengeance", "Damnation" }, glow: false);
+        b.Cd(row, "Thrill of Battle", new[] { "Thrill of Battle" }, new[] { "Thrill of Battle" }, glow: false);
+        b.Cd(row, "Equilibrium", new[] { "Equilibrium" }, new[] { "Equilibrium" }, glow: false);
+        b.Cd(row, "Bloodwhetting", new[] { "Raw Intuition" }, new[] { "Raw Intuition", "Bloodwhetting" }, glow: false);
     }
 
     // ---- Dark Knight (Blood and Darkside are in the gauge, Dark Arts is the frame of the Darkside bar)

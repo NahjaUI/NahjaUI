@@ -67,22 +67,6 @@ public enum HpColorMode
     Role
 }
 
-/// <summary>The character that separates the groups of three digits in long numbers.</summary>
-public enum ThousandsSeparator
-{
-    /// <summary>104,071</summary>
-    Comma,
-
-    /// <summary>104.071</summary>
-    Dot,
-
-    /// <summary>104 071</summary>
-    Space,
-
-    /// <summary>104071</summary>
-    None
-}
-
 /// <summary>
 /// One text drawn over a frame. It is attached to a point of the bar (the anchor): the same point of the text is placed
 /// on it, so a right anchor right-justifies the text and a centre anchor centres it. The offset then moves it, in pixels.
@@ -118,10 +102,8 @@ internal interface IValueTextFormat
 {
     HpTextPreset HpPreset { get; }
     string CustomTemplate { get; }
-    string Separator { get; }
     int PercentDecimals { get; }
     int AbbreviationDecimals { get; }
-    ThousandsSeparator Thousands { get; }
 }
 
 /// <summary>The MP text of the player: the same choices as the HP text.</summary>
@@ -131,10 +113,8 @@ public class MpTextSettings : IValueTextFormat
     public FrameTextSettings Text { get; set; } = new() { Enabled = false, Anchor = AnchorPoint.Center };
     public HpTextPreset HpPreset { get; set; } = HpTextPreset.Current;
     public string CustomTemplate { get; set; } = "{curk} | {pct}";
-    public string Separator { get; set; } = " | ";
     public int PercentDecimals { get; set; } = 0;
     public int AbbreviationDecimals { get; set; } = 0;
-    public ThousandsSeparator Thousands { get; set; } = ThousandsSeparator.Comma;
 }
 
 /// <summary>The settings of every HUD bar.</summary>
@@ -228,9 +208,6 @@ public class HudBarSettings : IValueTextFormat
     [Newtonsoft.Json.JsonIgnore]
     public Vector4 MpColor => GlobalColors.Current.Mp;
 
-    /// <summary>How solid the shield is (0 to 1). Below 1 the HP and the background show through it.</summary>
-    public float ShieldOpacity { get; set; } = 0.65f;
-
     // ---- name
     public FrameTextSettings Name { get; set; } = new()
     {
@@ -257,16 +234,11 @@ public class HudBarSettings : IValueTextFormat
     /// <summary>Used when the preset is Custom. Parts: {cur} {curk} {max} {maxk} {def} {defk} {pct}. The ones ending in k are abbreviated.</summary>
     public string CustomTemplate { get; set; } = "{curk} | {pct}";
 
-    /// <summary>Between the HP and the percentage in the presets that show both.</summary>
-    public string Separator { get; set; } = " | ";
-
     /// <summary>Decimals of the percentage (0, 1 or 2).</summary>
     public int PercentDecimals { get; set; } = 0;
 
     /// <summary>Decimals of abbreviated numbers: 0 gives 738K, 1 gives 738.2K. Millions always show at least one.</summary>
     public int AbbreviationDecimals { get; set; } = 0;
-
-    public ThousandsSeparator Thousands { get; set; } = ThousandsSeparator.Comma;
 
     // ---- HP bar and MP bar of the player: two separate things, each one on or off for every job
 

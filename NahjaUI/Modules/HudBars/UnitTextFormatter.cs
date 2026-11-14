@@ -40,6 +40,9 @@ internal static class UnitTextFormatter
 
     // ---------------------------------------------------------------- HP
 
+    // Between the number and the percentage in the presets that show both.
+    private const string Separator = " | ";
+
     public static string FormatValue(IValueTextFormat settings, uint current, uint max)
     {
         if (settings.HpPreset == HpTextPreset.Deficit && current >= max)
@@ -47,8 +50,8 @@ internal static class UnitTextFormatter
 
         var template = settings.HpPreset switch
         {
-            HpTextPreset.CurrentAndPercent => "{curk}" + settings.Separator + "{pct}",
-            HpTextPreset.CurrentFullAndPercent => "{cur}" + settings.Separator + "{pct}",
+            HpTextPreset.CurrentAndPercent => "{curk}" + Separator + "{pct}",
+            HpTextPreset.CurrentFullAndPercent => "{cur}" + Separator + "{pct}",
             HpTextPreset.Current => "{curk}",
             HpTextPreset.CurrentFull => "{cur}",
             HpTextPreset.Percent => "{pct}",
@@ -63,27 +66,16 @@ internal static class UnitTextFormatter
             .Replace("{curk}", Abbreviate(current, settings))
             .Replace("{maxk}", Abbreviate(max, settings))
             .Replace("{defk}", Abbreviate(missing, settings))
-            .Replace("{cur}", Full(current, settings.Thousands))
-            .Replace("{max}", Full(max, settings.Thousands))
-            .Replace("{def}", Full(missing, settings.Thousands))
+            .Replace("{cur}", Full(current))
+            .Replace("{max}", Full(max))
+            .Replace("{def}", Full(missing))
             .Replace("{pct}", Percent(current, max, settings));
     }
 
-    /// <summary>The whole number with the chosen separator between groups of three digits.</summary>
-    public static string Full(uint value, ThousandsSeparator separator)
-    {
-        var text = value.ToString("N0", CultureInfo.InvariantCulture);
+    /// <summary>The whole number with a comma between groups of three digits (104,071).</summary>
+    public static string Full(uint value) => value.ToString("N0", CultureInfo.InvariantCulture);
 
-        return separator switch
-        {
-            ThousandsSeparator.Dot => text.Replace(',', '.'),
-            ThousandsSeparator.Space => text.Replace(',', ' '),
-            ThousandsSeparator.None => text.Replace(",", string.Empty),
-            _ => text
-        };
-    }
-
-    /// <summary>738,000 as 738K and 1,250,000 as 1.2M. With the dot as thousands separator the decimal mark is a comma.</summary>
+    /// <summary>738,000 as 738K and 1,250,000 as 1.2M.</summary>
     public static string Abbreviate(uint value, IValueTextFormat settings)
     {
         var decimals = Math.Clamp(settings.AbbreviationDecimals, 0, 2);
@@ -108,7 +100,7 @@ internal static class UnitTextFormatter
             text = value.ToString(CultureInfo.InvariantCulture);
         }
 
-        return settings.Thousands == ThousandsSeparator.Dot ? text.Replace('.', ',') : text;
+        return text;
     }
 
     // The percentage is rounded down, so a HP that is not full never reads 100 %.
@@ -120,8 +112,7 @@ internal static class UnitTextFormatter
         var factor = Math.Pow(10.0, decimals);
         var floored = Math.Floor(percent * factor) / factor;
 
-        var text = Format(floored, decimals) + "%";
-        return settings.Thousands == ThousandsSeparator.Dot ? text.Replace('.', ',') : text;
+        return Format(floored, decimals) + "%";
     }
 
     private static string Format(double value, int decimals) =>

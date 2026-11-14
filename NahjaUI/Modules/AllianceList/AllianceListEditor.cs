@@ -26,7 +26,6 @@ internal sealed class AllianceListEditor
         DrawGeneral(settings);
         DrawOptions(settings);
         DrawDeadText(settings);
-        DrawDiagnostics();
     }
 
     private void DrawGeneral(AllianceListSettings settings)
@@ -94,16 +93,9 @@ internal sealed class AllianceListEditor
     // The word over a dead member: the same controls as every other text.
     private void DrawDeadText(AllianceListSettings settings)
     {
-        Widgets.Card("##card_al_dead", 11, () =>
+        Widgets.Card("##card_al_dead", 9, () =>
         {
             Widgets.SectionLabel("Dead text");
-
-            var show = settings.DeadText.Enabled;
-            if (ImGui.Checkbox("Show the word Dead over a dead member", ref show))
-            {
-                settings.DeadText.Enabled = show;
-                plugin.RequestSave();
-            }
 
             ImGui.TextColored(Theme.TextMuted, "If the cell is too narrow for the word, it ends in ... so it never goes out of the cell.");
 
@@ -112,46 +104,11 @@ internal sealed class AllianceListEditor
         });
     }
 
-    // What the game gives right now, to see why the grid shows (or does not show) members.
-    private void DrawDiagnostics()
-    {
-        Widgets.Card("##card_al_diagnostics", 5, () =>
-        {
-            Widgets.SectionLabel("What the game says right now");
-
-            var list = Plugin.PartyList;
-            var filled = 0;
-
-            if (list.IsAlliance)
-            {
-                for (var i = 0; i < (plugin.GameData.Current.Alliance?.Count ?? 16); i++)
-                {
-                    var member = list.CreateAllianceMemberReference(list.GetAllianceMemberAddress(i));
-                    if (member is not null && member.EntityId != 0)
-                        filled++;
-                }
-            }
-
-            var shown = plugin.GameData.Current.Alliance?.Count(unit => unit is not null) ?? 0;
-            ImGui.TextColored(Theme.TextMuted, $"You are in an alliance: {(list.IsAlliance ? "yes" : "no")}");
-            ImGui.TextColored(Theme.TextMuted, $"Members of your own party: {list.Length}");
-            ImGui.TextColored(Theme.TextMuted, $"Alliance slots with a member: {filled}");
-            ImGui.TextColored(Theme.TextMuted, $"Cells drawn: {shown}");
-        });
-    }
-
     private void DrawOptions(AllianceListSettings settings)
     {
         Widgets.Card("##card_al_options", 24, () =>
         {
             Widgets.SectionLabel("Alliance options");
-
-            var awayOpacity = settings.AwayOpacityPercent;
-            if (ImGui.SliderInt("Opacity when dead, offline, away or in a cutscene (%)", ref awayOpacity, 10, 100))
-            {
-                settings.AwayOpacityPercent = awayOpacity;
-                plugin.RequestSave();
-            }
 
             var showJobIcon = settings.ShowJobIcon;
             if (ImGui.Checkbox("Show the job icon", ref showJobIcon))
@@ -206,62 +163,45 @@ internal sealed class AllianceListEditor
                 }
             }
 
-            var showRaise = settings.ShowRaiseIcon;
-            if (ImGui.Checkbox("Show the Raise icon on a dead member who has a Raise waiting", ref showRaise))
+            var raiseWidth = settings.RaiseIconWidthPx;
+            if (ImGui.InputInt("Raise icon width (px)", ref raiseWidth, 2, 10))
             {
-                settings.ShowRaiseIcon = showRaise;
+                settings.RaiseIconWidthPx = Math.Clamp(raiseWidth, 4, 200);
                 plugin.RequestSave();
             }
 
-            if (settings.ShowRaiseIcon)
+            var raiseHeight = settings.RaiseIconHeightPx;
+            if (ImGui.InputInt("Raise icon height (px)", ref raiseHeight, 2, 10))
             {
-                var raiseWidth = settings.RaiseIconWidthPx;
-                if (ImGui.InputInt("Raise icon width (px)", ref raiseWidth, 2, 10))
-                {
-                    settings.RaiseIconWidthPx = Math.Clamp(raiseWidth, 4, 200);
-                    plugin.RequestSave();
-                }
-
-                var raiseHeight = settings.RaiseIconHeightPx;
-                if (ImGui.InputInt("Raise icon height (px)", ref raiseHeight, 2, 10))
-                {
-                    settings.RaiseIconHeightPx = Math.Clamp(raiseHeight, 4, 200);
-                    plugin.RequestSave();
-                }
-
-                var raiseBarAnchor = settings.RaiseIconBarAnchor;
-                if (HudBarEditor.EnumCombo("Raise icon anchor on the cell", ref raiseBarAnchor, point => point.Label()))
-                {
-                    settings.RaiseIconBarAnchor = raiseBarAnchor;
-                    plugin.RequestSave();
-                }
-
-                var raiseSelfAnchor = settings.RaiseIconSelfAnchor;
-                if (HudBarEditor.EnumCombo("Raise icon anchor of the icon", ref raiseSelfAnchor, point => point.Label()))
-                {
-                    settings.RaiseIconSelfAnchor = raiseSelfAnchor;
-                    plugin.RequestSave();
-                }
-
-                var raiseOffsetX = settings.RaiseIconOffsetX;
-                if (ImGui.InputInt("Raise icon offset X (px)", ref raiseOffsetX, 1, 5))
-                {
-                    settings.RaiseIconOffsetX = Math.Clamp(raiseOffsetX, -500, 500);
-                    plugin.RequestSave();
-                }
-
-                var raiseOffsetY = -settings.RaiseIconOffsetY;
-                if (ImGui.InputInt("Raise icon offset Y (px)", ref raiseOffsetY, 1, 5))
-                {
-                    settings.RaiseIconOffsetY = -Math.Clamp(raiseOffsetY, -500, 500);
-                    plugin.RequestSave();
-                }
+                settings.RaiseIconHeightPx = Math.Clamp(raiseHeight, 4, 200);
+                plugin.RequestSave();
             }
 
-            var showName = settings.ShowNameOnHover;
-            if (ImGui.Checkbox("Show the name while the mouse is over a cell", ref showName))
+            var raiseBarAnchor = settings.RaiseIconBarAnchor;
+            if (HudBarEditor.EnumCombo("Raise icon anchor on the cell", ref raiseBarAnchor, point => point.Label()))
             {
-                settings.ShowNameOnHover = showName;
+                settings.RaiseIconBarAnchor = raiseBarAnchor;
+                plugin.RequestSave();
+            }
+
+            var raiseSelfAnchor = settings.RaiseIconSelfAnchor;
+            if (HudBarEditor.EnumCombo("Raise icon anchor of the icon", ref raiseSelfAnchor, point => point.Label()))
+            {
+                settings.RaiseIconSelfAnchor = raiseSelfAnchor;
+                plugin.RequestSave();
+            }
+
+            var raiseOffsetX = settings.RaiseIconOffsetX;
+            if (ImGui.InputInt("Raise icon offset X (px)", ref raiseOffsetX, 1, 5))
+            {
+                settings.RaiseIconOffsetX = Math.Clamp(raiseOffsetX, -500, 500);
+                plugin.RequestSave();
+            }
+
+            var raiseOffsetY = -settings.RaiseIconOffsetY;
+            if (ImGui.InputInt("Raise icon offset Y (px)", ref raiseOffsetY, 1, 5))
+            {
+                settings.RaiseIconOffsetY = -Math.Clamp(raiseOffsetY, -500, 500);
                 plugin.RequestSave();
             }
         });

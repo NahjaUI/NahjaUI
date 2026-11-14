@@ -1013,7 +1013,7 @@ internal sealed class TrackerEngine
         }
 
         // The dark sweep that covers the part of the icon that is still recharging.
-        if (cooling && definition.ShowCooldownSweep && state.Total > 0f)
+        if (cooling && activeRule is { Sweep: true } && state.Total > 0f)
             DrawSweep(drawList, pos, size, state.Remaining / state.Total, rounding);
 
         // 1 px border (it grows with the UI scale so it always looks 1 px thick):
@@ -1110,11 +1110,11 @@ internal sealed class TrackerEngine
         return null;
     }
 
-    // The stack count of a status as text, only for statuses that really stack.
+    // The stack count of a status as text, only for statuses that really stack (the last stack is shown too: 1 of Requiescat).
     private static string? StackText(uint statusId, int stacks)
     {
         var maxStacks = GameNames.MaxStacks(statusId);
-        return maxStacks > 1 && stacks > 1 && stacks <= maxStacks ? stacks.ToString() : null;
+        return maxStacks > 1 && stacks >= 1 && stacks <= maxStacks ? stacks.ToString() : null;
     }
 
     /// <summary>

@@ -217,6 +217,28 @@ internal sealed class StatusRowRenderer
 
     private int tooltipFrame = -1;
 
+    // A small box next to the mouse with one line of text (the name of a party or alliance member), with the look of the status tooltip.
+    internal void ShowTextTooltip(string text)
+    {
+        var look = plugin.Configuration.Tooltip;
+        var scale = ImGuiHelpers.GlobalScale;
+
+        using var theme = new ThemeScope(plugin.Configuration);
+        using var font = plugin.Fonts.PushClosest(OverlayFont.NahjaText, look.TextSize);
+
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, look.BackgroundColor);
+        ImGui.PushStyleColor(ImGuiCol.Border, look.BorderColor);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, MathF.Round(GlobalColors.Current.Rounding * scale));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, MathF.Max(1f, MathF.Round(scale)));
+
+        ImGui.BeginTooltip();
+        ImGui.TextColored(look.NameUsesAccent ? Theme.Accent : look.NameColor, text);
+        ImGui.EndTooltip();
+
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor(2);
+    }
+
     // A small box next to the mouse with what the game says about the status: name, kind, time left, description and who applied it.
     internal void ShowTooltip(StatusSnapshot status, bool isEnhancement, string place)
     {

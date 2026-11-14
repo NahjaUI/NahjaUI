@@ -52,17 +52,32 @@ internal static class Widgets
     }
 
     /// <summary>
+    /// The body of a tab, in a space of its own that fills what is left under the tab bar. It scrolls by itself, so the tabs above never
+    /// scroll away. Use it as <c>using (Widgets.TabBody(id)) { ... }</c> inside the tab, and close the tab after it. When the body holds
+    /// nothing but another tab bar, pass <paramref name="scroll"/> false: the tabs inside scroll their own bodies.
+    /// </summary>
+    public static ImRaii.ChildDisposable TabBody(string id, bool scroll = true)
+    {
+        var flags = scroll ? ImGuiWindowFlags.None : ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+        return ImRaii.Child(id, Vector2.Zero, false, flags);
+    }
+
+    /// <summary>
     /// A highlighted message box. The colour (Theme.Info, Theme.Warning...) tints the background and the border.
     /// Its height follows the text, like a card.
     /// </summary>
-    public static void Callout(string id, string text, Vector4 color, int lines = 2)
+    public static void Callout(string id, string text, Vector4 color, int lines = 2, Action? extra = null)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var estimate = lines * ImGui.GetTextLineHeightWithSpacing() + 20f * scale;
 
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.WithAlpha(color, 0.16f)))
         using (ImRaii.PushColor(ImGuiCol.Border, Theme.WithAlpha(color, 0.60f)))
-            DrawBox(id, estimate, () => ImGui.TextWrapped(text));
+            DrawBox(id, estimate, () =>
+            {
+                ImGui.TextWrapped(text);
+                extra?.Invoke();
+            });
 
         ImGui.Spacing();
     }
@@ -123,22 +138,56 @@ internal static class Widgets
             MeasuredHeights[id] = measured;
     }
 
+    // A fresh settings object of each kind, with the values the code gives by default (what "Reset" of a color goes back to).
+    private static readonly Dictionary<Type, object> DefaultInstances = new();
+
     /// <summary>
-    /// A color setting: the swatch opens the picker, and the picker has a "Reset" button that brings back the original color.
-    /// Returns true when the color changed.
+    /// The default values of a kind of settings: a fresh object of the same type as <paramref name="like"/>.
+    /// For the original color of a "Reset" button: <c>Widgets.Default(settings).BarColor</c>.
     /// </summary>
-    public static bool ColorSetting(string label, ref Vector4 value, Vector4 original, bool alpha = false)
+    public static T Default<T>(T like) where T : class
+    {
+        // The real type of the object, not the type of the variable: a gauge held as its base class must give ITS defaults.
+        var type = like.GetType();
+        if (!DefaultInstances.TryGetValue(type, out var instance))
+        {
+            instance = Activator.CreateInstance(type, true)!;
+            DefaultInstances[type] = instance;
+        }
+
+        return (T)instance;
+    }
+
+    /// <summary>
+    /// A color setting: a swatch with its name. Clicking it opens the picker, with only the hexadecimal value (to copy one from somewhere)
+    /// and, when the original color is known, a "Reset" button that brings it back. Returns true when the color changed.
+    /// </summary>
+    public static bool ColorSetting(string label, ref Vector4 value, Vector4? original, bool alpha = false)
     {
         var changed = false;
-        var flags = alpha ? ImGuiColorEditFlags.AlphaBar : ImGuiColorEditFlags.NoAlpha;
+        var flags = (alpha ? ImGuiColorEditFlags.AlphaBar : ImGuiColorEditFlags.NoAlpha) | ImGuiColorEditFlags.DisplayHex;
         var popupId = "##picker_" + label;
         var side = ImGui.GetFrameHeight();
 
-        if (ImGui.ColorButton("##swatch_" + label, value, alpha ? ImGuiColorEditFlags.None : ImGuiColorEditFlags.NoAlpha, new Vector2(side, side)))
+        // NoTooltip: the game's tooltip lists RGB and other numbers; here only the hexadecimal value is shown.
+        var swatchFlags = (alpha ? ImGuiColorEditFlags.None : ImGuiColorEditFlags.NoAlpha) | ImGuiColorEditFlags.NoTooltip;
+        if (ImGui.ColorButton("##swatch_" + label, value, swatchFlags, new Vector2(side, side)))
             ImGui.OpenPopup(popupId);
 
+        if (ImGui.IsItemHovered())
+        {
+            static int Byte(float channel) => (int)MathF.Round(Math.Clamp(channel, 0f, 1f) * 255f);
+            var hex = $"#{Byte(value.X):X2}{Byte(value.Y):X2}{Byte(value.Z):X2}";
+            if (alpha)
+                hex += $"{Byte(value.W):X2}";
+
+            ImGui.SetTooltip(hex);
+        }
+
+        // What comes after "##" is only an id, not part of the name.
+        var hidden = label.IndexOf("##", StringComparison.Ordinal);
         ImGui.SameLine();
-        ImGui.TextUnformatted(label);
+        ImGui.TextUnformatted(hidden >= 0 ? label.Substring(0, hidden) : label);
 
         if (ImGui.BeginPopup(popupId))
         {
@@ -150,9 +199,9 @@ internal static class Widgets
                 changed = true;
             }
 
-            if (ImGui.Button("Reset"))
+            if (original is { } reset && ImGui.Button("Reset"))
             {
-                value = original;
+                value = reset;
                 changed = true;
             }
 

@@ -19,8 +19,42 @@ internal sealed class EnmityListEditor
 
     public void Draw()
     {
-        var settings = plugin.Configuration.EnmityList;
         plugin.EnmityListSystem.PreviewRequested = true;
+
+        // The same three tabs as the nameplates and the frames of the HUD bars page: the list itself, its progress bar and its status icons.
+        if (!ImGui.BeginTabBar("##el_tabs"))
+            return;
+
+        if (ImGui.BeginTabItem("Frame"))
+        {
+            using (Widgets.TabBody("##el_body_frame"))
+                DrawFrame();
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Progress bar"))
+        {
+            using (Widgets.TabBody("##el_body_progress"))
+                DrawProgressBar();
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Status icons"))
+        {
+            using (Widgets.TabBody("##el_body_status"))
+                DrawStatusIcons();
+
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    private void DrawFrame()
+    {
+        var settings = plugin.Configuration.EnmityList;
 
         Widgets.Card("##card_el_general", 5, () =>
         {
@@ -51,7 +85,7 @@ internal sealed class EnmityListEditor
             }
 
             Slider("Space between bars (px)", settings.SpacingPx, 0, 30, v => settings.SpacingPx = v);
-            Color("HP color", settings.HpColor, v => settings.HpColor = v);
+            Color("HP color", settings.HpColor, v => settings.HpColor = v, Widgets.Default(settings).HpColor);
             if (HudBarEditor.BackgroundAndBorder("bgbd13", "Background color", "Border color",
                 settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
                 settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
@@ -80,9 +114,35 @@ internal sealed class EnmityListEditor
 
             Offset("Dot offset X (px)", settings.EnmityDotOffsetX, v => settings.EnmityDotOffsetX = v);
             Offset("Dot offset Y (px)", -settings.EnmityDotOffsetY, v => settings.EnmityDotOffsetY = -v);
-            Color("Enemy is attacking me", settings.OnMeColor, v => settings.OnMeColor = v);
-            Color("Enemy is not attacking me", settings.OnOthersColor, v => settings.OnOthersColor = v);
+            Color("Enemy is attacking me", settings.OnMeColor, v => settings.OnMeColor = v, Widgets.Default(settings).OnMeColor);
+            Color("Enemy is not attacking me", settings.OnOthersColor, v => settings.OnOthersColor = v, Widgets.Default(settings).OnOthersColor);
         });
+
+        Widgets.Card("##card_el_name", 12, () =>
+        {
+            Widgets.SectionLabel("Name");
+
+            Check("Show the name", settings.Name.Enabled, v => settings.Name.Enabled = v);
+            ImGui.TextColored(Theme.TextMuted, "Enemy names are written as the game gives them (the game has no option for it).");
+
+            if (HudBarEditor.TextControls(settings.Name))
+                plugin.RequestSave();
+        });
+
+        Widgets.Card("##card_el_hp", 11, () =>
+        {
+            Widgets.SectionLabel("HP percentage");
+
+            Check("Show the HP percentage", settings.Hp.Enabled, v => settings.Hp.Enabled = v);
+
+            if (HudBarEditor.TextControls(settings.Hp))
+                plugin.RequestSave();
+        });
+    }
+
+    private void DrawProgressBar()
+    {
+        var settings = plugin.Configuration.EnmityList;
 
         Widgets.Card("##card_el_progress_bar", 14, () =>
         {
@@ -110,32 +170,11 @@ internal sealed class EnmityListEditor
             Offset("Progress bar offset X (px)", settings.ProgressBarOffsetX, v => settings.ProgressBarOffsetX = v);
             // Up is plus: the saved value counts downwards, so the sign is turned here.
             Offset("Progress bar offset Y (px)", -settings.ProgressBarOffsetY, v => settings.ProgressBarOffsetY = -v);
-            Color("Color when it can be interrupted", settings.ProgressBarColor, v => settings.ProgressBarColor = new Vector4(v.X, v.Y, v.Z, 1f));
-            Color("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, v => settings.ProgressBarUninterruptibleColor = new Vector4(v.X, v.Y, v.Z, 1f));
+            Color("Color when it can be interrupted", settings.ProgressBarColor, v => settings.ProgressBarColor = new Vector4(v.X, v.Y, v.Z, 1f), Widgets.Default(settings).ProgressBarColor);
+            Color("Color when it cannot be interrupted", settings.ProgressBarUninterruptibleColor, v => settings.ProgressBarUninterruptibleColor = new Vector4(v.X, v.Y, v.Z, 1f), Widgets.Default(settings).ProgressBarUninterruptibleColor);
             if (HudBarEditor.BackgroundAndBorder("bgbd14", "Progress bar background color", "Progress bar border color",
                 settings.CustomProgressBarBackground, settings.ProgressBarBackgroundColor, onBg => settings.CustomProgressBarBackground = onBg, colBg => settings.ProgressBarBackgroundColor = colBg,
                 settings.CustomProgressBarBorder, settings.ProgressBarBorderColor, onBd => settings.CustomProgressBarBorder = onBd, colBd => settings.ProgressBarBorderColor = colBd))
-                plugin.RequestSave();
-        });
-
-        Widgets.Card("##card_el_name", 12, () =>
-        {
-            Widgets.SectionLabel("Name");
-
-            Check("Show the name", settings.Name.Enabled, v => settings.Name.Enabled = v);
-            ImGui.TextColored(Theme.TextMuted, "Enemy names are written as the game gives them (the game has no option for it).");
-
-            if (HudBarEditor.TextControls(settings.Name))
-                plugin.RequestSave();
-        });
-
-        Widgets.Card("##card_el_hp", 11, () =>
-        {
-            Widgets.SectionLabel("HP percentage");
-
-            Check("Show the HP percentage", settings.Hp.Enabled, v => settings.Hp.Enabled = v);
-
-            if (HudBarEditor.TextControls(settings.Hp))
                 plugin.RequestSave();
         });
 
@@ -165,10 +204,16 @@ internal sealed class EnmityListEditor
             if (HudBarEditor.TextControls(settings.ProgressBarTime))
                 plugin.RequestSave();
         });
+    }
+
+    private void DrawStatusIcons()
+    {
+        var settings = plugin.Configuration.EnmityList;
 
         plugin.HudBarEditorPage.DrawStatusRowCard("##card_el_enhancements", "Enhancements", settings.Enhancements, true);
         plugin.HudBarEditorPage.DrawStatusRowCard("##card_el_enfeeblements", "Enfeeblements", settings.Enfeeblements, false);
     }
+
 
     private void Check(string label, bool current, Action<bool> apply)
     {
@@ -212,10 +257,10 @@ internal sealed class EnmityListEditor
         }
     }
 
-    private void Color(string label, Vector4 current, Action<Vector4> apply)
+    private void Color(string label, Vector4 current, Action<Vector4> apply, Vector4 original)
     {
         var value = current;
-        if (ImGui.ColorEdit4(label, ref value, ImGuiColorEditFlags.None))
+        if (Widgets.ColorSetting(label, ref value, original, true))
         {
             apply(value);
             plugin.RequestSave();

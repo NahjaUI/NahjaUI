@@ -92,6 +92,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
+        // A new install starts from the author's interface (see DefaultConfiguration); a settings file that already exists is never touched.
+        NahjaUI.Core.Profiles.DefaultConfiguration.WriteIfMissing();
+
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         // A plain copy of the saved file when the plugin was updated (or the format must be converted), then the conversion itself.

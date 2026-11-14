@@ -103,6 +103,9 @@ public class TrackerRule
     /// <summary>The icon darkened.</summary>
     public bool Dim { get; set; }
 
+    /// <summary>A dark sweep over the part of the icon that is still recharging (triggers of an ability, while it recharges).</summary>
+    public bool Sweep { get; set; }
+
     [Newtonsoft.Json.JsonIgnore]
     public bool IsAbility => Kind is not (ConditionKind.StatusPresent or ConditionKind.StatusMissing);
 }
@@ -178,20 +181,15 @@ public class TrackerDefinition
     /// <summary>The icon triggers, in order of priority: the first one that matches decides the picture and the glow.</summary>
     public List<TrackerRule> Rules { get; set; } = new();
 
-    /// <summary>Draw the sweep (the clock that fills as the cooldown goes) over the icon while an ability recharges.</summary>
-    public bool ShowCooldownSweep { get; set; } = true;
-
     // Load conditions
     public TrackerLoadConditions Load { get; set; } = new();
 
     /// <summary>
-    /// Copies the display settings and the load conditions of another tracker.
+    /// Copies the load conditions of another tracker.
     /// The name, the trigger, the group and the position are not touched.
     /// </summary>
     public void CopyStyleFrom(TrackerDefinition other)
     {
-        ShowCooldownSweep = other.ShowCooldownSweep;
-
         Load = new TrackerLoadConditions
         {
             Where = other.Load.Where,

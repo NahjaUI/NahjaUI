@@ -464,7 +464,8 @@ public class FrontlineGaugeSettings : BarGaugeSettings
         // There is no spender at 50 here.
         ShowThreshold = false;
         HighlightWhenReady = false;
-        BarColor = new Vector4(0.95f, 0.62f, 0.20f, 1f);
+        // The same orange as the filling bar of the Limit Break.
+        BarColor = new Vector4(0.95f, 0.55f, 0.20f, 1f);
     }
 }
 

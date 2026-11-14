@@ -519,7 +519,7 @@ internal sealed class HudBarModule : IDisposable
             return;
 
         var color = settings.ShieldColor;
-        color.W = Math.Clamp(color.W * settings.ShieldOpacity, 0f, 1f);
+        color.W = Math.Clamp(color.W * Fade.Alpha, 0f, 1f);
 
         // The rounded bar cut to the part of the shield: it follows the corners of the bar, never sticks out of them.
         drawList.PushClipRect(new Vector2(left, pos.Y), new Vector2(right, max.Y), true);

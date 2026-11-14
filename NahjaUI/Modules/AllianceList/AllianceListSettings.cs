@@ -39,16 +39,10 @@ public class AllianceListSettings
 
     public int JobIconOffsetY { get; set; }
 
-    /// <summary>How visible the cell of a member is while he is dead, offline, in another area or too far away (percent).</summary>
-    public int AwayOpacityPercent { get; set; } = 40;
-
-    /// <summary>"Dead" over the cell of a dead member (on or off, place, size, color). Members who are only away get no text. It ends in "..." if the cell is too narrow.</summary>
+    /// <summary>"Dead" over the cell of a dead member (place, size, color). Members who are only away get no text. It ends in "..." if the cell is too narrow.</summary>
     public FrameTextSettings DeadText { get; set; } = new() { Anchor = AnchorPoint.Center, OffsetX = 0, OffsetY = 0, TextSize = 11 };
 
-    /// <summary>The game's own Raise icon on a dead member who already has a Raise waiting for him.</summary>
-    public bool ShowRaiseIcon { get; set; } = true;
-
-    /// <summary>Size of the Raise icon, like the icons of the trackers: the game's icon is cut (never stretched) to the shape of this box.</summary>
+    /// <summary>Size of the Raise icon (the game's own icon, on a dead member who already has a Raise waiting for him), like the icons of the trackers: the game's icon is cut (never stretched) to the shape of this box.</summary>
     public int RaiseIconWidthPx { get; set; } = 16;
 
     public int RaiseIconHeightPx { get; set; } = 16;
@@ -61,7 +55,4 @@ public class AllianceListSettings
     public int RaiseIconOffsetX { get; set; } = -2;
 
     public int RaiseIconOffsetY { get; set; } = 2;
-
-    /// <summary>The name of the member in a small box while the mouse is over his cell.</summary>
-    public bool ShowNameOnHover { get; set; } = true;
 }

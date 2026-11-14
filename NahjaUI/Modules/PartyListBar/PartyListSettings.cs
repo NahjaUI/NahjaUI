@@ -244,12 +244,6 @@ public class PartyListSettings
     /// <summary>Space between two bars, in pixels.</summary>
     public int RowSpacingPx { get; set; } = 6;
 
-    /// <summary>How visible the bar of a member is while he is dead, offline, in another area or too far away (percent).</summary>
-    public int AwayOpacityPercent { get; set; } = 50;
-
-    /// <summary>Write "Dead", "Offline", "Other area" or "Out of range" instead of the name of that member.</summary>
-    public bool ShowAwayTag { get; set; } = true;
-
     public PartyMpMode MpMode { get; set; } = PartyMpMode.HealersAndRaisers;
 
     // The MP bar is a bar of its own, placed relative to the bar of the member. Where: a point of the MP bar (MpSelfAnchor) goes on a

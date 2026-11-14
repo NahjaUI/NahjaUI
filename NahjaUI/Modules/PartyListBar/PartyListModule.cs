@@ -253,11 +253,25 @@ internal sealed class PartyListModule : IDisposable
 
             // Clicks only for real members, and not while the boxes are being moved.
             if (!isSample && !plugin.Layout.UnlockMode)
+            {
                 plugin.HudBarSystem.HandleClicks($"party.{member.EntityId}", rowPos, size, member);
+
+                // A member whose name is replaced by Dead, Offline, Other area... shows it in a small box while the mouse is over his bar.
+                if (AwayTag(member) is not null && IsHovered(rowPos, size))
+                    plugin.StatusRows.ShowTextTooltip(member.Name);
+            }
         }
 
         // In unlock mode the box is the whole stack of bars.
         PartyElement.DisplayRect = (pos, new Vector2(size.X, boxHeight));
+    }
+
+    private bool IsHovered(Vector2 pos, Vector2 size)
+    {
+        if (plugin.GameCover.Contains(ImGui.GetIO().MousePos))
+            return false;
+
+        return ImGui.IsMouseHoveringRect(pos, pos + size, false) && !ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow);
     }
 
     // The game's own job icons: 62000 + job id (plain) or 62100 + job id (light). Crafters and gatherers (jobs 8-18) have them too.
@@ -321,9 +335,9 @@ internal sealed class PartyListModule : IDisposable
         }
 
         // The texts last, over everything (the ring too: a name at the very top of the bar must not be cut by it).
-        // A member who is away (offline, in another area, too far) or dead is faded; his name can be replaced by what is happening.
+        // A member who is away (offline, in another area, too far) or dead is faded, and his name is replaced by what is happening.
         var away = AwayTag(member);
-        var name = settings.ShowAwayTag && away is not null
+        var name = away is not null
             ? away
             : UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
         // The name is shortened with "..." when it would go out of the bar or run into the HP text.
@@ -334,7 +348,7 @@ internal sealed class PartyListModule : IDisposable
         plugin.HudBarSystem.DrawText(drawList, hpText, look.Hp, pos, size);
 
         if (away is not null)
-            DrawListFade.FadeSince(drawList, fadeMark, settings.AwayOpacityPercent / 100f);
+            DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
     }
 
     // ---------------------------------------------------------------- helpers

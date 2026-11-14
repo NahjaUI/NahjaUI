@@ -193,8 +193,9 @@ internal sealed class AllianceListModule : IDisposable
             {
                 plugin.HudBarSystem.HandleClicks($"alliance.{member.EntityId}", cellPos, size, member);
 
-                if (settings.ShowNameOnHover && IsHovered(cellPos, size))
-                    ImGui.SetTooltip(member.Name);
+                // The cells are small and have no name: it always shows in a small box while the mouse is over the cell.
+                if (IsHovered(cellPos, size))
+                    plugin.StatusRows.ShowTextTooltip(member.Name);
             }
         }
 
@@ -264,11 +265,16 @@ internal sealed class AllianceListModule : IDisposable
             drawList.AddRect(pos - grow, max + grow, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
         }
 
-        if (dead)
+        // With the Raise icon on him the text is left out: the cell is too small for both.
+        if (dead && !raiseReady)
+        {
+            // The word Dead is always on: it has no switch, so it is never left off.
+            settings.DeadText.Enabled = true;
             plugin.HudBarSystem.DrawText(drawList, "Dead", settings.DeadText, pos, size, fitInBox: true);
+        }
 
         // The Raise that is waiting for him: only the game's icon, in the top right corner.
-        if (raiseReady && settings.ShowRaiseIcon)
+        if (raiseReady)
         {
             var iconSize = new Vector2(MathF.Max(MathF.Round(settings.RaiseIconWidthPx * scale), 4f), MathF.Max(MathF.Round(settings.RaiseIconHeightPx * scale), 4f));
             var iconAttach = pos + size * settings.RaiseIconBarAnchor.Fraction() + new Vector2(settings.RaiseIconOffsetX, settings.RaiseIconOffsetY) * scale;
@@ -286,7 +292,7 @@ internal sealed class AllianceListModule : IDisposable
         }
 
         if (away)
-            DrawListFade.FadeSince(drawList, fadeMark, settings.AwayOpacityPercent / 100f);
+            DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
     }
 
     private static bool HasRaise(UnitSnapshot member)

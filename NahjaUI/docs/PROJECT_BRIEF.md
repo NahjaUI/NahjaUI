@@ -317,6 +317,12 @@ Move to the next milestone only when the previous one is stable and committed in
 - The saved values keep counting downwards (screen coordinates), so no saved file changes. Only the editors turn the sign: unlock overlay "Y", Layout page "Offset Y", unit frame / party text and status row offsets (position, time, stacks), tracker time/stacks (`PlacementControls`), nameplate name and title offsets.
 - Rule for new editors: any vertical offset control shows `-value` and stores `-input`. Dragging in unlock mode is not affected.
 
+## PILLAR: the tabs of a page never scroll away (owner's rule, 2026-11-13)
+- On every page with tabs (HUD bars, Progress bars, Nameplates, Status effects, Others, and any new one) the tab bar stays pinned at the top while the user scrolls. Only the body of the selected tab scrolls.
+- How: each tab puts its content inside `using (Widgets.TabBody(id)) { ... }` (a child window that fills the space under the tab bar and scrolls by itself), and closes the tab after it (`ImGui.EndTabItem()`). A body that only holds another tab bar passes `scroll: false` (the Parameter bar page, each kind of nameplate), so the inner tabs scroll their own bodies and also stay pinned.
+- `MainWindow` turns off the scroll of the page as a whole for the pages with tabs (`tabbedPage`). A new page with tabs has to be added to that list.
+- Cards that sit above the tab bar (the Nameplates general card, the card of each kind of plate) are pinned too; they can be folded.
+
 ## Nameplates: the title is part of the name block (replaces the earlier title options)
 - No title options at all (no size, color, offsets, anchor, follow-game tick). Title text is drawn with the name's font, size and color, and moves with the name's position and offsets.
 - Name + title are one block of two lines (title above or under the name as the game says, `GameTexts.TitleAbove`). The same point of the block goes on the chosen point of the bar. If the name is over the bar (anchor Y fraction < 0.5) the block grows UPWARDS when a title exists, so the extra line never covers the life bar; otherwise it grows downwards. Lines are aligned inside the block like the anchor (left / centre / right).
@@ -1441,3 +1447,9 @@ Still to do (medium/minor of the audit): separate vs combined "Hide the game's X
 ## Enmity list cut by the alliance lists (tester eryk, 2026-11-11, not compiled or tested yet)
 - The tester found that the game's alliance lists (`_AllianceList1`, `_AllianceList2`), switched on in the HUD layout but not shown (not in an alliance), still counted in `GameWindowCover` as a covering window and cut our enmity list (names started cut, "Gurangatch" looked like "ngatch").
 - Fix: `GameWindowCover.Update` skips every window whose name starts with `_AllianceList`. It is a fix for this window only: other windows that are "visible but empty" could behave the same; the diagnostic "Copy the names of the windows cut" was removed from the published build, so a new case needs it back for a moment.
+
+## FUTURE PLANS (not now; decided 2026-11-13)
+- Job gauges: make them more intuitive, in the spirit of WeakAuras, WITHOUT leaving the pillar "NahjaUI only redraws, the game's rules stay".
+- The line: we may redraw data the game already gives (a status time, a stack count). We do not invent information the game does not expose (best moment to refresh a buff, rotation advice computed by us). Extras of the WeakAuras kind are opt-in, off by default; the default look stays close to the game.
+- Ideas discussed: (1) a bar next to the Warrior's Beast Gauge with the time left of Surging Tempest (only the time the game reports; off by default); (2) Inner Release stacks (3) as a segmented bar. Today both are covered by trackers (Surging Tempest upkeep tracker; Inner Release tracker with its stacks written by our text).
+- When: after the other menus are polished, reviewing job by job, and with feedback from testers (see claude/feedback-testers.md in the Project) to choose the direction.
