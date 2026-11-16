@@ -224,7 +224,7 @@ internal sealed class UnlockOverlay
 
         // Where to put the panel: under the box (and its tag), or above it when the box is near the bottom.
         var panelWidth = 300f * scale;
-        var estimatedHeight = 215f * scale;
+        var estimatedHeight = 265f * scale;
 
         var minX = viewport.Pos.X + panelWidth * 0.5f;
         var maxX = Math.Max(minX, viewport.Pos.X + viewport.Size.X - panelWidth * 0.5f);
@@ -275,6 +275,12 @@ internal sealed class UnlockOverlay
 
             // When it is shown: a common choice for every element.
             if (VisibilityControls.Draw(data, fieldWidth * 1.6f))
+                plugin.RequestSave();
+
+            ImGui.Spacing();
+
+            // The same position for every job, or one of its own for the job being played.
+            if (JobPositionControl.Draw(layout, selected))
                 plugin.RequestSave();
 
             ImGui.Spacing();

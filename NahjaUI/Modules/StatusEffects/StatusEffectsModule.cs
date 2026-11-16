@@ -12,6 +12,7 @@ using NahjaUI.Core.Layout;
 using NahjaUI.Game;
 using NahjaUI.Modules.PartyListBar;
 using NahjaUI.Modules.HudBars;
+using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Modules.StatusEffects;
 
@@ -83,10 +84,12 @@ internal sealed class StatusEffectsModule : IDisposable
     {
         var settings = plugin.Configuration.StatusEffects;
         hider.ShowAgain(_ => settings.Enabled);
-        var preview = PreviewRequested || plugin.Layout.UnlockMode || elements.Any(e => plugin.Layout.IsPreviewing(e.Id));
+        var snapshot = plugin.GameData.Current;
+
+        // Never during combat: made-up data must not stay in a real fight (unlock mode is a choice of the player).
+        var preview = ((PreviewRequested || elements.Any(e => plugin.Layout.IsPreviewing(e.Id))) && !snapshot.Context.InCombat) || plugin.Layout.UnlockMode;
         PreviewRequested = false;
 
-        var snapshot = plugin.GameData.Current;
         var player = snapshot.IsLoggedIn ? snapshot.Player : null;
 
         foreach (var kind in Enum.GetValues<StatusGroupKind>())
@@ -108,7 +111,10 @@ internal sealed class StatusEffectsModule : IDisposable
                 isSample = true;
             }
 
-            DrawGroup(element, group, statuses, isSample);
+            DrawGroup(element, group, statuses, isSample, preview);
+
+            if (isSample && !plugin.Layout.UnlockMode)
+                PreviewBadge.Draw(ImGui.GetBackgroundDrawList(), LayoutManager.GetRect(element.Layout).Item1);
         }
     }
 
@@ -141,13 +147,13 @@ internal sealed class StatusEffectsModule : IDisposable
         return result;
     }
 
-    private void DrawGroup(LayoutElement element, StatusGroupSettings group, List<StatusSnapshot> statuses, bool isSample)
+    private void DrawGroup(LayoutElement element, StatusGroupSettings group, List<StatusSnapshot> statuses, bool isSample, bool preview)
     {
-        if (!plugin.Layout.IsShown(element))
+        if (!plugin.Layout.IsShown(element, preview))
             return;
 
         var look = group.Look;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         // A horizontal growth fills lines that are rows (and starts a new row when one is full); a vertical growth fills columns.
         var growth = look.Growth;

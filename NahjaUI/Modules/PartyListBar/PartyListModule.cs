@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Addon.Lifecycle;
@@ -41,7 +42,7 @@ internal sealed class PartyListModule : IDisposable
         Sample("Aldric", 19, 82000, 10000, 10000, 12),
         Sample("Brogan", 21, 64000, 10000, 10000, 0),
         Sample("Selene", 28, 100000, 3800, 10000, 18),
-        Sample("Kaito", 20, 41000, 10000, 10000, 0),
+        Sample("Kaito", 20, 41000, 10000, 10000, 0) with { Presence = Presence.ViewingCutscene },
         Sample("Rhea", 35, 100000, 7100, 10000, 0),
         Sample("Tobias", 23, 77000, 10000, 10000, 0),
         Sample("Vera", 25, 0, 10000, 10000, 0)
@@ -156,14 +157,16 @@ internal sealed class PartyListModule : IDisposable
         var hideLook = plugin.Configuration.HudBars.Party.Look;
         hider.ShowAgain(_ => hideLook.Enabled);
         var snapshot = plugin.GameData.Current;
-        var preview = PreviewRequested || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(PartyElement.Id);
+        // The page of the menu asks for the preview every frame it is open; never during combat, so a made-up member can't stay in a real fight.
+        var menuPreview = PreviewRequested && !snapshot.Context.InCombat;
+        var preview = menuPreview || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(PartyElement.Id);
         PreviewRequested = false;
 
         var settings = plugin.Configuration.HudBars.Party;
         if (!settings.Look.Enabled)
             return;
 
-        if (!plugin.Layout.IsShown(PartyElement))
+        if (!plugin.Layout.IsShown(PartyElement, preview))
         {
             PartyElement.DisplayRect = null;
             return;
@@ -183,8 +186,12 @@ internal sealed class PartyListModule : IDisposable
             members = SamplePartyWithChocobo;
             isSample = true;
         }
+        else if (menuPreview)
+        {
+            members = WithPreviewCutscene(members);
+        }
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(PartyElement.Layout);
 
         // The MP bar is a bar of its own that can sit anywhere around the member's bar. A member that shows it takes the area of the bar and
@@ -221,6 +228,7 @@ internal sealed class PartyListModule : IDisposable
         // The rows go one under the other from the top of the box; with "Start from the bottom" the whole stack sits at the bottom of it
         // (the empty space is on top). The order of the members does not change (macros <2>, <3>).
         var cursor = settings.StartFromBottom ? pos.Y + MathF.Max(0f, boxHeight - total) : pos.Y;
+        var firstRow = new Vector2(pos.X, cursor);
 
         for (var i = 0; i < members.Count; i++)
         {
@@ -262,8 +270,44 @@ internal sealed class PartyListModule : IDisposable
             }
         }
 
+        // Made-up data is always marked, so it is never taken for real.
+        if (menuPreview && !plugin.Layout.UnlockMode)
+            PreviewBadge.Draw(drawList, firstRow);
+
         // In unlock mode the box is the whole stack of bars.
         PartyElement.DisplayRect = (pos, new Vector2(size.X, boxHeight));
+    }
+
+    // With a real party, the page of the menu shows one member (not you) watching a cutscene when nobody really is, so the icon can be placed.
+    // The rest of the party stays real. The list is a copy: the real data is not touched.
+    private static IReadOnlyList<UnitSnapshot> WithPreviewCutscene(IReadOnlyList<UnitSnapshot> members)
+    {
+        if (members.Any(m => m.Presence == Presence.ViewingCutscene))
+            return members;
+
+        var index = -1;
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (!members[i].IsPlayer && !members[i].IsCompanion)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        var copy = new List<UnitSnapshot>(members);
+
+        if (index < 0)
+        {
+            // Nobody but you (alone with the game's option "show the list when alone", or the only member): a made-up member is added before
+            // the chocobo, so the icon has a bar to be placed on.
+            var at = copy.FindIndex(m => m.IsCompanion);
+            copy.Insert(at < 0 ? copy.Count : at, SampleParty[1] with { Presence = Presence.ViewingCutscene });
+            return copy;
+        }
+
+        copy[index] = copy[index] with { Presence = Presence.ViewingCutscene };
+        return copy;
     }
 
     private bool IsHovered(Vector2 pos, Vector2 size)
@@ -282,7 +326,7 @@ internal sealed class PartyListModule : IDisposable
     {
         var fadeMark = DrawListFade.Mark(drawList);
         var look = settings.Look;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var max = pos + size;
 
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
@@ -340,6 +384,18 @@ internal sealed class PartyListModule : IDisposable
 
         if (away is not null)
             DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
+
+        // The icon of someone watching a cutscene is drawn after the fade, so it stays clear on a faded bar.
+        if (settings.ShowCutsceneIcon && member.Presence == Presence.ViewingCutscene && GameDataProvider.CutsceneIconId != 0)
+        {
+            var side = MathF.Max(MathF.Round(settings.CutsceneIconSizePx * scale), 4f);
+            var attach = pos + size * settings.CutsceneIconBarAnchor.Fraction() + new Vector2(settings.CutsceneIconOffsetX, settings.CutsceneIconOffsetY) * scale;
+            var iconMin = attach - new Vector2(side, side) * settings.CutsceneIconSelfAnchor.Fraction();
+            iconMin = new Vector2(MathF.Round(iconMin.X), MathF.Round(iconMin.Y));
+            var cutsceneTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(GameDataProvider.CutsceneIconId)).GetWrapOrEmpty();
+
+            drawList.AddImage(cutsceneTexture.Handle, iconMin, iconMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
+        }
     }
 
     // ---------------------------------------------------------------- helpers
@@ -386,7 +442,7 @@ internal sealed class PartyListModule : IDisposable
     private static void DrawMpBar(ImDrawListPtr drawList, PartyListSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size)
     {
         var look = settings.Look;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (mpPos, mpSize) = MpRect(settings, pos, size, scale);
         var mpMax = mpPos + mpSize;
 

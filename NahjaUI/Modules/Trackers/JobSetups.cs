@@ -87,8 +87,8 @@ internal static class JobSetups
 
     public static string? NameOfJob(uint jobId) => Jobs.FirstOrDefault(pair => pair.Value.Id == jobId).Key;
 
-    // One place of the column: an element, whether it has a position for each job (shared elements) and the size to give it (0 = keep).
-    private sealed record Slot(LayoutElement Element, bool PerJob, int Width = 0, int Height = 0);
+    // One place of the column: an element, the size to give it (0 = keep) and whether it is a gauge of this job (the other jobs have none there).
+    private sealed record Slot(LayoutElement Element, int Width = 0, int Height = 0, bool IsGauge = false);
 
     public static string Apply(Plugin plugin, TrackerEngine engine, string jobName)
     {
@@ -244,22 +244,41 @@ internal static class JobSetups
             PlaceInOrder(engine, Find("General"));
         }
 
-        var progressBar = new Slot(plugin.ProgressBarSystem.PlayerElement, true, 240, 18);
+        // The rows of every job share one position each ("Rotation", "CDs", "Defensive CDs"): set once, every job shows it.
+        if (rotation is not null)
+        {
+            rotation.Definition.PositionGroup = "Rotation";
+            rotation.Element.PositionGroup = "Rotation";
+        }
+
+        if (cooldowns is not null)
+        {
+            cooldowns.Definition.PositionGroup = "CDs";
+            cooldowns.Element.PositionGroup = "CDs";
+        }
+
+        if (defensives is not null)
+        {
+            defensives.Definition.PositionGroup = "Defensive CDs";
+            defensives.Element.PositionGroup = "Defensive CDs";
+        }
+
+        var progressBar = new Slot(plugin.ProgressBarSystem.PlayerElement, 240, 18);
 
         // From the top of the column down.
         var column = new List<Slot>();
         if (rotation is not null)
-            column.Add(new Slot(rotation.Element, false));
+            column.Add(new Slot(rotation.Element));
 
-        column.AddRange(job.Gauge(plugin).Select(bar => new Slot(bar, false, 240, 6)));
+        column.AddRange(job.Gauge(plugin).Select(bar => new Slot(bar, 240, 6, true)));
 
         void AddRows()
         {
             if (cooldowns is not null)
-                column.Add(new Slot(cooldowns.Element, false));
+                column.Add(new Slot(cooldowns.Element));
 
             if (defensives is not null)
-                column.Add(new Slot(defensives.Element, false));
+                column.Add(new Slot(defensives.Element));
         }
 
         // Dark Knight is the one tank that also needs its MP (Edge of Shadow, The Blackest Night).
@@ -269,30 +288,53 @@ internal static class JobSetups
         var player = plugin.Configuration.HudBars.Player;
         var showsMp = player.IsMpOn(job.Id);
         if (showsMp)
-            column.Add(new Slot(plugin.HudBarSystem.MpElement, true, 240, 6));
+            column.Add(new Slot(plugin.HudBarSystem.MpElement, 240, 6));
 
         // The global cooldown bar sits between the MP bar (or the gauges) and the progress bar.
-        column.Add(new Slot(plugin.ProgressBarSystem.GcdElement, true, 240, 6));
+        column.Add(new Slot(plugin.ProgressBarSystem.GcdElement, 240, 6));
         column.Add(progressBar);
         AddRows();
 
         if (roleRow is not null)
-            column.Add(new Slot(roleRow.Element, true));
+            column.Add(new Slot(roleRow.Element));
 
         // Every element of the column has its own height measured from the middle of the screen (no anchor to the one above, so moving
         // one of them never drags the others by surprise): 6 px between rows, 1 px between bars (gauges, MP bar, progress bar).
-        var y = TopY;
-        var aboveIsBar = false;
-        var first = true;
-        foreach (var slot in column)
+        // Walked twice: without the gauges of the job (the column every job shares) and with them (the column of this job).
+        int[] Tops(bool withGauges)
         {
-            var isBar = slot.Width > 0;
-            if (!first)
-                y += aboveIsBar && isBar ? BarGap : 6;
+            var tops = new int[column.Count];
+            var y = TopY;
+            var aboveIsBar = false;
+            var first = true;
 
-            var top = y;
+            for (var i = 0; i < column.Count; i++)
+            {
+                var slot = column[i];
+                if (slot.IsGauge && !withGauges)
+                    continue;
 
-            void Place(ElementLayout layout)
+                var isBar = slot.Width > 0;
+                if (!first)
+                    y += aboveIsBar && isBar ? BarGap : 6;
+
+                tops[i] = y;
+                y += isBar ? slot.Height : slot.Element.Layout.Height;
+                aboveIsBar = isBar;
+                first = false;
+            }
+
+            return tops;
+        }
+
+        var commonTops = Tops(false);
+        var jobTops = Tops(true);
+
+        for (var i = 0; i < column.Count; i++)
+        {
+            var slot = column[i];
+
+            void PlaceAt(ElementLayout layout, int top)
             {
                 TrackerPresets.Builder.AttachToScreenTop(layout, top);
 
@@ -303,20 +345,20 @@ internal static class JobSetups
                 }
             }
 
-            if (slot.PerJob)
-                PlaceForJob(plugin, slot.Element, job.Id, Place);
-            else
-                Place(slot.Element.Layout);
+            var commonTop = commonTops[i];
+            var jobTop = jobTops[i];
 
-            y += isBar ? slot.Height : slot.Element.Layout.Height;
-            aboveIsBar = isBar;
-            first = false;
+            // The gauges are of this job only. The rest has one position for every job; a job whose column is different (it has gauges)
+            // gets its own, and the checkbox "Use a different position for this job" shows it.
+            if (slot.IsGauge)
+                PlaceAt(slot.Element.Layout, jobTop);
+            else
+                plugin.Layout.PlaceForJob(slot.Element, job.Id, false, layout => PlaceAt(layout, commonTop), layout => PlaceAt(layout, jobTop));
         }
 
-        // PvP has its own column (its own positions for the job, see LayoutManager.KeyOf), from the same top: the Rotation row, then 6 px
-        // below it the Frontline gauge, the MP bar of PvP, the global cooldown bar and the progress bar, 1 px apart. There are no job gauges
-        // and no CDs rows in PvP, so nothing else is in between.
-        var pvpKey = LayoutManager.KeyOf(job.Id, true);
+        // PvP has its own column, from the same top: the Rotation row, then 6 px below it the Frontline gauge, the MP bar of PvP, the global
+        // cooldown bar and the progress bar, 1 px apart. There are no job gauges and no CDs rows in PvP, so nothing else is in between,
+        // and every job has the same one.
         var pvpTop = rotation is null ? TopY : TopY + rotation.Element.Layout.Height + 6;
         var pvpColumn = new (LayoutElement Element, int Height)[]
         {
@@ -329,13 +371,15 @@ internal static class JobSetups
         foreach (var (pvpElement, pvpHeight) in pvpColumn)
         {
             var barTop = pvpTop;
-            PlaceForJob(plugin, pvpElement, pvpKey, layout =>
+
+            void PlacePvp(ElementLayout layout)
             {
                 TrackerPresets.Builder.AttachToScreenTop(layout, barTop);
                 layout.Width = 240;
                 layout.Height = pvpHeight;
-            });
+            }
 
+            plugin.Layout.PlaceForJob(pvpElement, job.Id, true, PlacePvp, PlacePvp);
             pvpTop += pvpHeight + BarGap;
         }
 
@@ -487,27 +531,6 @@ internal static class JobSetups
     {
         var manager = ActionManager.Instance();
         return manager == null ? -1 : manager->GetRecastGroup((int)ActionType.Action, actionId);
-    }
-
-    // An element shared by all jobs (the progress bar, the MP bar, the Tank Role row) gets its own position for this job and zone
-    // (the key is LayoutManager.KeyOf: the job in PvE, or the job in PvP).
-    private static void PlaceForJob(Plugin plugin, LayoutElement element, uint key, Action<ElementLayout> place)
-    {
-        if (!plugin.Layout.IsPerJob(element.Id))
-            plugin.Layout.SetPerJob(element, true, 0);
-
-        var jobs = plugin.Configuration.JobLayouts[element.Id];
-        if (!jobs.TryGetValue(key, out var layout))
-        {
-            layout = (jobs.TryGetValue(0, out var baseLayout) ? baseLayout : element.Layout).Clone();
-            jobs[key] = layout;
-        }
-
-        place(layout);
-
-        // If this is the job and zone being played, the element shows its position now (and would save it back over ours).
-        if (plugin.Layout.CurrentKey == key)
-            element.Layout.CopyPositionFrom(layout);
     }
 
     // ---------------------------------------------------------------- tanks

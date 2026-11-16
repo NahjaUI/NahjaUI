@@ -441,11 +441,38 @@ internal sealed partial class JobGaugeModule : IDisposable
 
     public void Draw()
     {
+        // The preview of a page of the menu is never shown during combat, and while it is shown the "show when" conditions of the gauges are ignored.
+        var previewing = PreviewJobId != 0 && !plugin.GameData.Current.Context.InCombat;
+        LayoutManager.PreviewNow = previewing;
+
+        try
+        {
+            DrawGauges();
+        }
+        finally
+        {
+            LayoutManager.PreviewNow = false;
+        }
+    }
+
+    private void DrawGauges()
+    {
         hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
         var player = snapshot.IsLoggedIn ? snapshot.Player : null;
-        var previewJob = PreviewJobId;
+        var previewJob = snapshot.Context.InCombat ? 0u : PreviewJobId;
         PreviewJobId = 0;
+
+        // The page of ANOTHER job is open: the gauge of the job being played is not drawn, so the two never pile up in the same place.
+        // (The pages of the Limit Break and of the Frontline gauge are special ids, not jobs, and do not hide anything.)
+        if (previewJob != 0 && previewJob < FrontlinePageId && player is not null && player.JobId != previewJob)
+        {
+            snapshot = snapshot with
+            {
+                WhiteMage = null, Warrior = null, Paladin = null, DarkKnight = null, Gunbreaker = null,
+                Scholar = null, Astrologian = null, Sage = null, RedMage = null, ExtraGauge = null
+            };
+        }
 
         // The job gauges are for PvE: in PvP only the Frontline gauge is drawn (unlock mode still shows all of them so they can be placed).
         var frontline = plugin.Configuration.JobGauges.Frontline;
@@ -460,7 +487,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             if (frontlineGauge is not null)
             {
                 var frontlineValue = (byte)Math.Clamp(frontlineGauge.Max == 0 ? 0 : frontlineGauge.Value * 100f / frontlineGauge.Max, 0f, 100f);
-                Cover(() => DrawBar(frontline, FrontlineElement, frontlineValue, (int)frontlineGauge.Value), FrontlineElement);
+                Cover(!(snapshot.Context.InPvPMatch && snapshot.Frontline is not null), () => DrawBar(frontline, FrontlineElement, frontlineValue, (int)frontlineGauge.Value), FrontlineElement);
             }
         }
 
@@ -472,7 +499,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             var pvpGauge = snapshot.Context.InPvP ? snapshot.LimitBreak : null;
             pvpGauge ??= previewJob == LimitBreakPvpPageId || plugin.Layout.UnlockMode ? LimitBreakSample : null;
             if (pvpGauge is not null)
-                Cover(() => DrawLimitBreak(limitBreakPvp, pvpGauge, LimitBreakPvpElement), LimitBreakPvpElement);
+                Cover(!(snapshot.Context.InPvP && snapshot.LimitBreak is not null), () => DrawLimitBreak(limitBreakPvp, pvpGauge, LimitBreakPvpElement), LimitBreakPvpElement);
         }
 
         if (snapshot.Context.InPvP)
@@ -543,7 +570,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             // unlock mode only for the job you are playing.
             var gauge = snapshot.WhiteMage ?? (previewJob == WhiteMageJobId || (unlock && isWhiteMage) ? Sample : null);
             if (gauge is not null)
-                Cover(() => DrawWhiteMage(whiteMage, gauge), LilyElement, BloodLilyElement);
+                Cover(snapshot.WhiteMage is null, () => DrawWhiteMage(whiteMage, gauge), LilyElement, BloodLilyElement);
         }
 
         var warrior = plugin.Configuration.JobGauges.Warrior;
@@ -551,7 +578,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Warrior ?? (previewJob == WarriorJobId || (unlock && isWarrior) ? WarriorSample : null);
             if (gauge is not null)
-                Cover(() => DrawBar(warrior, WarriorElement, gauge.BeastGauge), WarriorElement);
+                Cover(snapshot.Warrior is null, () => DrawBar(warrior, WarriorElement, gauge.BeastGauge), WarriorElement);
         }
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
@@ -559,7 +586,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Paladin ?? (previewJob == PaladinJobId || (unlock && isPaladin) ? PaladinSample : null);
             if (gauge is not null)
-                Cover(() => DrawBar(paladin, PaladinElement, gauge.OathGauge), PaladinElement);
+                Cover(snapshot.Paladin is null, () => DrawBar(paladin, PaladinElement, gauge.OathGauge), PaladinElement);
         }
 
         var darkKnight = plugin.Configuration.JobGauges.DarkKnight;
@@ -567,7 +594,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.DarkKnight ?? (previewJob == DarkKnightJobId || (unlock && isDarkKnight) ? DarkKnightSample : null);
             if (gauge is not null)
-                Cover(() => DrawDarkKnight(darkKnight, gauge), DarkBloodElement, DarksideElement);
+                Cover(snapshot.DarkKnight is null, () => DrawDarkKnight(darkKnight, gauge), DarkBloodElement, DarksideElement);
         }
 
         var gunbreaker = plugin.Configuration.JobGauges.Gunbreaker;
@@ -575,7 +602,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Gunbreaker ?? (previewJob == GunbreakerJobId || (unlock && isGunbreaker) ? GunbreakerSample : null);
             if (gauge is not null)
-                Cover(() => DrawGunbreaker(gunbreaker, gauge), GunbreakerElement);
+                Cover(snapshot.Gunbreaker is null, () => DrawGunbreaker(gunbreaker, gauge), GunbreakerElement);
         }
 
         var scholar = plugin.Configuration.JobGauges.Scholar;
@@ -583,7 +610,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Scholar ?? (previewJob == ScholarJobId || (unlock && isScholar) ? ScholarSample : null);
             if (gauge is not null)
-                Cover(() => DrawScholar(scholar, gauge), AetherflowElement, FaerieElement);
+                Cover(snapshot.Scholar is null, () => DrawScholar(scholar, gauge), AetherflowElement, FaerieElement);
         }
 
         var astrologian = plugin.Configuration.JobGauges.Astrologian;
@@ -591,7 +618,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Astrologian ?? (previewJob == AstrologianJobId || (unlock && isAstrologian) ? AstrologianSample : null);
             if (gauge is not null)
-                Cover(() => DrawAstrologian(astrologian, gauge), CardsElement, CrownElement);
+                Cover(snapshot.Astrologian is null, () => DrawAstrologian(astrologian, gauge), CardsElement, CrownElement);
         }
 
         var sage = plugin.Configuration.JobGauges.Sage;
@@ -599,7 +626,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Sage ?? (previewJob == SageJobId || (unlock && isSage) ? SageSample : null);
             if (gauge is not null)
-                Cover(() => DrawSage(sage, gauge), AddersgallElement, AdderstingElement);
+                Cover(snapshot.Sage is null, () => DrawSage(sage, gauge), AddersgallElement, AdderstingElement);
         }
 
         var limitBreak = plugin.Configuration.JobGauges.LimitBreak;
@@ -607,7 +634,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.LimitBreak ?? (previewJob == LimitBreakPageId || unlock ? LimitBreakSample : null);
             if (gauge is not null)
-                Cover(() => DrawLimitBreak(limitBreak, gauge, LimitBreakElement), LimitBreakElement);
+                Cover(snapshot.LimitBreak is null, () => DrawLimitBreak(limitBreak, gauge, LimitBreakElement), LimitBreakElement);
         }
 
         var redMage = plugin.Configuration.JobGauges.RedMage;
@@ -615,14 +642,15 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.RedMage ?? (previewJob == RedMageJobId || (unlock && isRedMage) ? RedMageSample : null);
             if (gauge is not null)
-                Cover(() => DrawRedMage(redMage, gauge), RedWhiteElement, RedBlackElement, RedStackElement);
+                Cover(snapshot.RedMage is null, () => DrawRedMage(redMage, gauge), RedWhiteElement, RedBlackElement, RedStackElement);
         }
 
         DrawExtraGauges(snapshot, player, previewJob, unlock);
     }
 
     // Draws a gauge so that the game's windows stay over it: the box around its elements is cut around those windows.
-    private void Cover(Action draw, params LayoutElement[] elements)
+    // sample: what is drawn is made up (the preview of the menu), so it is marked.
+    private void Cover(bool sample, Action draw, params LayoutElement[] elements)
     {
         var min = new Vector2(float.MaxValue);
         var max = new Vector2(float.MinValue);
@@ -640,7 +668,10 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
         }
 
-        plugin.GameCover.Draw(min, max - min, 120f * ImGuiHelpers.GlobalScale, draw);
+        plugin.GameCover.Draw(min, max - min, 120f * UiScale.Overlay, draw);
+
+        if (sample && !plugin.Layout.UnlockMode)
+            PreviewBadge.Draw(ImGui.GetBackgroundDrawList(), min);
     }
 
     // As many bars as the content has (1 to 3), side by side: each one fills from the left; a full bar has the "full" colour. The level (LB1...) is written over it.
@@ -651,7 +682,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var drawList = ImGui.GetBackgroundDrawList();
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;
@@ -708,7 +739,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var drawList = ImGui.GetBackgroundDrawList();
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(DarksideElement.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;
@@ -750,7 +781,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         const int count = 3;
         var drawList = ImGui.GetBackgroundDrawList();
         var (pos, size) = LayoutManager.GetRect(GunbreakerElement.Layout);
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(settings.GapPx * scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
@@ -795,7 +826,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (!LayoutManager.IsShownNow(element))
             return;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;
@@ -837,7 +868,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         const int count = 3;
         var (pos, size) = LayoutManager.GetRect(RedStackElement.Layout);
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(settings.GapPx * scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
@@ -868,7 +899,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var drawList = ImGui.GetBackgroundDrawList();
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         if (size.X < 2f || size.Y < 2f)
             return;
@@ -945,7 +976,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     {
         const int count = 3;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(gapPx * scale);
         var rounding = MathF.Round(roundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
@@ -990,7 +1021,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     // A short text (the seconds until the next lily) in the middle of one pip.
     private void DrawPipText(ImDrawListPtr drawList, FrameTextSettings textSettings, int gapPx, Vector2 pos, Vector2 size, int pipIndex, string text)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(gapPx * scale);
         var pipWidth = MathF.Floor((size.X - gap * 2f) / 3f);
         if (pipWidth < 1f)
@@ -1073,7 +1104,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var (pos, size) = LayoutManager.GetRect(element.Layout);
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(gapPx * scale);
         var rounding = MathF.Round(roundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
@@ -1106,7 +1137,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (size.X < 2f || size.Y < 2f)
             return;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var rounding = MathF.Round(roundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;

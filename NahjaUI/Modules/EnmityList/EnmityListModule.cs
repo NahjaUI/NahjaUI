@@ -125,10 +125,11 @@ internal sealed class EnmityListModule : IDisposable
         if (inPvp && !PreviewRequested)
             return;
 
-        var preview = PreviewRequested || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(Element.Id);
+        // Never during combat: made-up data must not stay in a real fight (unlock mode is a choice of the player).
+        var preview = ((PreviewRequested || plugin.Layout.IsPreviewing(Element.Id)) && !plugin.GameData.Current.Context.InCombat) || plugin.Layout.UnlockMode;
         PreviewRequested = false;
 
-        if (!settings.Enabled || !plugin.Layout.IsShown(Element))
+        if (!settings.Enabled || !plugin.Layout.IsShown(Element, preview))
             return;
 
         // The game's option can hide the list (the samples of the unlock mode still show, to place it).
@@ -151,9 +152,12 @@ internal sealed class EnmityListModule : IDisposable
         if (enemies.Count == 0)
             return;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var drawList = ImGui.GetBackgroundDrawList();
         var (pos, size) = LayoutManager.GetRect(Element.Layout);
+
+        if (isSample && !plugin.Layout.UnlockMode)
+            PreviewBadge.Draw(drawList, pos);
 
         // The part of a cast that hangs below its bar takes room in the column (the next bar starts under it); at the sides it takes none.
         var progressBarBlock = 0f;

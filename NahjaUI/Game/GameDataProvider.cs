@@ -937,6 +937,20 @@ internal sealed class GameDataProvider : IDisposable
     // from the English table, so it does not depend on the language of the game; after that only numbers are compared.
     public static readonly uint CutsceneStatusId = FindOnlineStatus("Viewing Cutscene");
 
+    // The icon the game draws for that online status (the same one its party list shows next to the member).
+    public static readonly uint CutsceneIconId = FindOnlineStatusIcon("Viewing Cutscene");
+
+    private static uint FindOnlineStatusIcon(string name)
+    {
+        foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.OnlineStatus>(Dalamud.Game.ClientLanguage.English))
+        {
+            if (row.Name.ToString() == name)
+                return (uint)row.Icon;
+        }
+
+        return 0;
+    }
+
     private static uint FindOnlineStatus(string name)
     {
         foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.OnlineStatus>(Dalamud.Game.ClientLanguage.English))
@@ -962,6 +976,16 @@ internal sealed class GameDataProvider : IDisposable
             : territory != Plugin.ClientState.TerritoryType ? Presence.OtherArea
             : Presence.OutOfRange;
 
+        // The game has no statuses to show for a member in another area or offline: what is left in those lists is old or meaningless
+        // data (it showed random icons), so nothing is read from them. A dead member lost his statuses too, except the ones that tell if he
+        // can be raised (the ones of a previous raise), which are the only ones kept.
+        var dead = chara?.IsDead ?? false;
+        var statuses = presence is Presence.OtherArea or Presence.Offline
+            ? Array.Empty<StatusSnapshot>()
+            : chara is null ? ToStatuses(member.EntityId, member.Statuses)
+            : dead ? KeepRaiseStatuses(ToStatuses(member.EntityId, chara.StatusList))
+            : ToStatuses(member.EntityId, chara.StatusList);
+
         return new UnitSnapshot(
             member.EntityId,
             StreamerMode.Name(CleanName(member.Name.ToString()), true),
@@ -971,14 +995,27 @@ internal sealed class GameDataProvider : IDisposable
             member.MaxHP,
             member.CurrentMP,
             member.MaxMP,
-            chara?.IsDead ?? false,
+            dead,
             chara is null ? null : ToCast(chara),
             // The statuses of the party list are only refreshed when the server sends them (every few seconds), so their times jump and lag
             // behind. A member next to you is read from its own character instead, which the game counts down every frame (the same
             // list the status rows use). The party list is the fallback for members that are far away.
-            chara is not null ? ToStatuses(member.EntityId, chara.StatusList) : ToStatuses(member.EntityId, member.Statuses),
+            statuses,
             ShieldPercent: chara?.ShieldPercentage ?? 0,
             Presence: presence);
+    }
+
+    // Weakness (43), Brink of Death (44), Transcendent (148) and Damage Down (2092): what a raised or recently dead player carries.
+    private static IReadOnlyList<StatusSnapshot> KeepRaiseStatuses(IReadOnlyList<StatusSnapshot> statuses)
+    {
+        var kept = new List<StatusSnapshot>(2);
+        foreach (var status in statuses)
+        {
+            if (status.Id is 43 or 44 or 148 or 2092)
+                kept.Add(status);
+        }
+
+        return kept;
     }
 
     private static CastSnapshot? ToCast(IBattleChara chara)

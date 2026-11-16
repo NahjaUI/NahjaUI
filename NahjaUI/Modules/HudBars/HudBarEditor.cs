@@ -321,7 +321,7 @@ internal sealed class HudBarEditor
     // What is only about the party: space between bars, MP bar, and how the targeted member is marked.
     private void DrawPartyOptions(PartyListSettings party)
     {
-        Widgets.Card("##card_pf_options", 23, () =>
+        Widgets.Card("##card_pf_options", 31, () =>
         {
             Widgets.SectionLabel("Party options");
 
@@ -385,6 +385,56 @@ internal sealed class HudBarEditor
                 }
             }
 
+            // The icon of a member who is watching a cutscene, right after the job icon: it works the same way.
+            ImGui.Spacing();
+            var showCutscene = party.ShowCutsceneIcon;
+            if (ImGui.Checkbox("Show an icon when a member is watching a cutscene", ref showCutscene))
+            {
+                party.ShowCutsceneIcon = showCutscene;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The game's own icon of the status \"Viewing Cutscene\", the one its party list shows. Nothing is shown when the game does not say it.");
+
+            if (party.ShowCutsceneIcon)
+            {
+                var cutsceneSize = party.CutsceneIconSizePx;
+                if (ImGui.SliderInt("Cutscene icon size (px)", ref cutsceneSize, 8, 64))
+                {
+                    party.CutsceneIconSizePx = cutsceneSize;
+                    plugin.RequestSave();
+                }
+
+                var cutsceneBarAnchor = party.CutsceneIconBarAnchor;
+                if (EnumCombo("Cutscene icon: anchor on the bar", ref cutsceneBarAnchor, point => point.Label()))
+                {
+                    party.CutsceneIconBarAnchor = cutsceneBarAnchor;
+                    plugin.RequestSave();
+                }
+
+                var cutsceneSelfAnchor = party.CutsceneIconSelfAnchor;
+                if (EnumCombo("Cutscene icon: anchor of the icon", ref cutsceneSelfAnchor, point => point.Label()))
+                {
+                    party.CutsceneIconSelfAnchor = cutsceneSelfAnchor;
+                    plugin.RequestSave();
+                }
+
+                var cutsceneOffsetX = party.CutsceneIconOffsetX;
+                if (ImGui.InputInt("Cutscene icon: offset X (px)", ref cutsceneOffsetX, 1, 5))
+                {
+                    party.CutsceneIconOffsetX = Math.Clamp(cutsceneOffsetX, -500, 500);
+                    plugin.RequestSave();
+                }
+
+                // Up is plus (the saved value counts downwards).
+                var cutsceneOffsetY = -party.CutsceneIconOffsetY;
+                if (ImGui.InputInt("Cutscene icon: offset Y (px)", ref cutsceneOffsetY, 1, 5))
+                {
+                    party.CutsceneIconOffsetY = -Math.Clamp(cutsceneOffsetY, -500, 500);
+                    plugin.RequestSave();
+                }
+            }
         });
 
         Widgets.Card("##card_pf_mp", 16, () =>

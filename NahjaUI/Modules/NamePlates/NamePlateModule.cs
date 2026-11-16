@@ -44,7 +44,8 @@ internal sealed class NamePlateModule : IDisposable
 
     // The texts the game wrote for a plate, already shaped by the game's own options (name display type: full name, surname,
     // abbreviated, forename, initials; title shown or not). We never format a name ourselves.
-    private sealed record GameTexts(string Name, string Title, bool ShowTitle, bool TitleAbove);
+    // JobOnly: the text of the game is the name of the job of the player (what it writes over an enemy player in PvP), not a real name.
+    private sealed record GameTexts(string Name, string Title, bool ShowTitle, bool TitleAbove, bool JobOnly = false);
 
     private readonly Dictionary<ulong, GameTexts> gameTexts = new();
     private readonly Dictionary<ulong, int> gameFlags = new();
@@ -55,6 +56,15 @@ internal sealed class NamePlateModule : IDisposable
     private readonly object gameFlagsLock = new();
 
     private readonly Plugin plugin;
+
+    // The party members who are watching a cutscene this frame (their plates get the cutscene icon).
+    private readonly HashSet<uint> cutsceneMembers = new();
+
+    // The key of the made-up plate of the preview: no real object has it, so nothing the game told us is mixed in.
+    private const ulong PreviewKey = ulong.MaxValue - 1;
+
+    /// <summary>Set by the settings page every frame a tab of a kind of plate is open: one made-up plate of that kind is drawn at a fixed place.</summary>
+    public NamePlateRelation? PreviewKind { get; set; }
 
     public NamePlateModule(Plugin plugin)
     {
@@ -131,11 +141,13 @@ internal sealed class NamePlateModule : IDisposable
 
                 if (handler.IsUpdating || !known)
                 {
+                    var rawName = handler.Name.TextValue;
                     var texts = new GameTexts(
-                        handler.Name.TextValue,
+                        rawName,
                         CleanTitle(handler.Title.TextValue),
                         handler.DisplayTitle,
-                        handler.IsPrefixTitle);
+                        handler.IsPrefixTitle,
+                        IsJobName(StripUndrawable(rawName), owner));
 
                     lock (gameFlagsLock)
                         gameTexts[owner.GameObjectId] = texts;
@@ -226,7 +238,7 @@ internal sealed class NamePlateModule : IDisposable
             return;
 
         var drawList = ImGui.GetBackgroundDrawList();
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         var screenSize = ImGuiHelpers.MainViewport.Size;
 
@@ -249,16 +261,21 @@ internal sealed class NamePlateModule : IDisposable
         // Only the kinds of plate that are switched on.
         var plates = snapshot.NamePlates.Where(p => settings.StyleOf(p.Relation).Active).ToList();
 
+        cutsceneMembers.Clear();
+        foreach (var member in snapshot.Party)
+        {
+            if (member.Presence == Presence.ViewingCutscene)
+                cutsceneMembers.Add(member.EntityId);
+        }
+
+        DrawPreview(drawList, scale, settings, snapshot);
+
         // The target is drawn over the rest: a plate whose area touches the target's is not drawn, so two names never mix.
         var target = plates.FirstOrDefault(p => p.IsTarget);
         var targetArea = target is null ? default : AreaOf(target);
 
         foreach (var plate in plates.OrderBy(p => p.IsTarget))
         {
-            var anchor = AnchorOf(plate);
-            var plateSize = SizeOf(plate);
-            var current = plate;
-
             var hidden = false;
             if (target is not null && !plate.IsTarget)
             {
@@ -267,9 +284,47 @@ internal sealed class NamePlateModule : IDisposable
                          && area.Min.Y < targetArea.Max.Y && area.Max.Y > targetArea.Min.Y;
             }
 
-            plugin.GameCover.Draw(anchor - new Vector2(plateSize.X / 2f, 0f), plateSize, 200f * scale,
-                hidden ? () => { } : () => DrawPlate(drawList, scale, settings, settings.StyleOf(current.Relation), current, current.IsTarget, snapshot.Player?.Level ?? 0));
+            // The plates are part of the world, like the game's own: windows of the game never cut them.
+            if (!hidden)
+                DrawPlate(drawList, scale, settings, settings.StyleOf(plate.Relation), plate, plate.IsTarget, snapshot.Player?.Level ?? 0);
         }
+    }
+
+    // One made-up plate of the kind whose tab is open, over a fixed place of the screen (a bit above the middle), with every piece it can have
+    // (name, title, level, bar, cast, status icons). Never during combat, and it always carries the "PREVIEW" mark.
+    private void DrawPreview(ImDrawListPtr drawList, float scale, NamePlateSettings settings, GameSnapshot snapshot)
+    {
+        var kind = PreviewKind;
+        PreviewKind = null;
+
+        if (kind is null || snapshot.Context.InCombat)
+            return;
+
+        var style = settings.StyleOf(kind.Value);
+        if (!style.Active)
+            return;
+
+        var (name, level) = kind.Value switch
+        {
+            NamePlateRelation.Self => ("Nahja Stark", 100),
+            NamePlateRelation.Party => ("Aldric", 100),
+            NamePlateRelation.OtherPlayer => ("Selene", 100),
+            NamePlateRelation.Friendly => ("Allied Soldier", 90),
+            NamePlateRelation.Enemy => ("Gurangatch", 92),
+            NamePlateRelation.EnemyPlayer => ("Dragoon", 100),
+            _ => ("Aetheryte", 1)
+        };
+
+        var withCast = kind.Value != NamePlateRelation.Other;
+        var plate = new NamePlateSnapshot(0, name, level, 620000, 1000000, new Vector2(0f, 0.1f), 1f,
+            withCast ? new CastSnapshot(7, 1.2f, 3f, true) : null, kind.Value, PreviewKey, false, withCast ? StatusRowRenderer.PreviewEnfeeblements : null);
+
+        var size = ImGuiHelpers.MainViewport.Size;
+        var anchor = new Vector2((plate.Ndc.X + 1f) * 0.5f * size.X, (1f - plate.Ndc.Y) * 0.5f * size.Y);
+        var plateSize = new Vector2(style.WidthPx * scale, style.HeightPx * scale);
+
+        DrawPlate(drawList, scale, settings, style, plate, false, snapshot.Player?.Level ?? 0);
+        PreviewBadge.Draw(drawList, new Vector2(anchor.X - plateSize.X / 2f, anchor.Y - 46f * scale));
     }
 
     private void DrawPlate(ImDrawListPtr drawList, float scale, NamePlateSettings settings, NamePlateStyle style, NamePlateSnapshot plate, bool isTarget, int playerLevel)
@@ -298,6 +353,22 @@ internal sealed class NamePlateModule : IDisposable
             if (texts is not null && !string.IsNullOrWhiteSpace(texts.Name))
                 displayName = texts.Name;
         }
+        else if (plate.Relation == NamePlateRelation.EnemyPlayer)
+        {
+            // In PvP the game writes only the job over an enemy player: nothing to hide, so streamer mode leaves it alone.
+            // A real name (Crystalline Conflict) is not a job, so it keeps its invented name.
+            GameTexts? enemyTexts;
+            lock (gameFlagsLock)
+                gameTexts.TryGetValue(plate.Key, out enemyTexts);
+
+            if (enemyTexts is { JobOnly: true })
+                displayName = enemyTexts.Name;
+        }
+
+        // The made-up plate of the preview: players get a title, so the title can be placed.
+        var isPreview = plate.Key == PreviewKey;
+        if (isPreview && plate.Relation is NamePlateRelation.Self or NamePlateRelation.Party or NamePlateRelation.OtherPlayer)
+            texts = new GameTexts(plate.Name, "Hero", true, false);
 
         // The game wraps some names in its own quote symbols (in PvP the plate of an enemy player is only its job, between two of them):
         // our font does not have them and they showed as "?". Only what the font can draw is kept.
@@ -376,6 +447,19 @@ internal sealed class NamePlateModule : IDisposable
                 var ring = new Vector2(ringWidth / 2f, ringWidth / 2f);
                 drawList.AddRect(min - ring, max + ring, ImGui.GetColorU32(plugin.Configuration.TargetRingColor), rounding + ringWidth / 2f, ImDrawFlags.None, ringWidth);
             }
+        }
+
+        // A player of your party who is watching a cutscene: the game's own icon of that status, on a point of the HP bar.
+        // The preview of the Party tab always shows it, so it can be placed.
+        if (style.ShowCutsceneIcon && GameDataProvider.CutsceneIconId != 0 && plate.Relation == NamePlateRelation.Party
+            && (isPreview || cutsceneMembers.Contains(plate.EntityId)))
+        {
+            var cutsceneSide = MathF.Max(MathF.Round(style.CutsceneIconSizePx * scale), 4f);
+            var cutsceneAttach = min + (max - min) * style.CutsceneIconBarAnchor.Fraction() + new Vector2(style.CutsceneIconOffsetX, style.CutsceneIconOffsetY) * scale;
+            var cutsceneMin = cutsceneAttach - new Vector2(cutsceneSide, cutsceneSide) * style.CutsceneIconSelfAnchor.Fraction();
+            cutsceneMin = new Vector2(MathF.Round(cutsceneMin.X), MathF.Round(cutsceneMin.Y));
+            var cutsceneTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(GameDataProvider.CutsceneIconId)).GetWrapOrEmpty();
+            drawList.AddImage(cutsceneTexture.Handle, cutsceneMin, cutsceneMin + new Vector2(cutsceneSide, cutsceneSide), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
         }
 
         // Where the big marker goes: over the name block (title included) when the name shows, over the bar otherwise.
@@ -510,7 +594,9 @@ internal sealed class NamePlateModule : IDisposable
         {
             var playerId = plugin.GameData.Current.Player?.EntityId ?? 0u;
             var barSize = max - min;
-            plugin.StatusRows.DrawRows(drawList, style.Enhancements, style.Enfeeblements, statuses, statuses, false, playerId, min, barSize, "nameplate", !plate.Relation.IsEnemy());
+            // The preview shows both rows (enhancements and enfeeblements), whatever the filters say.
+            var enhancements = isPreview ? StatusRowRenderer.PreviewEnhancements : statuses;
+            plugin.StatusRows.DrawRows(drawList, style.Enhancements, style.Enfeeblements, enhancements, statuses, isPreview, playerId, min, barSize, "nameplate", !plate.Relation.IsEnemy());
         }
     }
 
@@ -520,6 +606,19 @@ internal sealed class NamePlateModule : IDisposable
     {
         var text = StripUndrawable(raw);
         return text.Length == 0 ? string.Empty : $"\u00AB{text}\u00BB";
+    }
+
+    // Is this text the name of the job of the player? (the game's own text, in the language of the game)
+    private static bool IsJobName(string text, Dalamud.Game.ClientState.Objects.Types.IGameObject? owner)
+    {
+        if (text.Length == 0 || owner is not Dalamud.Game.ClientState.Objects.Types.IBattleChara chara)
+            return false;
+
+        if (!Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().TryGetRow(chara.ClassJob.RowId, out var row))
+            return false;
+
+        var job = row.Name.ToString();
+        return !string.IsNullOrWhiteSpace(job) && text.Contains(job, StringComparison.OrdinalIgnoreCase);
     }
 
     // Keeps only the characters the NahjaUI fonts can draw (the same ranges as OverlayFonts: Latin, accents, common punctuation).

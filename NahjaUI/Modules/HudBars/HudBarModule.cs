@@ -289,9 +289,11 @@ internal sealed class HudBarModule : IDisposable
     {
         hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
-        var preview = PreviewRequested || plugin.Layout.UnlockMode
+        // The preview of a page of the menu is never shown during combat (made-up data must not stay in a real fight); unlock mode is a choice of the player.
+        var menuPreview = (PreviewRequested
             || plugin.Layout.IsPreviewing(PlayerElement.Id) || plugin.Layout.IsPreviewing(MpElement.Id) || plugin.Layout.IsPreviewing(MpPvpElement.Id) || plugin.Layout.IsPreviewing(TargetElement.Id)
-            || plugin.Layout.IsPreviewing(TargetOfTargetElement.Id) || plugin.Layout.IsPreviewing(FocusElement.Id);
+            || plugin.Layout.IsPreviewing(TargetOfTargetElement.Id) || plugin.Layout.IsPreviewing(FocusElement.Id)) && !snapshot.Context.InCombat;
+        var preview = menuPreview || plugin.Layout.UnlockMode;
         PreviewRequested = false;
         PreviewActive = preview;
 
@@ -328,7 +330,7 @@ internal sealed class HudBarModule : IDisposable
     // One frame: the real unit when there is one, a sample while the settings are open or in unlock mode, else nothing.
     private void DrawUnit(HudBarSettings settings, LayoutElement element, UnitSnapshot? unit, UnitSnapshot sample, bool isPlayerFrame, bool preview)
     {
-        if (!settings.Enabled || !plugin.Layout.IsShown(element))
+        if (!settings.Enabled || !plugin.Layout.IsShown(element, preview))
             return;
 
         var isReal = unit is not null;
@@ -343,7 +345,7 @@ internal sealed class HudBarModule : IDisposable
 
         // Everything of the frame is drawn around the game's own right click menu, never over it.
         var (barPos, barSize) = LayoutManager.GetRect(element.Layout);
-        plugin.GameCover.Draw(barPos, barSize, 400f * ImGuiHelpers.GlobalScale, () =>
+        plugin.GameCover.Draw(barPos, barSize, 400f * UiScale.Overlay, () =>
         {
             DrawFrame(settings, element, unit, isPlayerFrame);
 
@@ -361,6 +363,10 @@ internal sealed class HudBarModule : IDisposable
                 plugin.StatusRows.DrawRows(drawList, settings.Enhancements, settings.Enfeeblements, enhancements, enfeeblements, !isReal, playerId, barPos, barSize, place, !unit.IsHostile);
             }
         });
+
+        // Made-up data is always marked.
+        if (!isReal && !plugin.Layout.UnlockMode)
+            PreviewBadge.Draw(ImGui.GetBackgroundDrawList(), barPos);
 
         // Clicks only make sense on a real unit, and not while the boxes are being moved (they use the same place).
         // The target of target only selects with the left click: the game gives it no menu.
@@ -430,7 +436,7 @@ internal sealed class HudBarModule : IDisposable
     // The MP bar of the player (CP for crafters, GP for gatherers): its own bar, in its own box of the Layout.
     private void DrawPlayerMp(HudBarSettings settings, LayoutElement element, UnitSnapshot? unit, bool preview)
     {
-        if (!plugin.Layout.IsShown(element))
+        if (!plugin.Layout.IsShown(element, preview))
             return;
 
         float fraction;
@@ -447,13 +453,16 @@ internal sealed class HudBarModule : IDisposable
             fraction = 0.7f; // a sample, so there is something to see and drag
             mp = 8400;
             maxMp = 12000;
+
+            if (!plugin.Layout.UnlockMode)
+                PreviewBadge.Draw(ImGui.GetBackgroundDrawList(), LayoutManager.GetRect(element.Layout).Item1);
         }
         else
         {
             return;
         }
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var drawList = ImGui.GetBackgroundDrawList();
         var thickness = MathF.Max(1f, MathF.Round(scale));
@@ -470,7 +479,7 @@ internal sealed class HudBarModule : IDisposable
 
     private void DrawFrame(HudBarSettings settings, LayoutElement element, UnitSnapshot unit, bool isPlayerFrame)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var max = pos + size;
         var drawList = ImGui.GetBackgroundDrawList();
@@ -633,7 +642,7 @@ internal sealed class HudBarModule : IDisposable
         using (var face = plugin.Fonts.PushCap(font, settings.TextSize))
         {
             var textSize = face.Measure(text);
-            var pos = PlaceText(settings, boxPos, boxSize, textSize, ImGuiHelpers.GlobalScale);
+            var pos = PlaceText(settings, boxPos, boxSize, textSize, UiScale.Overlay);
             return (pos, pos + textSize);
         }
     }
@@ -650,7 +659,7 @@ internal sealed class HudBarModule : IDisposable
         if (!settings.Enabled || string.IsNullOrEmpty(text))
             return;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         // The size is in logical pixels: the fonts are already built scaled by the UI scale.
         // The size is the height of the letters (not of the font's line box).

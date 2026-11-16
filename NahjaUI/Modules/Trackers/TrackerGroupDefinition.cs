@@ -36,6 +36,12 @@ public class TrackerGroupDefinition
 
     public GroupGrowth Growth { get; set; } = GroupGrowth.FromCenterHorizontal;
 
+    /// <summary>
+    /// The groups with the same name here share one position between jobs ("Rotation": the Rotation row of every job). Empty = the group has its own.
+    /// A job can still have a position of its own for the group (Layout page, "Use a different position for this job").
+    /// </summary>
+    public string? PositionGroup { get; set; }
+
     /// <summary>Space between two icons, in pixels.</summary>
     public int Spacing { get; set; } = 4;
 

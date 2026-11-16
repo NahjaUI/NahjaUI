@@ -137,7 +137,8 @@ internal sealed class AllianceListModule : IDisposable
         var settings = plugin.Configuration.HudBars.Alliance;
         hider.ShowAgain(_ => settings.Enabled);
 
-        var preview = PreviewRequested || plugin.Layout.UnlockMode || plugin.Layout.IsPreviewing(AllianceElement.Id);
+        // Never during combat: made-up data must not stay in a real fight (unlock mode is a choice of the player).
+        var preview = ((PreviewRequested || plugin.Layout.IsPreviewing(AllianceElement.Id)) && !plugin.GameData.Current.Context.InCombat) || plugin.Layout.UnlockMode;
         PreviewRequested = false;
 
         if (!settings.Enabled)
@@ -146,7 +147,7 @@ internal sealed class AllianceListModule : IDisposable
             return;
         }
 
-        if (!plugin.Layout.IsShown(AllianceElement))
+        if (!plugin.Layout.IsShown(AllianceElement, preview))
         {
             AllianceElement.DisplayRect = null;
             return;
@@ -168,7 +169,7 @@ internal sealed class AllianceListModule : IDisposable
             isSample = true;
         }
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(AllianceElement.Layout);
         var gap = MathF.Round(settings.SpacingPx * scale);
         var columns = Math.Clamp(settings.Columns, 1, Math.Max(1, members.Count));
@@ -199,6 +200,9 @@ internal sealed class AllianceListModule : IDisposable
             }
         }
 
+        if (isSample && !plugin.Layout.UnlockMode)
+            PreviewBadge.Draw(drawList, pos);
+
         AllianceElement.DisplayRect = (pos, box);
     }
 
@@ -217,7 +221,7 @@ internal sealed class AllianceListModule : IDisposable
     private void DrawCell(ImDrawListPtr drawList, AllianceListSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size)
     {
         var fadeMark = DrawListFade.Mark(drawList);
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var max = pos + size;
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));

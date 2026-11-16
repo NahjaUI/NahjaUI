@@ -60,6 +60,15 @@ public class NamePlateStyle
     public int MarkerOffsetX { get; set; } = 0;
     public int MarkerOffsetY { get; set; } = 0; // saved counts downward
 
+    // The game's icon of a player of your party or alliance who is watching a cutscene (same status the party list shows). It sits on a point of
+    // the HP bar, moved by the offsets; saved Y counts downward like the rest. Only plates of party and alliance members use it.
+    public bool ShowCutsceneIcon { get; set; } = true;
+    public int CutsceneIconSizePx { get; set; } = 24;
+    public AnchorPoint CutsceneIconBarAnchor { get; set; } = AnchorPoint.Right;
+    public AnchorPoint CutsceneIconSelfAnchor { get; set; } = AnchorPoint.Left;
+    public int CutsceneIconOffsetX { get; set; } = 3;
+    public int CutsceneIconOffsetY { get; set; } = 0;
+
     // The color of the name and the title (the game's color option only colors the bar, so this one is ours).
     public Vector4 NameColor { get; set; } = new(1f, 1f, 1f, 1f);
     public Vector4 LevelColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;

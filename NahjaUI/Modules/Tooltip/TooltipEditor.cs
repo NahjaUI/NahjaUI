@@ -19,7 +19,10 @@ internal sealed class TooltipEditor
     {
         var s = plugin.Configuration.Tooltip;
 
-        ImGui.TextColored(Theme.TextMuted, "Hover an icon on one of your frames to see how it looks.");
+        // While this page is open, an example of the tooltip is shown at the top of the screen.
+        plugin.StatusRows.ShowTooltipPreview();
+
+        ImGui.TextColored(Theme.TextMuted, "An example is shown at the top of the screen while this page is open. You can also hover an icon on one of your frames.");
         ImGui.Spacing();
 
         Widgets.Card("##card_tt_general", 3, () =>

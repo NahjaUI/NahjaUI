@@ -68,10 +68,12 @@ internal sealed class OverlayFonts : IDisposable
     /// <summary>
     /// Makes ImGui use the font of the given family closest to <paramref name="wantedPx"/> until the returned value
     /// is disposed. The size is in LOGICAL pixels (what the user chose): Dalamud builds these fonts already multiplied by
-    /// the UI scale, so never multiply it by ImGuiHelpers.GlobalScale before calling this. Returns null (and changes nothing) when no font is ready yet; <c>using (null)</c> is fine in C#.
+    /// the UI scale, so never multiply it by ImGuiHelpers.GlobalScale before calling this. The "Interface scale" is applied here: the font chosen is
+    /// the one closest to the size times that scale. Returns null (and changes nothing) when no font is ready yet; <c>using (null)</c> is fine in C#.
     /// </summary>
     public IDisposable? PushClosest(OverlayFont font, float wantedPx)
     {
+        wantedPx *= UiScale.Interface;
         var handle = FindClosest(GetSet(font), wantedPx);
 
         // The family is still loading: use the default one meanwhile.
@@ -120,7 +122,8 @@ internal sealed class OverlayFonts : IDisposable
             }
         }
 
-        var wantedLine = capPx / ratios.Height;
+        // The "Interface scale" is applied by choosing a bigger (or smaller) font, never by stretching one.
+        var wantedLine = capPx * UiScale.Interface / ratios.Height;
 
         // Same choice as PushClosest, but keeping the LOGICAL size of the font that was chosen.
         var handle = FindClosest(GetSet(font), wantedLine, out var builtPx);

@@ -61,11 +61,18 @@ public class Configuration : IPluginConfiguration
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
 
+    // Scale of everything NahjaUI draws over the game, on top of the scale of Dalamud (1 = no change, see UiScale).
+    public float InterfaceScale { get; set; } = 1f;
+
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
 
-    // Elements that have a different position for each job: element id to (job id to layout). Job 0 is the base,
-    // the position a job that was never moved starts from. The live position of the current job is in Layouts.
+    // The position every job shows by default, for the elements that can have one of their own for a job (and the groups that share one):
+    // element id (or the name of the shared position, "Rotation") to (0 = PvE, 1000 = PvP for the elements with their own PvP position, to layout).
+    // The live position of the job being played is in Layouts.
+    public Dictionary<string, Dictionary<uint, ElementLayout>> CommonLayouts { get; set; } = new();
+
+    // The jobs that have a position of their own for an element: element id to (job id, or job id + 1000 in PvP, to layout).
     public Dictionary<string, Dictionary<uint, ElementLayout>> JobLayouts { get; set; } = new();
 
     // The trackers the user has created.

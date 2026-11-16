@@ -213,6 +213,9 @@ public sealed class Plugin : IDalamudPlugin
     {
         Guard("unlock mode", FollowUnlockMode);
 
+        // The scale everything drawn over the game uses (the one of Dalamud times the "Interface scale" of Appearance).
+        UiScale.Interface = System.Math.Clamp(Configuration.InterfaceScale, UiScale.MinInterface, UiScale.MaxInterface);
+
         // The elements that have a position for each job show the one of the job being played.
         Guard("layout", () =>
         {

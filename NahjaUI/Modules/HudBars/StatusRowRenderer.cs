@@ -10,6 +10,7 @@ using NahjaUI.Core.Ui;
 using NahjaUI.Game;
 using NahjaUI.Modules.Trackers;
 using NahjaUI.Modules.PartyListBar;
+using NahjaUI.Modules.Tooltip;
 
 namespace NahjaUI.Modules.HudBars;
 
@@ -93,7 +94,7 @@ internal sealed class StatusRowRenderer
     // starts the next line, on the side the row says.
     private RowPlace Place(StatusRowSettings row, int count, Vector2 targetPos, Vector2 targetSize)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         var iconSize = new Vector2(MathF.Round(Math.Max(4, row.IconWidth) * scale), MathF.Round(Math.Max(4, row.IconHeight) * scale));
         var spacing = MathF.Round(row.SpacingPx * scale);
@@ -221,7 +222,7 @@ internal sealed class StatusRowRenderer
     internal void ShowTextTooltip(string text)
     {
         var look = plugin.Configuration.Tooltip;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         using var theme = new ThemeScope(plugin.Configuration);
         using var font = plugin.Fonts.PushClosest(OverlayFont.NahjaText, look.TextSize);
@@ -257,7 +258,7 @@ internal sealed class StatusRowRenderer
 
         tooltipFrame = frame;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         using var theme = new ThemeScope(plugin.Configuration);
         using var font = plugin.Fonts.PushClosest(OverlayFont.NahjaText, look.TextSize);
@@ -268,7 +269,59 @@ internal sealed class StatusRowRenderer
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, MathF.Max(1f, MathF.Round(scale)));
 
         ImGui.BeginTooltip();
+        DrawTooltipContent(look, status, scale);
+        ImGui.EndTooltip();
 
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor(2);
+    }
+
+    /// <summary>
+    /// The tooltip of a status, as an example over a fixed place of the screen (top center): shown while the Tooltip page is open, so its look can be
+    /// adjusted without hovering an icon. Never during combat.
+    /// </summary>
+    internal void ShowTooltipPreview()
+    {
+        var look = plugin.Configuration.Tooltip;
+        var snapshot = plugin.GameData.Current;
+        if (!look.Enabled || !snapshot.IsLoggedIn || snapshot.Context.InCombat)
+            return;
+
+        var scale = UiScale.Overlay;
+
+        // A made-up status of the player's own, so "Applied by" can be seen too.
+        var status = new StatusSnapshot(PreviewEnhancements[0].Id, snapshot.Player?.EntityId ?? 0u, 14f, 0);
+
+        using var theme = new ThemeScope(plugin.Configuration);
+        using var font = plugin.Fonts.PushClosest(OverlayFont.NahjaText, look.TextSize);
+
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, look.BackgroundColor);
+        ImGui.PushStyleColor(ImGuiCol.Border, look.BorderColor);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, MathF.Round(GlobalColors.Current.Rounding * scale));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, MathF.Max(1f, MathF.Round(scale)));
+
+        var viewport = Dalamud.Interface.Utility.ImGuiHelpers.MainViewport;
+        ImGui.SetNextWindowPos(new Vector2(viewport.Pos.X + viewport.Size.X * 0.5f, viewport.Pos.Y + viewport.Size.Y * 0.18f), ImGuiCond.Always, new Vector2(0.5f, 0f));
+
+        const ImGuiWindowFlags flags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoSavedSettings
+                                       | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.AlwaysAutoResize;
+
+        if (ImGui.Begin("##nahja_tooltip_preview", flags))
+        {
+            DrawTooltipContent(look, status, scale);
+            ImGui.Spacing();
+            ImGui.TextColored(new Vector4(1f, 0.82f, 0.25f, 0.9f), "PREVIEW");
+        }
+
+        ImGui.End();
+
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor(2);
+    }
+
+    // What a status tooltip says (the box around it is made by the caller).
+    private void DrawTooltipContent(TooltipSettings look, StatusSnapshot status, float scale)
+    {
         ImGui.TextColored(look.NameUsesAccent ? Theme.Accent : look.NameColor, GameNames.StatusName(status.Id));
 
         if (look.ShowId)
@@ -294,11 +347,6 @@ internal sealed class StatusRowRenderer
                 ImGui.TextColored(look.DetailColor, $"Applied by {StreamerMode.Name(source.Name.ToString(), source.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)}");
             }
         }
-
-        ImGui.EndTooltip();
-
-        ImGui.PopStyleVar(2);
-        ImGui.PopStyleColor(2);
     }
 
     // Does this row show this status?
@@ -336,7 +384,7 @@ internal sealed class StatusRowRenderer
     // One icon: cropped (never stretched) to the shape of the box, with a 1 px black border, the time and the stacks.
     internal void DrawIcon(ImDrawListPtr drawList, StatusRowSettings row, StatusSnapshot status, Vector2 pos, Vector2 size, bool friendly = true)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var iconId = GameNames.StatusIconId(status.Id);
 
         // Rounded corners, like the bars. They can never be more than half of the shorter side.

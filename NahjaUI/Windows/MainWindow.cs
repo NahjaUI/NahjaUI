@@ -494,7 +494,7 @@ public class MainWindow : Window, IDisposable
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 9, () =>
+        Widgets.Card("##card_theme", 13, () =>
         {
             Widgets.SectionLabel("Theme");
 
@@ -511,6 +511,17 @@ public class MainWindow : Window, IDisposable
 
                 ImGui.EndCombo();
             }
+
+            // Everything NahjaUI draws over the game (bars, trackers, gauges, nameplates, texts) gets bigger or smaller. It multiplies the scale
+            // of Dalamud; the game's own HUD scale does not change it. The windows of NahjaUI keep the scale of Dalamud.
+            var scalePercent = (int)MathF.Round(config.InterfaceScale * 100f);
+            if (ImGui.SliderInt("Interface scale (%)", ref scalePercent, (int)(UiScale.MinInterface * 100f), (int)(UiScale.MaxInterface * 100f)))
+            {
+                config.InterfaceScale = scalePercent / 100f;
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, "Makes everything NahjaUI draws over the game bigger or smaller, on top of the scale of Dalamud. Text uses the closest font size that exists.");
 
             var inBar = config.ShowInServerBar;
             if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))
@@ -626,7 +637,7 @@ public class MainWindow : Window, IDisposable
 
                 foreach (var element in movable)
                 {
-                    var listName = layout.IsPerJob(element.Id) ? element.Name + "  (per job)" : element.Name;
+                    var listName = layout.HasAnyOwnPosition(element.Id) ? element.Name + "  (own position on some jobs)" : element.Name;
                     if (ImGui.Selectable(listName + "##" + element.Id, layout.SelectedId == element.Id))
                         layout.SelectedId = element.Id;
                 }
@@ -712,24 +723,9 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Spacing();
 
-        // One position for each job: it follows the job you play, so a job with a big gauge and another without it can
-        // each have the bars where they fit.
-        var perJob = plugin.Layout.IsPerJob(element.Id);
-        if (ImGui.Checkbox("A different position for each job", ref perJob))
-        {
-            plugin.Layout.SetPerJob(element, perJob, plugin.Layout.CurrentKey);
+        // Every job shows the same position. A job with a big gauge and another without it can each have the bars where they fit.
+        if (JobPositionControl.Draw(plugin.Layout, element))
             plugin.RequestSave();
-        }
-
-        if (perJob)
-        {
-            // PvE and PvP have each their own position for a job.
-            var key = plugin.Layout.CurrentKey;
-            var inPvp = key >= LayoutManager.PvpKeyOffset;
-            var jobId = inPvp ? key - LayoutManager.PvpKeyOffset : key;
-            var jobName = jobId == 0 ? "no job" : GameNames.JobAbbreviation(jobId);
-            ImGui.TextColored(Theme.TextMuted, $"What you change here is saved for {jobName} in {(inPvp ? "PvP" : "PvE")}. A job you have not moved it on starts from where it was when you turned this on (in PvP, from its position in PvE).");
-        }
 
         ImGui.Spacing();
         ImGui.TextColored(Theme.TextMuted, "Show this element");

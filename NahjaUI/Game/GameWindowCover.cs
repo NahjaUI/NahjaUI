@@ -37,6 +37,14 @@ internal sealed unsafe class GameWindowCover
         "_WideText"
     };
 
+    // The same, for every window whose name starts like this. Their boxes are much bigger than what they show, and they cut our HUD in a straight
+    // line with nothing visible on top (tester report "hud is hidden by other elements"):
+    //  - the alliance lists: with the option on in the HUD layout they are "visible" and paint something even when you are not in an alliance,
+    //    and their box cut the enmity list of a tester;
+    //  - the quest list (to-do list) and the minimap: the box of what they paint is far bigger than their visible part. The full map and the
+    //    menus are other windows and keep cutting.
+    private static readonly string[] NeverCutPrefixes = { "_AllianceList", "_ToDoList", "_NaviMap" };
+
     private readonly List<(Vector2 Min, Vector2 Max)> rects = new();
 
     // The name of the window of each rectangle (only to show them while looking for the one that cuts something).
@@ -95,12 +103,7 @@ internal sealed unsafe class GameWindowCover
                     continue;
 
                 var name = Marshal.PtrToStringUTF8((nint)((byte*)unit + NameOffset)) ?? string.Empty;
-                if (NeverCut.Contains(name))
-                    continue;
-
-                // The alliance lists: with the option on in the HUD layout they are "visible" and paint something even when you are not in an
-                // alliance, and their box cut the enmity list of a tester. Nothing of ours needs cutting around them.
-                if (name.StartsWith("_AllianceList", StringComparison.Ordinal))
+                if (NeverCut.Contains(name) || IsNeverCutPrefix(name))
                     continue;
 
                 var box = new Box { Min = new Vector2(float.MaxValue), Max = new Vector2(float.MinValue) };
@@ -160,6 +163,17 @@ internal sealed unsafe class GameWindowCover
             rectNames.Clear();
             debugNodes.Clear();
         }
+    }
+
+    private static bool IsNeverCutPrefix(string name)
+    {
+        foreach (var prefix in NeverCutPrefixes)
+        {
+            if (name.StartsWith(prefix, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Draws the areas that are cut, each with the name of its window (when <see cref="ShowAreas"/> is on).</summary>

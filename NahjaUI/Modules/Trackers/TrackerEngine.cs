@@ -512,6 +512,8 @@ internal sealed class TrackerEngine
         };
 
         var element = plugin.Layout.Register($"tracker-group.{definition.Id}", $"Group: {definition.Name}", defaults);
+        element.PlacementOnly = true;
+        element.PositionGroup = definition.PositionGroup;
         var runtime = new TrackerGroupRuntime(definition, element);
         groups.Add(runtime);
         return runtime;
@@ -628,6 +630,7 @@ internal sealed class TrackerEngine
             }
 
             group.Element.IsHidden = !anyApplies;
+            group.Element.PositionGroup = group.Definition.PositionGroup;
 
             // In unlock mode every enabled member is drawn as a ghost, so the group can be placed
             // even when nothing is active. Otherwise only the visible trackers take a slot.
@@ -677,7 +680,7 @@ internal sealed class TrackerEngine
     {
         try
         {
-            plugin.GameCover.Draw(pos, size, 80f * ImGuiHelpers.GlobalScale, () => DrawTracker(runtime, pos, size, ghost));
+            plugin.GameCover.Draw(pos, size, 80f * UiScale.Overlay, () => DrawTracker(runtime, pos, size, ghost));
             runtime.ConsecutiveErrors = 0;
         }
         catch (Exception ex)
@@ -709,7 +712,7 @@ internal sealed class TrackerEngine
     /// </summary>
     private static Vector2[] Arrange(TrackerGroupDefinition group, Vector2 anchorPos, Vector2 anchorSize, IReadOnlyList<Vector2> sizes)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(Math.Max(0, group.Spacing) * scale);
         var count = sizes.Count;
         var positions = new Vector2[count];
@@ -972,7 +975,7 @@ internal sealed class TrackerEngine
     {
         var definition = runtime.Definition;
         var state = runtime.State;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var drawList = ImGui.GetBackgroundDrawList();
 
         var isCooldown = state.AbilityBased || (state.Rule ?? definition.Rules.FirstOrDefault())?.IsAbility == true;
@@ -1217,7 +1220,7 @@ internal sealed class TrackerEngine
     // The dashes follow the rounded corners. Their size is in logical pixels, so it looks the same at any UI scale.
     private static void DrawGlow(ImDrawListPtr drawList, Vector2 pos, Vector2 size, float rounding)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         // The path runs just outside the border of the icon.
         var grow = MathF.Max(1f, MathF.Round(scale));
@@ -1393,7 +1396,7 @@ internal sealed class TrackerEngine
     // so a right anchor right-justifies the text and a centre anchor centres it. The offset then moves it (in pixels).
     internal void DrawOverlayText(ImDrawListPtr drawList, string text, float wantedPx, OverlayFont font, Vector2 boxPos, Vector2 boxSize, AnchorPoint anchor, Vector2 offset, Vector4? color = null)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         // The size is the height of the letters (not of the font's line box).
         using (var face = plugin.Fonts.PushCap(font, wantedPx))

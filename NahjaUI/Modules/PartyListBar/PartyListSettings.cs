@@ -280,6 +280,25 @@ public class PartyListSettings
 
     public int JobIconOffsetY { get; set; }
 
+    /// <summary>
+    /// The game's own icon of the online status "Viewing Cutscene" next to the member who is watching one (the same status the game's party list shows).
+    /// Nothing is shown when the game does not say it.
+    /// </summary>
+    public bool ShowCutsceneIcon { get; set; } = true;
+
+    /// <summary>Size of the cutscene icon in pixels.</summary>
+    public int CutsceneIconSizePx { get; set; } = 16;
+
+    // Where the cutscene icon goes, like the job icon: a point of the icon goes on a point of the member's bar, then the offsets move it
+    // (the saved Y counts downwards). By default: outside the bar, at its right, centered vertically.
+    public AnchorPoint CutsceneIconBarAnchor { get; set; } = AnchorPoint.Right;
+
+    public AnchorPoint CutsceneIconSelfAnchor { get; set; } = AnchorPoint.Left;
+
+    public int CutsceneIconOffsetX { get; set; } = 3;
+
+    public int CutsceneIconOffsetY { get; set; }
+
     /// <summary>The enhancements of each member, at the left of the bar by default.</summary>
     public StatusRowSettings Enhancements { get; set; } = StatusRowSettings.CreateEnhancements();
 

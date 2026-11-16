@@ -75,6 +75,10 @@ internal sealed class ProgressBarModule : IDisposable
             Height = 6
         });
 
+        // PvP has another column of bars (the Frontline gauge is above), so these two have a common position for PvP apart from the one of PvE.
+        PlayerElement.SeparatePvp = true;
+        GcdElement.SeparatePvp = true;
+
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);
     }
 
@@ -132,32 +136,33 @@ internal sealed class ProgressBarModule : IDisposable
     {
         hider.ShowAgain(HidesNative);
         var snapshot = plugin.GameData.Current;
-        var preview = PreviewRequested || plugin.Layout.UnlockMode;
+        // Never during combat: a made-up cast must not stay in a real fight (unlock mode is a choice of the player).
+        var preview = (PreviewRequested && !snapshot.Context.InCombat) || plugin.Layout.UnlockMode;
         PreviewRequested = false;
 
         var settings = plugin.Configuration.ProgressBars;
 
         var (playerPos, playerSize) = LayoutManager.GetRect(PlayerElement.Layout);
-        plugin.GameCover.Draw(playerPos, playerSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false, true));
+        plugin.GameCover.Draw(playerPos, playerSize, 80f * UiScale.Overlay, () => DrawBar(settings.Player, PlayerElement, snapshot.Player?.Cast, preview, false, true));
 
         DrawGcd(settings.Gcd, snapshot.Gcd, preview);
 
         // The icon of an enemy action means nothing (the game's own bar has none): the target bar shows it only for allies.
         var (targetPos, targetSize) = LayoutManager.GetRect(TargetElement.Layout);
-        plugin.GameCover.Draw(targetPos, targetSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, false));
+        plugin.GameCover.Draw(targetPos, targetSize, 80f * UiScale.Overlay, () => DrawBar(settings.Target, TargetElement, snapshot.Target?.Cast, preview, true, false));
 
         // The focus bar works like the target's. The game's own focus cast bar is part of its focus frame, which the Focus frame hides.
         var (focusPos, focusSize) = LayoutManager.GetRect(FocusElement.Layout);
-        plugin.GameCover.Draw(focusPos, focusSize, 80f * ImGuiHelpers.GlobalScale, () => DrawBar(settings.Focus, FocusElement, snapshot.Focus?.Cast, preview, true, false));
+        plugin.GameCover.Draw(focusPos, focusSize, 80f * UiScale.Overlay, () => DrawBar(settings.Focus, FocusElement, snapshot.Focus?.Cast, preview, true, false));
     }
 
     // The global cooldown: a thin bar that fills while it runs, with the queue window (last 0.5 s) and the weave limit marked.
     private void DrawGcd(GcdBarSettings settings, GcdSnapshot? gcd, bool preview)
     {
-        if (!settings.Enabled || !plugin.Layout.IsShown(GcdElement))
+        if (!settings.Enabled || !plugin.Layout.IsShown(GcdElement, preview))
             return;
 
-        preview |= plugin.Layout.IsPreviewing(GcdElement.Id);
+        preview |= plugin.Layout.IsPreviewing(GcdElement.Id) && !plugin.GameData.Current.Context.InCombat;
 
         float elapsed, total;
         if (gcd is { Active: true })
@@ -169,6 +174,9 @@ internal sealed class ProgressBarModule : IDisposable
         {
             total = 2.5f;
             elapsed = 1.5f;
+
+            if (!plugin.Layout.UnlockMode)
+                PreviewBadge.Draw(ImGui.GetBackgroundDrawList(), LayoutManager.GetRect(GcdElement.Layout).Item1);
         }
         else if (settings.AlwaysVisible)
         {
@@ -180,7 +188,7 @@ internal sealed class ProgressBarModule : IDisposable
             return;
         }
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(GcdElement.Layout);
         var max = pos + size;
         var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), size.Y / 2f);
@@ -219,12 +227,12 @@ internal sealed class ProgressBarModule : IDisposable
 
     private void DrawBar(ProgressBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
     {
-        if (!settings.Enabled || !plugin.Layout.IsShown(element))
+        if (!settings.Enabled || !plugin.Layout.IsShown(element, preview))
             return;
 
 
         // The bar selected in the Layout page shows a sample, so it can be placed even when nothing is being cast.
-        preview |= plugin.Layout.IsPreviewing(element.Id);
+        preview |= plugin.Layout.IsPreviewing(element.Id) && !plugin.GameData.Current.Context.InCombat;
 
         ProgressBarView view;
 
@@ -241,13 +249,16 @@ internal sealed class ProgressBarModule : IDisposable
         {
             // A sample cast, 60 % done.
             view = new ProgressBarView("Action name", GameNames.ActionIconId(3), 1.2f, 2.0f, true);
+
+            if (!plugin.Layout.UnlockMode)
+                PreviewBadge.Draw(ImGui.GetBackgroundDrawList(), LayoutManager.GetRect(element.Layout).Item1);
         }
         else
         {
             return;
         }
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var max = pos + size;
         var drawList = ImGui.GetBackgroundDrawList();
@@ -339,7 +350,7 @@ internal sealed class ProgressBarModule : IDisposable
     // The name's box starts after the icon; the name is shortened with "..." so it never runs into the time.
     private void DrawTexts(ImDrawListPtr drawList, ProgressBarSettings settings, ProgressBarView view, float barLeft, Vector2 pos, Vector2 max)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
 
         var remaining = Math.Max(0f, view.Total - view.Current);
         var timeText = settings.TimeMode == ProgressBarTimeMode.Remaining

@@ -77,7 +77,7 @@ internal sealed partial class JobGaugeModule
             if (shown.Length == 0)
                 continue;
 
-            Cover(() => DrawExtraGauge(def, settings, elements, parts), shown);
+            Cover(live is null, () => DrawExtraGauge(def, settings, elements, parts), shown);
         }
     }
 
@@ -131,7 +131,7 @@ internal sealed partial class JobGaugeModule
     // A rounded bar filled from the left, with the marks where a spender can be used and the text over it.
     private void DrawExtraBar(ImDrawListPtr drawList, ExtraGaugeJobSettings settings, GaugePartDef def, GaugePartSnapshot part, Vector2 pos, Vector2 size)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var end = pos + size;
@@ -170,7 +170,7 @@ internal sealed partial class JobGaugeModule
         if (slots.Length == 0)
             return;
 
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var gap = MathF.Round(settings.GapPx * scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));

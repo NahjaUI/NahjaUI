@@ -43,6 +43,9 @@ internal sealed class NamePlateEditor
         if (!ImGui.BeginTabItem(title))
             return;
 
+        // While this tab is open, a made-up plate of this kind is shown at a fixed place of the screen.
+        plugin.NamePlateSystem.PreviewKind = kind;
+
         ImGui.PushID($"kind{(int)kind}");
 
         // This body only holds the card and the sub-tabs, which scroll their own bodies.
@@ -124,7 +127,7 @@ internal sealed class NamePlateEditor
             ImGui.TextColored(Theme.TextMuted, "The color of the HP is the game's own (set in the game).");
         });
 
-        Widgets.Card("##card_np_name", 17, () =>
+        Widgets.Card("##card_np_name", 25, () =>
         {
             Widgets.SectionLabel("Name");
 
@@ -172,6 +175,35 @@ internal sealed class NamePlateEditor
             settings.MarkerIconSizePx = Slide("Top icon size (px)", settings.MarkerIconSizePx, 12, 128);
             settings.MarkerOffsetX = Number("Top icon offset X (px)", settings.MarkerOffsetX, -500, 500, 1, 5);
             settings.MarkerOffsetY = -Number("Top icon offset Y (px)", -settings.MarkerOffsetY, -500, 500, 1, 5);
+
+            // Players of the party: the game's icon of someone who is watching a cutscene.
+            if (kind == NamePlateRelation.Party)
+            {
+                if (Check("Show an icon when a party member is watching a cutscene", settings.ShowCutsceneIcon, out var showCutscene))
+                    settings.ShowCutsceneIcon = showCutscene;
+
+                if (settings.ShowCutsceneIcon)
+                {
+                    settings.CutsceneIconSizePx = Slide("Cutscene icon size (px)", settings.CutsceneIconSizePx, 8, 64);
+
+                    var cutsceneBarAnchor = settings.CutsceneIconBarAnchor;
+                    if (EnumCombo("Cutscene icon: anchor on the bar", ref cutsceneBarAnchor, point => point.Label()))
+                    {
+                        settings.CutsceneIconBarAnchor = cutsceneBarAnchor;
+                        plugin.RequestSave();
+                    }
+
+                    var cutsceneSelfAnchor = settings.CutsceneIconSelfAnchor;
+                    if (EnumCombo("Cutscene icon: anchor of the icon", ref cutsceneSelfAnchor, point => point.Label()))
+                    {
+                        settings.CutsceneIconSelfAnchor = cutsceneSelfAnchor;
+                        plugin.RequestSave();
+                    }
+
+                    settings.CutsceneIconOffsetX = Number("Cutscene icon: offset X (px)", settings.CutsceneIconOffsetX, -500, 500, 1, 5);
+                    settings.CutsceneIconOffsetY = -Number("Cutscene icon: offset Y (px)", -settings.CutsceneIconOffsetY, -500, 500, 1, 5);
+                }
+            }
 
             // Which plates show a name and how it is written (full name, surname, initials...) are the game's own options.
             ImGui.TextColored(Theme.TextMuted, "When the name shows, how it is written and whether the title shows (it joins the name): set in the game.");

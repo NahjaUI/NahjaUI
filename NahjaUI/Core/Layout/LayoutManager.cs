@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Core.Layout;
 
@@ -43,6 +44,18 @@ internal sealed class LayoutElement
 
     /// <summary>Extra options of this element, drawn in the panel that unlock mode shows under the X and Y fields (null = none).</summary>
     public Action? DrawOptions { get; set; }
+
+    /// <summary>
+    /// The elements with the same name here share one position between jobs (the Rotation row of every job, for example):
+    /// it is set once and each job shows it. Null = the element has a position of its own.
+    /// </summary>
+    public string? PositionGroup { get; set; }
+
+    /// <summary>True when only the place (anchors and offsets) is shared between jobs and the size stays the element's own (tracker groups).</summary>
+    public bool PlacementOnly { get; set; }
+
+    /// <summary>True when the element has its own common position in PvP (the progress bars: PvP has another column of bars).</summary>
+    public bool SeparatePvp { get; set; }
 
     /// <summary>The saved, editable layout (it lives inside the plugin configuration).</summary>
     public ElementLayout Layout { get; }
@@ -120,6 +133,12 @@ internal sealed class LayoutManager
     /// Do the "show when" conditions of this element allow drawing it right now? While you move elements (unlock mode) or
     /// edit one on the Layout page it is always shown, so it can be placed.
     /// </summary>
+    public bool IsShown(LayoutElement element, bool preview) => preview || IsShown(element);
+
+    /// <summary>
+    /// The same, for a module that is showing a preview of itself right now (the page of the menu is open and the player is not in combat):
+    /// the conditions are ignored then, so the element can always be placed and adjusted.
+    /// </summary>
     public bool IsShown(LayoutElement element)
     {
         var data = element.Layout;
@@ -146,7 +165,13 @@ internal sealed class LayoutManager
     }
 
     /// <summary>Like <see cref="IsShown"/>, for code that has no reference to the manager (static drawing helpers).</summary>
-    public static bool IsShownNow(LayoutElement element) => Current?.IsShown(element) ?? true;
+    public static bool IsShownNow(LayoutElement element) => PreviewNow || (Current?.IsShown(element) ?? true);
+
+    /// <summary>
+    /// True while a module draws the preview of its page of the menu (set by that module around its drawing): the "show when" conditions
+    /// are ignored then, also for static drawing helpers that have no reference to the manager.
+    /// </summary>
+    public static bool PreviewNow { get; set; }
 
     /// <summary>The label of an option, for the combo boxes.</summary>
     public static string Label(ShowCombat value) => value switch
@@ -187,6 +212,7 @@ internal sealed class LayoutManager
     public void Detach(string id)
     {
         elements.RemoveAll(e => e.Id == id);
+        loadedFrom.Remove(id);
 
         if (SelectedId == id)
             SelectedId = null;
@@ -195,98 +221,241 @@ internal sealed class LayoutManager
     /// <summary>Removes an element and forgets its saved position (used when a tracker is deleted).</summary>
     public void Unregister(string id)
     {
+        var element = elements.Find(e => e.Id == id);
         elements.RemoveAll(e => e.Id == id);
         config.Layouts.Remove(id);
         config.JobLayouts.Remove(id);
-        loadedFor.Remove(id);
+        loadedFrom.Remove(id);
+
+        // The position a whole kind of group shares stays: other jobs still use it.
+        if (element?.PositionGroup is null)
+            config.CommonLayouts.Remove(id);
 
         if (SelectedId == id)
             SelectedId = null;
     }
 
-    // ---------------------------------------------------------------- one position for each job
+    // ---------------------------------------------------------------- one position for every job, and a different one for a job
 
-    // The key whose position each element currently shows.
-    private readonly Dictionary<string, uint> loadedFor = new();
-
-    /// <summary>A position "for each job" is saved under a key: the job id in PvE, and the job id plus this number in PvP.</summary>
+    /// <summary>A position that belongs to a job is saved under a key: the job id, and for PvP (elements with their own PvP position) the job id plus this number.</summary>
     public const uint PvpKeyOffset = 1000;
 
-    /// <summary>The key of a job's position in PvE or in PvP (0, the base, when no job is known).</summary>
-    public static uint KeyOf(uint jobId, bool pvp) => jobId != 0 && pvp ? jobId + PvpKeyOffset : jobId;
+    // The layout each element currently shows (the common position or the one of the job), to know when it has to change.
+    private readonly Dictionary<string, ElementLayout> loadedFrom = new();
 
-    /// <summary>The key (job and zone) the positions show right now.</summary>
-    public uint CurrentKey { get; private set; }
+    /// <summary>The job being played (0 when not known) and whether it is in PvP.</summary>
+    public uint CurrentJob { get; private set; }
 
-    /// <summary>True when the element keeps a different position for each job.</summary>
-    public bool IsPerJob(string id) => config.JobLayouts.ContainsKey(id);
+    public bool InPvp { get; private set; }
+
+    /// <summary>The key of the job's own position for this element now: the job, or the job in PvP for the elements with their own PvP column.</summary>
+    public uint KeyFor(LayoutElement element) => CurrentJob != 0 && element.SeparatePvp && InPvp ? CurrentJob + PvpKeyOffset : CurrentJob;
+
+    // 0 = the common position of PvE, PvpKeyOffset = the common position of PvP (only for the elements with their own).
+    private uint CommonKeyFor(LayoutElement element) => element.SeparatePvp && InPvp ? PvpKeyOffset : 0;
+
+    private static string CommonId(LayoutElement element) => element.PositionGroup ?? element.Id;
+
+    /// <summary>True when the job being played has its own position for this element (in this zone, for the elements that tell PvP apart).</summary>
+    public bool HasOwnPosition(LayoutElement element) =>
+        CurrentJob != 0 && config.JobLayouts.TryGetValue(element.Id, out var own) && own.ContainsKey(KeyFor(element));
+
+    /// <summary>True when some job has its own position for this element.</summary>
+    public bool HasAnyOwnPosition(string id) => config.JobLayouts.TryGetValue(id, out var own) && own.Count > 0;
 
     /// <summary>
-    /// Turns "a position for each job" on or off for an element. On: the current position becomes the base (what a job that
-    /// was never moved starts from) and the position of the key being played (job and zone). Off: the element keeps what it shows now.
+    /// Turns the own position of the job being played on or off. On: the job starts from what is shown now. Off: the job goes back to the common position.
     /// </summary>
-    public void SetPerJob(LayoutElement element, bool on, uint key)
+    public void SetOwnPosition(LayoutElement element, bool on)
     {
+        if (CurrentJob == 0)
+            return;
+
+        var key = KeyFor(element);
+
         if (!on)
         {
-            config.JobLayouts.Remove(element.Id);
-            loadedFor.Remove(element.Id);
+            if (config.JobLayouts.TryGetValue(element.Id, out var existing))
+            {
+                existing.Remove(key);
+                if (existing.Count == 0)
+                    config.JobLayouts.Remove(element.Id);
+            }
+
+            loadedFrom.Remove(element.Id);
             return;
         }
 
-        var jobs = new Dictionary<uint, ElementLayout> { [0] = element.Layout.Clone() };
-        if (key != 0)
-            jobs[key] = element.Layout.Clone();
+        EnsureCommon(element);
 
-        config.JobLayouts[element.Id] = jobs;
-        loadedFor[element.Id] = key;
+        if (!config.JobLayouts.TryGetValue(element.Id, out var own))
+        {
+            own = new Dictionary<uint, ElementLayout>();
+            config.JobLayouts[element.Id] = own;
+        }
+
+        var layout = element.Layout.Clone();
+        own[key] = layout;
+        loadedFrom[element.Id] = layout;
+    }
+
+    // The common positions of an element: the one it shows now, saved the first time it is needed.
+    private Dictionary<uint, ElementLayout> EnsureCommon(LayoutElement element)
+    {
+        var id = CommonId(element);
+        if (!config.CommonLayouts.TryGetValue(id, out var common))
+        {
+            common = new Dictionary<uint, ElementLayout> { [0] = element.Layout.Clone() };
+            config.CommonLayouts[id] = common;
+        }
+
+        return common;
+    }
+
+    private static bool SamePlace(ElementLayout a, ElementLayout b) =>
+        a.AttachTo == b.AttachTo && a.ScreenAnchor == b.ScreenAnchor && a.SelfAnchor == b.SelfAnchor && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY;
+
+    private static void CopyPlace(ElementLayout from, ElementLayout to)
+    {
+        to.AttachTo = from.AttachTo;
+        to.ScreenAnchor = from.ScreenAnchor;
+        to.SelfAnchor = from.SelfAnchor;
+        to.OffsetX = from.OffsetX;
+        to.OffsetY = from.OffsetY;
+    }
+
+    private static void Show(LayoutElement element, ElementLayout source)
+    {
+        if (element.PlacementOnly)
+            CopyPlace(source, element.Layout);
+        else
+            element.Layout.CopyPositionFrom(source);
+    }
+
+    private static void Save(LayoutElement element, ElementLayout target)
+    {
+        if (element.PlacementOnly)
+            CopyPlace(element.Layout, target);
+        else
+            target.CopyPositionFrom(element.Layout);
     }
 
     /// <summary>
-    /// Call once per frame with the job being played (0 when not known) and whether it is in PvP. The elements with a position for
-    /// each job show the one of that job and zone when either changes; while they stay, what is moved or edited is stored for them.
-    /// A job that was never moved in PvP starts from its position in PvE.
+    /// Places an element for a job from a preset (the job setup). <paramref name="forCommon"/> draws the common place (a column without job
+    /// gauges), <paramref name="forJob"/> the place for this job. The common position is set only while it is still where the element
+    /// starts (or missing, in PvP). If it is the one of the preset, a job whose place is different (it has gauges) gets its own position.
+    /// A common position the user placed is left alone.
+    /// </summary>
+    public void PlaceForJob(LayoutElement element, uint jobId, bool pvp, Action<ElementLayout> forCommon, Action<ElementLayout> forJob)
+    {
+        var common = EnsureCommon(element);
+        var separate = pvp && element.SeparatePvp;
+        var commonKey = separate ? PvpKeyOffset : 0u;
+        var jobKey = separate ? jobId + PvpKeyOffset : jobId;
+
+        var presetCommon = common[0].Clone();
+        forCommon(presetCommon);
+
+        if (!common.TryGetValue(commonKey, out var commonLayout))
+        {
+            commonLayout = presetCommon.Clone();
+            common[commonKey] = commonLayout;
+        }
+        else if (!separate && SamePlace(commonLayout, element.Defaults))
+        {
+            // Never moved: the preset's column becomes the common one (with the size the preset gives it).
+            commonLayout.CopyPositionFrom(presetCommon);
+        }
+
+        if (SamePlace(commonLayout, presetCommon))
+        {
+            var wanted = commonLayout.Clone();
+            forJob(wanted);
+
+            if (SamePlace(wanted, commonLayout))
+            {
+                if (config.JobLayouts.TryGetValue(element.Id, out var existing))
+                {
+                    existing.Remove(jobKey);
+                    if (existing.Count == 0)
+                        config.JobLayouts.Remove(element.Id);
+                }
+            }
+            else
+            {
+                if (!config.JobLayouts.TryGetValue(element.Id, out var own))
+                {
+                    own = new Dictionary<uint, ElementLayout>();
+                    config.JobLayouts[element.Id] = own;
+                }
+
+                own[jobKey] = wanted;
+            }
+        }
+
+        // Shown again from the saved positions on the next frame.
+        loadedFrom.Remove(element.Id);
+    }
+
+    /// <summary>
+    /// Call once per frame with the job being played (0 when not known) and whether it is in PvP. Every element shows the position of the
+    /// job if the job has its own, and the common one otherwise; what is moved or edited is saved in the position that is shown.
     /// </summary>
     public void SyncJob(uint jobId, bool pvp)
     {
-        var key = KeyOf(jobId, pvp);
-        CurrentKey = key;
+        CurrentJob = jobId;
+        InPvp = pvp;
 
-        if (jobId == 0 || config.JobLayouts.Count == 0)
+        if (jobId == 0)
             return;
 
         foreach (var element in elements)
         {
-            if (!config.JobLayouts.TryGetValue(element.Id, out var jobs))
+            if (element.IsManaged)
                 continue;
 
-            if (!loadedFor.TryGetValue(element.Id, out var loaded) || loaded != key)
+            config.JobLayouts.TryGetValue(element.Id, out var own);
+
+            ElementLayout source;
+            if (own is not null && own.TryGetValue(KeyFor(element), out var ownLayout))
             {
-                // A different job or zone (or the first frame): show its position; if it never had its own, the one of the job in PvE
-                // (for PvP), and the base one after that.
-                if (!jobs.TryGetValue(key, out var own))
-                {
-                    if (pvp && jobs.TryGetValue(jobId, out var pveLayout))
-                        own = pveLayout.Clone();
-                    else
-                        own = jobs.TryGetValue(0, out var baseLayout) ? baseLayout.Clone() : element.Layout.Clone();
-
-                    jobs[key] = own;
-                }
-
-                element.Layout.CopyPositionFrom(own);
-                loadedFor[element.Id] = key;
+                source = ownLayout;
+                EnsureCommon(element);
             }
             else
             {
-                // The same job and zone: keep its saved position equal to what is shown (moved by hand or edited).
-                if (!jobs.TryGetValue(key, out var own))
+                // Only the elements that can differ from one job or zone to the next keep a common position apart from the layout.
+                if (own is null && element.PositionGroup is null && !element.SeparatePvp && !config.CommonLayouts.ContainsKey(element.Id))
                 {
-                    own = element.Layout.Clone();
-                    jobs[key] = own;
+                    loadedFrom.Remove(element.Id);
+                    continue;
                 }
 
-                own.CopyPositionFrom(element.Layout);
+                var common = EnsureCommon(element);
+                var commonKey = CommonKeyFor(element);
+                if (!common.TryGetValue(commonKey, out var commonLayout))
+                {
+                    // PvP starts from where PvE is.
+                    commonLayout = common[0].Clone();
+                    common[commonKey] = commonLayout;
+                }
+
+                source = commonLayout;
+            }
+
+            if (!loadedFrom.TryGetValue(element.Id, out var loaded) || !ReferenceEquals(loaded, source))
+            {
+                Show(element, source);
+                loadedFrom[element.Id] = source;
+            }
+            else if (element.IsHidden)
+            {
+                // What belongs to another job is only shown (a group shared by the jobs is changed by the one that is in use).
+                Show(element, source);
+            }
+            else
+            {
+                Save(element, source);
             }
         }
     }
@@ -301,7 +470,7 @@ internal sealed class LayoutManager
     /// </summary>
     public static (Vector2 Pos, Vector2 Size) GetRect(ElementLayout layout)
     {
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = UiScale.Overlay;
         var viewport = ImGui.GetMainViewport();
 
         var screenPoint = viewport.Pos + viewport.Size * layout.ScreenAnchor.Fraction();
