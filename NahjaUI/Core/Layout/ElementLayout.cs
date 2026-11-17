@@ -4,7 +4,7 @@ namespace NahjaUI.Core.Layout;
 
 /// <summary>
 /// Where an element sits on screen. Everything is stored as whole numbers in logical pixels
-/// (before the user's UI scale is applied), so positions are exact and reproducible.
+/// (before the user's UI scale is applied), so positions are exact and reproducible. Only the offsets can have decimals (see Pixel perfect).
 ///
 /// Meaning: the point <see cref="SelfAnchor"/> of the element is placed at the point
 /// <see cref="ScreenAnchor"/> of the screen, moved by (<see cref="OffsetX"/>, <see cref="OffsetY"/>).
@@ -33,8 +33,9 @@ public class ElementLayout
 
     public AnchorPoint ScreenAnchor { get; set; } = AnchorPoint.Center;
     public AnchorPoint SelfAnchor { get; set; } = AnchorPoint.Center;
-    public int OffsetX { get; set; }
-    public int OffsetY { get; set; }
+    /// <summary>Offsets in logical pixels. They can have decimals: with "Pixel perfect" on they are chosen in real screen pixels, so at a scale of 2 one real pixel is 0.5.</summary>
+    public float OffsetX { get; set; }
+    public float OffsetY { get; set; }
     public int Width { get; set; } = 100;
     public int Height { get; set; } = 30;
     public bool Locked { get; set; }

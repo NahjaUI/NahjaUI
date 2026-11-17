@@ -14,6 +14,9 @@ internal static class UiScale
     /// <summary>The "Interface scale" of Appearance (1 = no change). Set by the plugin every frame.</summary>
     public static float Interface { get; set; } = 1f;
 
+    /// <summary>"Pixel perfect" of the Layout page: offsets are shown and edited in real screen pixels. Set by the plugin every frame.</summary>
+    public static bool PixelPerfect { get; set; }
+
     /// <summary>What a logical pixel of an overlay is worth in physical pixels.</summary>
     public static float Overlay => ImGuiHelpers.GlobalScale * Interface;
 }

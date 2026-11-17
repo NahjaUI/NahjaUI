@@ -141,10 +141,65 @@ public class BarGaugeSettings
     public Vector4 ThresholdColor { get; set; } = new(0f, 0f, 0f, 0.9f);
 }
 
-/// <summary>The Warrior gauge: the Beast Gauge. Fell Cleave and Decimation cost 50.</summary>
+/// <summary>
+/// The Warrior gauge: the Beast Gauge (Fell Cleave and Decimation cost 50), the glow of the gauge while Nascent Chaos is on, the Inner Release
+/// pips, the Surging Tempest bar and the auras of Primal Rend and Primal Ruination.
+/// </summary>
 [Serializable]
 public class WarriorGaugeSettings : BarGaugeSettings
 {
+    // Orange while there is not enough gauge for a spender and red when there is (the same order as the auras: orange comes before red).
+    public WarriorGaugeSettings()
+    {
+        BarColor = new Vector4(1f, 0.62f, 0.20f, 1f);
+        ReadyColor = new Vector4(0.85f, 0.25f, 0.22f, 1f);
+    }
+
+    /// <summary>Flash the fill of the Beast Gauge to another color and back while Nascent Chaos is on (the next Fell Cleave is Inner Chaos).</summary>
+    public bool ShowNascentChaosFlash { get; set; } = true;
+
+    public Vector4 NascentChaosFlashColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    /// <summary>Three pips, one for each stack of Inner Release.</summary>
+    public bool ShowInnerRelease { get; set; } = true;
+
+    public int InnerReleaseGapPx { get; set; } = 2;
+
+    public Vector4 InnerReleaseColor { get; set; } = new(1f, 0.45f, 0.15f, 1f);
+
+    /// <summary>A bar for the time left of Surging Tempest (60 seconds when full).</summary>
+    public bool ShowSurgingTempest { get; set; } = true;
+
+    public bool ShowSurgingTempestSeconds { get; set; } = true;
+
+    public FrameTextSettings SurgingTempestText { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 9 };
+
+    public Vector4 SurgingTempestColor { get; set; } = new(0.75f, 0.14f, 0.34f, 1f);
+
+    /// <summary>The wings on both sides of the character while Primal Rend or Primal Ruination can be used.</summary>
+    public bool ShowProcAuras { get; set; } = true;
+
+    public float ProcAuraOpacity { get; set; } = 1f;
+
+    /// <summary>The arch above the character while Wrathful is on (Primal Wrath can be used).</summary>
+    public bool ShowWrathAura { get; set; } = true;
+
+    public float WrathAuraOpacity { get; set; } = 1f;
+
+    /// <summary>The steps of the combo you are in: three pips after Heavy Swing, two after Overpower. The last pip pulses: it is the next hit.</summary>
+    public bool ShowCombo { get; set; } = true;
+
+    /// <summary>Show the empty pips while there is no combo (the branch is not known until the first hit).</summary>
+    public bool ShowComboOutline { get; set; }
+
+    public int ComboGapPx { get; set; } = 2;
+
+    public Vector4 ComboColor { get; set; } = new(0.93f, 0.74f, 0.30f, 1f);
+
+    /// <summary>The last pip takes the refresh color while Surging Tempest has less than this many seconds (0 = off).</summary>
+    public int ComboRefreshSeconds { get; set; }
+
+    public Vector4 ComboRefreshColor { get; set; } = new(0.92f, 0.22f, 0.16f, 1f);
 }
 
 /// <summary>The Paladin gauge: the Oath Gauge. Holy Sheltron and Intervention cost 50.</summary>

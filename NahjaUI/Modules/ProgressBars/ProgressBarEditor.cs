@@ -87,14 +87,14 @@ internal sealed class ProgressBarEditor
 
             var layout = element.Layout;
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)##gcd", ref width, 2, 10))
+            if (ImGui.InputInt("Width (px)##gcd", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)##gcd", ref height, 2, 10))
+            if (ImGui.InputInt("Height (px)##gcd", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 100);
                 plugin.RequestSave();
@@ -168,14 +168,14 @@ internal sealed class ProgressBarEditor
             var layout = element.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 2, 10))
+            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();

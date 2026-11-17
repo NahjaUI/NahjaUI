@@ -292,14 +292,14 @@ internal sealed class HudBarEditor
             var layout = element.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 2, 10))
+            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
@@ -449,14 +449,14 @@ internal sealed class HudBarEditor
             }
 
             var mpWidth = party.MpWidthPx;
-            if (ImGui.InputInt("Width (px, 0 = same as the bar)", ref mpWidth, 2, 10))
+            if (ImGui.InputInt("Width (px, 0 = same as the bar)", ref mpWidth, 1, 10))
             {
                 party.MpWidthPx = Math.Clamp(mpWidth, 0, 500);
                 plugin.RequestSave();
             }
 
             var mpHeight = party.Look.MpHeightPx;
-            if (ImGui.InputInt("Height (px)", ref mpHeight, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref mpHeight, 1, 10))
             {
                 party.Look.MpHeightPx = Math.Clamp(mpHeight, 1, 1000);
                 plugin.RequestSave();
@@ -637,14 +637,14 @@ internal sealed class HudBarEditor
             ImGui.Spacing();
 
             var width = row.IconWidth;
-            if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
+            if (ImGui.InputInt("Icon width (px)", ref width, 1, 10))
             {
                 row.IconWidth = Math.Clamp(width, 8, 128);
                 plugin.RequestSave();
             }
 
             var height = row.IconHeight;
-            if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
+            if (ImGui.InputInt("Icon height (px)", ref height, 1, 10))
             {
                 row.IconHeight = Math.Clamp(height, 8, 128);
                 plugin.RequestSave();
@@ -1166,14 +1166,14 @@ internal sealed class HudBarEditor
             var boxLayout = plugin.HudBarSystem.MpElement.Layout;
 
             var boxWidth = boxLayout.Width;
-            if (ImGui.InputInt("Width (px)", ref boxWidth, 2, 10))
+            if (ImGui.InputInt("Width (px)", ref boxWidth, 1, 10))
             {
                 boxLayout.Width = Math.Clamp(boxWidth, 1, 4000);
                 plugin.RequestSave();
             }
 
             var boxHeight = boxLayout.Height;
-            if (ImGui.InputInt("Height (px)", ref boxHeight, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref boxHeight, 1, 10))
             {
                 boxLayout.Height = Math.Clamp(boxHeight, 1, 1000);
                 plugin.RequestSave();

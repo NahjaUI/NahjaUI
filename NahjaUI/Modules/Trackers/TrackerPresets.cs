@@ -568,7 +568,7 @@ internal static class TrackerPresets
 
     // The action with exactly this name, not PvP, preferring the one of the job.
     // With pvp, the PvP action (of the job, or a common/role one) instead.
-    private static uint FindAction(string name, uint jobId, bool pvp = false)
+    internal static uint FindAction(string name, uint jobId, bool pvp = false)
     {
         uint fallback = 0;
         uint anyMatch = 0;

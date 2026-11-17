@@ -9,10 +9,13 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace NahjaUI.Game;
 
 /// <summary>
-/// Knows which game windows are on the screen and cover part of it (for now the right click menu, "ContextMenu").
+/// Knows which game windows are on the screen and cover part of it.
 /// Dalamud always draws the plugin interface ABOVE the game's own windows, so without this a frame would be drawn over
-/// the menu. Things that are drawn through <see cref="Draw"/> are cut around the covering windows, and the mouse
+/// a menu. Things that are drawn through <see cref="Draw"/> are cut around the covering windows, and the mouse
 /// helpers can ask whether the cursor is over one.
+/// Only two kinds of window cover: the ones with a window frame (title bar and close button: the menus, logs and books, also the ones a patch adds)
+/// and a short list of pieces of the HUD that have no frame. Everything else (the banners like "Duty Commence", the texts of the screen, the
+/// speech balloons, the quest list...) is big and almost transparent, and cutting around it hid the HUD with nothing visible on top.
 /// </summary>
 internal sealed unsafe class GameWindowCover
 {
@@ -25,25 +28,12 @@ internal sealed unsafe class GameWindowCover
     private const int MaxNodes = 40000;
     private const int MaxDepth = 4;
 
-    // Windows that are never cut around (the speech balloons over the characters, for example). More names can be added here.
-    // The chat panels 1 to 3 are the extra chat windows: the game keeps them "visible" even when you do not use them, and one of them
-    // cut the status icons of a party list in the middle of the screen. The first panel (ChatLogPanel_0) is the real chat and still cuts.
-    private static readonly HashSet<string> NeverCut = new()
-    {
-        "Balloon", "_Balloon", "BalloonText", "_BalloonText",
-        "ChatLogPanel_1", "ChatLogPanel_2", "ChatLogPanel_3",
-        // The line of text in the middle of the screen ("You obtain...", "The void crystal begins to glow"): its text node is as wide as
-        // the whole screen (about 1460 px) even when the sentence is short, and it cut the bottom of the party list.
-        "_WideText"
-    };
+    // The windows without a frame that cover our HUD, by exact name: the chat (the extra chat panels 1 to 3 are not here on purpose: the game keeps
+    // them "visible" even when you do not use them, and one of them cut the status icons of a party list in the middle of the screen).
+    private static readonly HashSet<string> CutNames = new() { "ChatLog", "ChatLogPanel_0" };
 
-    // The same, for every window whose name starts like this. Their boxes are much bigger than what they show, and they cut our HUD in a straight
-    // line with nothing visible on top (tester report "hud is hidden by other elements"):
-    //  - the alliance lists: with the option on in the HUD layout they are "visible" and paint something even when you are not in an alliance,
-    //    and their box cut the enmity list of a tester;
-    //  - the quest list (to-do list) and the minimap: the box of what they paint is far bigger than their visible part. The full map and the
-    //    menus are other windows and keep cutting.
-    private static readonly string[] NeverCutPrefixes = { "_AllianceList", "_ToDoList", "_NaviMap" };
+    // The same, for every window whose name starts like this: the right click menu (and its submenus) and the hotbars (the normal ones and the cross hotbars).
+    private static readonly string[] CutPrefixes = { "ContextMenu", "_ActionBar", "_ActionCross", "_ActionDoubleCross" };
 
     private readonly List<(Vector2 Min, Vector2 Max)> rects = new();
 
@@ -103,7 +93,7 @@ internal sealed unsafe class GameWindowCover
                     continue;
 
                 var name = Marshal.PtrToStringUTF8((nint)((byte*)unit + NameOffset)) ?? string.Empty;
-                if (NeverCut.Contains(name) || IsNeverCutPrefix(name))
+                if (unit->WindowNode == null && !CutNames.Contains(name) && !HasCutPrefix(name))
                     continue;
 
                 var box = new Box { Min = new Vector2(float.MaxValue), Max = new Vector2(float.MinValue) };
@@ -165,9 +155,9 @@ internal sealed unsafe class GameWindowCover
         }
     }
 
-    private static bool IsNeverCutPrefix(string name)
+    private static bool HasCutPrefix(string name)
     {
-        foreach (var prefix in NeverCutPrefixes)
+        foreach (var prefix in CutPrefixes)
         {
             if (name.StartsWith(prefix, StringComparison.Ordinal))
                 return true;

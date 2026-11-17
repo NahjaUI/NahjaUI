@@ -49,14 +49,14 @@ internal sealed class AllianceListEditor
             var layout = plugin.AllianceListSystem.AllianceElement.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 2, 10))
+            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
@@ -164,14 +164,14 @@ internal sealed class AllianceListEditor
             }
 
             var raiseWidth = settings.RaiseIconWidthPx;
-            if (ImGui.InputInt("Raise icon width (px)", ref raiseWidth, 2, 10))
+            if (ImGui.InputInt("Raise icon width (px)", ref raiseWidth, 1, 10))
             {
                 settings.RaiseIconWidthPx = Math.Clamp(raiseWidth, 4, 200);
                 plugin.RequestSave();
             }
 
             var raiseHeight = settings.RaiseIconHeightPx;
-            if (ImGui.InputInt("Raise icon height (px)", ref raiseHeight, 2, 10))
+            if (ImGui.InputInt("Raise icon height (px)", ref raiseHeight, 1, 10))
             {
                 settings.RaiseIconHeightPx = Math.Clamp(raiseHeight, 4, 200);
                 plugin.RequestSave();

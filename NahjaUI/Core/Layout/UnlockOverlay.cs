@@ -21,8 +21,8 @@ internal sealed class UnlockOverlay
 
     // State of the drag that is currently in progress.
     private Vector2 dragTotal;
-    private int dragStartX;
-    private int dragStartY;
+    private float dragStartX;
+    private float dragStartY;
 
     // Which box is being dragged, or is under the mouse, this frame (filled while the boxes are drawn).
     private string? activeId;
@@ -148,12 +148,24 @@ internal sealed class UnlockOverlay
                 dragStartY = data.OffsetY;
             }
 
-            // Dragging: the mouse moves in physical pixels, offsets are logical pixels.
+            // Dragging: the mouse moves in physical pixels, offsets are logical pixels (the scale of everything drawn over the game,
+            // not only the one of Dalamud). With Pixel perfect on, it moves by whole real pixels.
             if (ImGui.IsItemActive() && !data.Locked)
             {
+                var overlayScale = UiScale.Overlay;
                 dragTotal += ImGui.GetIO().MouseDelta;
-                data.OffsetX = dragStartX + (int)MathF.Round(dragTotal.X / scale);
-                data.OffsetY = dragStartY + (int)MathF.Round(dragTotal.Y / scale);
+
+                if (UiScale.PixelPerfect)
+                {
+                    data.OffsetX = (MathF.Round(dragStartX * overlayScale) + MathF.Round(dragTotal.X)) / overlayScale;
+                    data.OffsetY = (MathF.Round(dragStartY * overlayScale) + MathF.Round(dragTotal.Y)) / overlayScale;
+                }
+                else
+                {
+                    data.OffsetX = MathF.Round(dragStartX) + MathF.Round(dragTotal.X / overlayScale);
+                    data.OffsetY = MathF.Round(dragStartY) + MathF.Round(dragTotal.Y / overlayScale);
+                }
+
                 plugin.RequestSave();
             }
 
@@ -246,7 +258,7 @@ internal sealed class UnlockOverlay
         if (ImGui.Begin("##nui_unlock_inspector", ref open, flags))
         {
             ImGui.TextColored(Theme.Accent, selected.Name);
-            ImGui.TextColored(Theme.TextMuted, "Offset in pixels from the anchor point");
+            ImGui.TextColored(Theme.TextMuted, UiScale.PixelPerfect ? "Offset in real screen pixels from the anchor point" : "Offset in pixels from the anchor point");
             ImGui.Spacing();
 
             // Exact position: type a value, or use the small +/- buttons (1 px, or 10 px with Ctrl held).
@@ -254,7 +266,7 @@ internal sealed class UnlockOverlay
 
             ImGui.SetNextItemWidth(fieldWidth);
             var x = data.OffsetX;
-            if (ImGui.InputInt("X", ref x, 1, 5) && !data.Locked)
+            if (OffsetField.Draw("X", ref x, false) && !data.Locked)
             {
                 data.OffsetX = x;
                 plugin.RequestSave();
@@ -264,10 +276,10 @@ internal sealed class UnlockOverlay
 
             ImGui.SetNextItemWidth(fieldWidth);
             // Up is plus (the saved value counts downwards, so the sign is turned here).
-            var y = -data.OffsetY;
-            if (ImGui.InputInt("Y", ref y, 1, 5) && !data.Locked)
+            var y = data.OffsetY;
+            if (OffsetField.Draw("Y", ref y, true) && !data.Locked)
             {
-                data.OffsetY = -y;
+                data.OffsetY = y;
                 plugin.RequestSave();
             }
 

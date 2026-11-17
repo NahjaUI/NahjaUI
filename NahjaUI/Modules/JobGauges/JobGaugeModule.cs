@@ -131,6 +131,8 @@ internal sealed partial class JobGaugeModule : IDisposable
     {
         this.plugin = plugin;
 
+        LoadAuraTextures();
+
         LilyElement = plugin.Layout.Register("gauge.whm.lily", "White Mage lilies", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
@@ -160,6 +162,8 @@ internal sealed partial class JobGaugeModule : IDisposable
             Width = 156,
             Height = 14
         });
+
+        RegisterWarriorElements();
 
         PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
         {
@@ -376,6 +380,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     {
         Plugin.AddonLifecycle.UnregisterListener(AddonEvent.PreDraw, NativeGauges, OnNativePreDraw);
         hider.ShowAll();
+        DisposeAuraTextures();
     }
 
     // ---------------------------------------------------------------- hiding the game's gauge
@@ -507,6 +512,11 @@ internal sealed partial class JobGaugeModule : IDisposable
             LilyElement.IsHidden = true;
             BloodLilyElement.IsHidden = true;
             WarriorElement.IsHidden = true;
+            WarriorReleaseElement.IsHidden = true;
+            WarriorComboElement.IsHidden = true;
+            WarriorTempestElement.IsHidden = true;
+            WarriorAurasElement.IsHidden = true;
+            WarriorWrathElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -533,6 +543,12 @@ internal sealed partial class JobGaugeModule : IDisposable
         LilyElement.IsHidden = !isWhiteMage;
         BloodLilyElement.IsHidden = !isWhiteMage;
         WarriorElement.IsHidden = !isWarrior;
+        var warriorSettings = plugin.Configuration.JobGauges.Warrior;
+        WarriorReleaseElement.IsHidden = !isWarrior || !warriorSettings.ShowInnerRelease;
+        WarriorComboElement.IsHidden = !isWarrior || !warriorSettings.ShowCombo;
+        WarriorTempestElement.IsHidden = !isWarrior || !warriorSettings.ShowSurgingTempest;
+        WarriorAurasElement.IsHidden = !isWarrior || !warriorSettings.ShowProcAuras;
+        WarriorWrathElement.IsHidden = !isWarrior || !warriorSettings.ShowWrathAura;
 
         var isPaladin = player is null || player.JobId == PaladinJobId;
         PaladinElement.IsHidden = !isPaladin;
@@ -578,7 +594,12 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.Warrior ?? (previewJob == WarriorJobId || (unlock && isWarrior) ? WarriorSample : null);
             if (gauge is not null)
-                Cover(snapshot.Warrior is null, () => DrawBar(warrior, WarriorElement, gauge.BeastGauge), WarriorElement);
+            {
+                // The statuses are the real ones, except while the page is open or the elements are unlocked: then a sample, so every piece can be placed.
+                var sample = snapshot.Warrior is null || previewJob == WarriorJobId;
+                var warriorState = !sample && !unlock && player is not null ? ReadWarriorState(player, snapshot.Combo) : WarriorStateSample();
+                Cover(sample, () => DrawWarrior(warrior, gauge, warriorState), WarriorCoverElements(warrior));
+            }
         }
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
@@ -893,7 +914,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     }
 
     // One rounded bar from 0 to 100, with an optional mark at 50 and the number in the middle.
-    private void DrawBar(BarGaugeSettings settings, LayoutElement element, byte gaugeValue, int? shownNumber = null)
+    private void DrawBar(BarGaugeSettings settings, LayoutElement element, byte gaugeValue, int? shownNumber = null, Vector4? flash = null)
     {
         if (!LayoutManager.IsShownNow(element))
             return;
@@ -911,6 +932,10 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         var ready = settings.HighlightWhenReady && value >= 50;
         var color = ready ? settings.ReadyColor : settings.BarColor;
+
+        // The fill changes to the flash color and back, over and over.
+        if (flash is { } flashColor)
+            color = Vector4.Lerp(color, flashColor, 0.5f + 0.5f * MathF.Sin((float)ImGui.GetTime() * 8f));
 
         drawList.AddRectFilled(pos, end, ImGui.GetColorU32(settings.BackgroundColor), rounding);
 

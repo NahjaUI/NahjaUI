@@ -2236,14 +2236,14 @@ internal sealed class TrackerEditor
             {
                 // Width and height are chosen apart, so the icon does not have to be square. The +/- buttons move by 2 px (10 px with Ctrl).
                 var width = elementLayout.Width;
-                if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
+                if (ImGui.InputInt("Icon width (px)", ref width, 1, 10))
                 {
                     elementLayout.Width = Math.Clamp(width, 1, 512);
                     plugin.RequestSave();
                 }
 
                 var height = elementLayout.Height;
-                if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
+                if (ImGui.InputInt("Icon height (px)", ref height, 1, 10))
                 {
                     elementLayout.Height = Math.Clamp(height, 1, 512);
                     plugin.RequestSave();
@@ -2278,14 +2278,14 @@ internal sealed class TrackerEditor
             Widgets.SectionLabel("Apply to every tracker in the group");
 
             var width = group.Definition.IconWidth;
-            if (ImGui.InputInt("Icon width (px)", ref width, 2, 10))
+            if (ImGui.InputInt("Icon width (px)", ref width, 1, 10))
             {
                 group.Definition.IconWidth = Math.Clamp(width, 1, 512);
                 changed = true;
             }
 
             var height = group.Definition.IconHeight;
-            if (ImGui.InputInt("Icon height (px)", ref height, 2, 10))
+            if (ImGui.InputInt("Icon height (px)", ref height, 1, 10))
             {
                 group.Definition.IconHeight = Math.Clamp(height, 1, 512);
                 changed = true;

@@ -71,14 +71,14 @@ internal sealed class EnmityListEditor
             var layout = plugin.EnmityListSystem.Element.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 2, 10))
+            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 2, 10))
+            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
@@ -236,11 +236,11 @@ internal sealed class EnmityListEditor
         }
     }
 
-    // A size: a numeric field with the small +/- buttons (2 px, 10 with Ctrl), like every other width and height of the interface.
+    // A size: a numeric field with the small +/- buttons (1 px, 10 with Ctrl), like every other width and height of the interface.
     private void Size(string label, int current, int min, int max, Action<int> apply)
     {
         var value = current;
-        if (ImGui.InputInt(label, ref value, 2, 10))
+        if (ImGui.InputInt(label, ref value, 1, 10))
         {
             apply(Math.Clamp(value, min, max));
             plugin.RequestSave();

@@ -618,12 +618,22 @@ public class MainWindow : Window, IDisposable
             "##callout_unlock",
             "Unlock mode shows every element as a box you can drag. Select one to get X/Y fields next to it for exact positions. Positions are saved automatically.",
             Theme.Info,
-            4,
+            5,
             () =>
             {
                 ImGui.Spacing();
                 if (Widgets.PrimaryButton("Unlock elements"))
                     layout.UnlockMode = true;
+
+                var pixelPerfect = plugin.Configuration.PixelPerfectLayout;
+                if (ImGui.Checkbox("Pixel perfect (offsets in real screen pixels)", ref pixelPerfect))
+                {
+                    plugin.Configuration.PixelPerfectLayout = pixelPerfect;
+                    plugin.RequestSave();
+                }
+
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Off: offsets are in logical pixels, so at a scale of 2 one step moves 2 real pixels.\nOn: X and Y are in real screen pixels, so you can ask for a gap of exactly 1 pixel at any scale.\nChanging the interface scale later moves the elements, because they are saved in logical pixels.");
             });
 
         using (Widgets.TabBody("##layout_body"))
@@ -707,17 +717,17 @@ public class MainWindow : Window, IDisposable
 
         // The +/- buttons next to each field move by 1 px (10 px with Ctrl held).
         var x = data.OffsetX;
-        if (ImGui.InputInt("Offset X (px)", ref x, 1, 5))
+        if (OffsetField.Draw($"Offset X ({OffsetField.Unit})", ref x, false))
         {
             data.OffsetX = x;
             plugin.RequestSave();
         }
 
         // Up is plus (the saved value counts downwards, so the sign is turned here).
-        var y = -data.OffsetY;
-        if (ImGui.InputInt("Offset Y (px)", ref y, 1, 5))
+        var y = data.OffsetY;
+        if (OffsetField.Draw($"Offset Y ({OffsetField.Unit})", ref y, true))
         {
-            data.OffsetY = -y;
+            data.OffsetY = y;
             plugin.RequestSave();
         }
 

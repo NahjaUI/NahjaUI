@@ -64,6 +64,9 @@ public class Configuration : IPluginConfiguration
     // Scale of everything NahjaUI draws over the game, on top of the scale of Dalamud (1 = no change, see UiScale).
     public float InterfaceScale { get; set; } = 1f;
 
+    // Layout page: the X/Y offsets of the elements are shown, typed and dragged in real screen pixels instead of logical ones (see OffsetField).
+    public bool PixelPerfectLayout { get; set; }
+
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
 

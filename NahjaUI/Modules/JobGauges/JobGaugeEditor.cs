@@ -72,7 +72,8 @@ internal sealed class JobGaugeEditor
                 DrawSage(plugin.Configuration.JobGauges.Sage);
                 break;
             case 21:
-                DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge");
+                DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge", extra: () => DrawWarriorBeastExtras(plugin.Configuration.JobGauges.Warrior));
+                DrawWarriorExtras(plugin.Configuration.JobGauges.Warrior);
                 break;
             default:
                 if (ExtraGauges.ByJob.TryGetValue(Entries[shown].JobId, out var extra))
@@ -641,10 +642,142 @@ internal sealed class JobGaugeEditor
         });
     }
 
-    // The card of a job whose gauge is one bar from 0 to 100 (Warrior, Paladin). <id> keeps the control ids apart.
-    private void DrawBarGauge(string title, string id, BarGaugeSettings settings, LayoutElement element, string gaugeName, bool hasThreshold = true)
+    // The Warrior is drawn as one card per piece, each with its own settings: the Beast Gauge (its flash is inside that card, see
+    // DrawWarriorBeastExtras), the Inner Release pips, the Surging Tempest bar, the auras of Primal Rend and Primal Ruination, and the combo pips.
+    private void DrawWarriorExtras(WarriorGaugeSettings settings)
     {
-        Widgets.Card($"##card_gauge_{id}", 22, () =>
+        const string id = "warx";
+        var original = Widgets.Default(settings);
+
+        void Check(string label, bool value, Action<bool> set)
+        {
+            if (ImGui.Checkbox($"{label}##{id}", ref value))
+            {
+                set(value);
+                plugin.RequestSave();
+            }
+        }
+
+        void Pick(string label, Vector4 value, Action<Vector4> set, Vector4 defaultValue)
+        {
+            if (Widgets.ColorSetting($"{label}##{id}", ref value, defaultValue))
+            {
+                set(value);
+                plugin.RequestSave();
+            }
+        }
+
+        void Slider(string label, int value, int min, int max, Action<int> set)
+        {
+            if (ImGui.SliderInt($"{label}##{id}", ref value, min, max))
+            {
+                set(value);
+                plugin.RequestSave();
+            }
+        }
+
+        Widgets.Card("##card_gauge_war_release", 8, () =>
+        {
+            Widgets.SectionLabel("Warrior (Inner Release)");
+            Check("Show the Inner Release pips", settings.ShowInnerRelease, v => settings.ShowInnerRelease = v);
+            ImGui.Spacing();
+            SizeControls("Inner Release pips", plugin.JobGaugeSystem.WarriorReleaseElement.Layout);
+            Slider("Space between the pips (px)", settings.InnerReleaseGapPx, 0, 20, v => settings.InnerReleaseGapPx = v);
+            ImGui.Spacing();
+            Pick("Pip color", settings.InnerReleaseColor, v => settings.InnerReleaseColor = v, original.InnerReleaseColor);
+        });
+
+        Widgets.Card("##card_gauge_war_tempest", 14, () =>
+        {
+            Widgets.SectionLabel("Warrior (Surging Tempest)");
+            Check("Show the Surging Tempest bar", settings.ShowSurgingTempest, v => settings.ShowSurgingTempest = v);
+            Check("Show the seconds on the bar", settings.ShowSurgingTempestSeconds, v => settings.ShowSurgingTempestSeconds = v);
+            ImGui.Spacing();
+            SizeControls("Surging Tempest bar", plugin.JobGaugeSystem.WarriorTempestElement.Layout);
+
+            if (settings.ShowSurgingTempestSeconds)
+            {
+                ImGui.Spacing();
+                ImGui.TextColored(Theme.TextMuted, "Seconds text (size and offset)");
+                ImGui.PushID("tempestText");
+                if (HudBarEditor.TextControls(settings.SurgingTempestText))
+                    plugin.RequestSave();
+                ImGui.PopID();
+            }
+
+            ImGui.Spacing();
+            Pick("Bar color", settings.SurgingTempestColor, v => settings.SurgingTempestColor = v, original.SurgingTempestColor);
+        });
+
+        Widgets.Card("##card_gauge_war_auras", 7, () =>
+        {
+            Widgets.SectionLabel("Warrior (Primal Rend and Primal Ruination)");
+            Check("Show the auras of Primal Rend and Primal Ruination", settings.ShowProcAuras, v => settings.ShowProcAuras = v);
+            ImGui.Spacing();
+            SizeControls("Auras (the box holds both wings)", plugin.JobGaugeSystem.WarriorAurasElement.Layout);
+
+            var opacity = settings.ProcAuraOpacity;
+            if (ImGui.SliderFloat($"Aura opacity##{id}", ref opacity, 0.1f, 1f))
+            {
+                settings.ProcAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
+        });
+
+        Widgets.Card("##card_gauge_war_wrath", 7, () =>
+        {
+            Widgets.SectionLabel("Warrior (Primal Wrath)");
+            Check("Show the arch above the character while Primal Wrath can be used", settings.ShowWrathAura, v => settings.ShowWrathAura = v);
+            ImGui.Spacing();
+            SizeControls("Primal Wrath arch (the image keeps its proportions)", plugin.JobGaugeSystem.WarriorWrathElement.Layout);
+
+            var opacity = settings.WrathAuraOpacity;
+            if (ImGui.SliderFloat($"Arch opacity##{id}", ref opacity, 0.1f, 1f))
+            {
+                settings.WrathAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
+        });
+
+        Widgets.Card("##card_gauge_war_combo", 13, () =>
+        {
+            Widgets.SectionLabel("Warrior (combo)");
+            Check("Show the combo pips (3 after Heavy Swing, 2 after Overpower)", settings.ShowCombo, v => settings.ShowCombo = v);
+            Check("Show empty combo pips while there is no combo", settings.ShowComboOutline, v => settings.ShowComboOutline = v);
+            ImGui.Spacing();
+            SizeControls("Combo pips", plugin.JobGaugeSystem.WarriorComboElement.Layout);
+            Slider("Space between the combo pips (px)", settings.ComboGapPx, 0, 20, v => settings.ComboGapPx = v);
+            Slider("Last pip changes color when Surging Tempest has less than (seconds, 0 = off)", settings.ComboRefreshSeconds, 0, 60, v => settings.ComboRefreshSeconds = v);
+            ImGui.Spacing();
+            Pick("Pip color", settings.ComboColor, v => settings.ComboColor = v, original.ComboColor);
+            Pick("Last pip color when Surging Tempest is low", settings.ComboRefreshColor, v => settings.ComboRefreshColor = v, original.ComboRefreshColor);
+        });
+    }
+
+    // What goes inside the card of the Beast Gauge: the flash while Nascent Chaos is on (it changes the Beast Gauge, so it lives there).
+    private void DrawWarriorBeastExtras(WarriorGaugeSettings settings)
+    {
+        ImGui.Spacing();
+
+        var flash = settings.ShowNascentChaosFlash;
+        if (ImGui.Checkbox("Flash while Nascent Chaos##warflash", ref flash))
+        {
+            settings.ShowNascentChaosFlash = flash;
+            plugin.RequestSave();
+        }
+
+        var color = settings.NascentChaosFlashColor;
+        if (Widgets.ColorSetting("Flash color##warflash", ref color, Widgets.Default(settings).NascentChaosFlashColor))
+        {
+            settings.NascentChaosFlashColor = color;
+            plugin.RequestSave();
+        }
+    }
+
+    // The card of a job whose gauge is one bar from 0 to 100 (Warrior, Paladin). <id> keeps the control ids apart.
+    private void DrawBarGauge(string title, string id, BarGaugeSettings settings, LayoutElement element, string gaugeName, bool hasThreshold = true, Action? extra = null)
+    {
+        Widgets.Card($"##card_gauge_{id}", extra is null ? 22 : 25, () =>
         {
             Widgets.SectionLabel($"{title} ({gaugeName})");
 
@@ -726,6 +859,8 @@ internal sealed class JobGaugeEditor
                     plugin.RequestSave();
                 }
             }
+
+            extra?.Invoke();
         });
     }
 
@@ -733,14 +868,14 @@ internal sealed class JobGaugeEditor
     private void SizeControls(string rowName, ElementLayout layout)
     {
         var width = layout.Width;
-        if (ImGui.InputInt($"{rowName} width (px)", ref width, 2, 10))
+        if (ImGui.InputInt($"{rowName} width (px)", ref width, 1, 10))
         {
             layout.Width = Math.Clamp(width, 1, 4000);
             plugin.RequestSave();
         }
 
         var height = layout.Height;
-        if (ImGui.InputInt($"{rowName} height (px)", ref height, 2, 10))
+        if (ImGui.InputInt($"{rowName} height (px)", ref height, 1, 10))
         {
             layout.Height = Math.Clamp(height, 1, 1000);
             plugin.RequestSave();
