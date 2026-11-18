@@ -5,7 +5,7 @@
     "InternalName": "NahjaUI",
     "AssemblyVersion": "0.6.0.0",
     "Punchline": "A complete, modular interface for Final Fantasy XIV.",
-    "Description": "NahjaUI gives the game a clean, consistent interface that you build piece by piece. Switch on only what you want: everything else stays exactly as the game made it.\n\nHUD bars: your parameter bar, target, target of target, focus target and party list.\nProgress bars: your casts and your target's, with a slidecast marker, plus a global cooldown bar that shows the queue and weave windows.\nJob gauges, status effects, nameplates and enmity list, each one with its own style.\nTrackers: pick the enhancements, enfeeblements and cooldowns you want to see. Every job comes with ready-made presets.\nProfiles: save, copy and share your whole setup.\n\nType /nui to open it.",
+    "Description": "NahjaUI gives the game a clean, consistent interface that you build piece by piece. Switch on only what you want: everything else stays exactly as the game made it.\n\nHUD bars: your parameter bar, target, target of target, focus target and party list.\nProgress bars: your casts and your target's, with a slidecast marker, plus a global cooldown bar that shows the queue and weave windows.\nJob gauges, status effects, nameplates and enmity list, each one with its own style.\nTrackers: pick the enhancements, enfeeblements and cooldowns you want to see. Every job comes with ready-made presets.\nProfiles: save, copy and share your whole setup.\n\nType /nui to open it.\n\nJoin the testers on Discord: https://nahjaui.github.io/discord",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/NahjaUI/NahjaUI",
     "Tags": [

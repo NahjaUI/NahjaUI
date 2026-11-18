@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -453,11 +454,33 @@ internal sealed partial class JobGaugeModule : IDisposable
         try
         {
             DrawGauges();
+            FlushTexts();
         }
         finally
         {
+            queuedTexts.Clear();
             LayoutManager.PreviewNow = false;
         }
+    }
+
+    // Texts of the gauges are not drawn when asked: they wait here and are drawn after EVERY gauge, so that no bar covers a number.
+    private readonly List<(Vector2 Pos, Vector2 Size, Action Draw)> queuedTexts = new();
+
+    private void QueueText(ImDrawListPtr drawList, string text, FrameTextSettings settings, Vector2 pos, Vector2 size)
+    {
+        queuedTexts.Add((pos, size, () => plugin.HudBarSystem.DrawText(drawList, text, settings, pos, size, OverlayFont.NahjaDisplayBold)));
+    }
+
+    private void FlushTexts()
+    {
+        if (queuedTexts.Count == 0)
+            return;
+
+        var pending = queuedTexts.ToArray();
+        queuedTexts.Clear();
+
+        foreach (var (pos, size, draw) in pending)
+            plugin.GameCover.Draw(pos, size, 120f * UiScale.Overlay, draw);
     }
 
     private void DrawGauges()
@@ -709,7 +732,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             return;
 
         var bars = Math.Clamp(gauge.Bars, 1, 3);
-        var gap = MathF.Round(settings.GapPx * scale);
+        var gap = GapPixels(settings.GapPx, scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -718,7 +741,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (barWidth < 1f)
             return;
 
-        var total = barWidth * bars + gap * (bars - 1);
+        var total = SlotAt(bars - 1, MaxBars, size.X, gap).Offset + SlotAt(bars - 1, MaxBars, size.X, gap).Width;
         var left = pos.X + MathF.Round((size.X - total) / 2f);
 
         var amount = gauge.Units / (float)gauge.BarUnits;
@@ -726,8 +749,8 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         for (var i = 0; i < bars; i++)
         {
-            var a = new Vector2(left + i * (barWidth + gap), pos.Y);
-            var b = new Vector2(a.X + barWidth, pos.Y + size.Y);
+            var a = new Vector2(left + SlotAt(i, MaxBars, size.X, gap).Offset, pos.Y);
+            var b = new Vector2(a.X + SlotAt(i, MaxBars, size.X, gap).Width, pos.Y + size.Y);
 
             drawList.AddRectFilled(a, b, ImGui.GetColorU32(settings.BackgroundColor), rounding);
 
@@ -735,8 +758,8 @@ internal sealed partial class JobGaugeModule : IDisposable
             if (fill > 0f)
             {
                 var color = fill >= 1f ? settings.FullColor : settings.FillColor;
-                drawList.PushClipRect(a, new Vector2(a.X + MathF.Round(barWidth * fill), b.Y), true);
-                drawList.AddRectFilled(a, b, ImGui.GetColorU32(color), rounding);
+                drawList.PushClipRect(a, new Vector2(a.X + MathF.Round(SlotAt(i, MaxBars, size.X, gap).Width * fill), b.Y), true);
+                BarGradient.Fill(drawList, a, b, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, a.X, a.X + MathF.Round(SlotAt(i, MaxBars, size.X, gap).Width * fill));
                 drawList.PopClipRect();
             }
 
@@ -776,7 +799,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (fillWidth > 0f)
         {
             drawList.PushClipRect(pos, new Vector2(pos.X + fillWidth, end.Y), true);
-            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(settings.DarksideColor), rounding);
+            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(settings.DarksideColor), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
             drawList.PopClipRect();
         }
 
@@ -803,7 +826,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
         var (pos, size) = LayoutManager.GetRect(GunbreakerElement.Layout);
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(settings.GapPx * scale);
+        var gap = GapPixels(settings.GapPx, scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -811,7 +834,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (pipWidth < 1f || size.Y < 1f)
             return;
 
-        var total = pipWidth * count + gap * (count - 1);
+        var total = SlotsTotal(count, size.X, gap);
         var left = pos.X + MathF.Round((size.X - total) / 2f);
         var background = ImGui.GetColorU32(settings.BackgroundColor);
         var fill = ImGui.GetColorU32(settings.CartridgeColor);
@@ -820,9 +843,12 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         for (var i = 0; i < count; i++)
         {
-            var a = new Vector2(left + i * (pipWidth + gap), pos.Y);
-            var b = new Vector2(a.X + pipWidth, pos.Y + size.Y);
-            drawList.AddRectFilled(a, b, i < filled ? fill : background, rounding);
+            var a = new Vector2(left + SlotAt(i, count, size.X, gap).Offset, pos.Y);
+            var b = new Vector2(a.X + SlotAt(i, count, size.X, gap).Width, pos.Y + size.Y);
+            if (i < filled)
+                BarGradient.Fill(drawList, a, b, fill, rounding, ImDrawFlags.None, left, left + total);
+            else
+                drawList.AddRectFilled(a, b, background, rounding);
             drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
         }
     }
@@ -862,7 +888,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (fillWidth > 0f)
         {
             drawList.PushClipRect(pos, new Vector2(pos.X + fillWidth, end.Y), true);
-            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(color), rounding);
+            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
             drawList.PopClipRect();
         }
 
@@ -890,7 +916,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         const int count = 3;
         var (pos, size) = LayoutManager.GetRect(RedStackElement.Layout);
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(settings.GapPx * scale);
+        var gap = GapPixels(settings.GapPx, scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -898,7 +924,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (pipWidth < 1f || size.Y < 1f)
             return;
 
-        var total = pipWidth * count + gap * (count - 1);
+        var total = SlotsTotal(count, size.X, gap);
         var left = pos.X + MathF.Round((size.X - total) / 2f);
         var background = ImGui.GetColorU32(settings.BackgroundColor);
         var fill = ImGui.GetColorU32(settings.StackColor);
@@ -906,9 +932,12 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         for (var i = 0; i < count; i++)
         {
-            var a = new Vector2(left + i * (pipWidth + gap), pos.Y);
-            var b = new Vector2(a.X + pipWidth, pos.Y + size.Y);
-            drawList.AddRectFilled(a, b, i < filled ? fill : background, rounding);
+            var a = new Vector2(left + SlotAt(i, count, size.X, gap).Offset, pos.Y);
+            var b = new Vector2(a.X + SlotAt(i, count, size.X, gap).Width, pos.Y + size.Y);
+            if (i < filled)
+                BarGradient.Fill(drawList, a, b, fill, rounding, ImDrawFlags.None, left, left + total);
+            else
+                drawList.AddRectFilled(a, b, background, rounding);
             drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
         }
     }
@@ -944,7 +973,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             // Clipped to the bar so the fill keeps the rounded outline of the bar, not its own rounded end.
             drawList.PushClipRect(pos, new Vector2(pos.X + fillWidth, end.Y), true);
-            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(color), rounding);
+            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
             drawList.PopClipRect();
         }
 
@@ -965,7 +994,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     // A number on a gauge, placed like every other text: a point of the box, the offsets, size, font and color of the settings.
     private void DrawCenteredText(ImDrawListPtr drawList, FrameTextSettings text, Vector2 pos, Vector2 size, string value)
     {
-        plugin.HudBarSystem.DrawText(drawList, value, text, pos, size, OverlayFont.NahjaDisplayBold);
+        QueueText(drawList, value, text, pos, size);
     }
 
     private void DrawWhiteMage(WhiteMageGaugeSettings settings, WhiteMageGaugeSnapshot gauge)
@@ -997,12 +1026,64 @@ internal sealed partial class JobGaugeModule : IDisposable
 
     // Three rounded pips side by side, inside the box of the layout element. The first <filled> are full and the next one
     // is filled by <partial> (0 to 1) from the left, like a small bar.
+    // Space between pips in screen pixels. A NEGATIVE value overlaps the pips by exactly one border, so the borders of two pips
+    // are the same line instead of a double line.
+    private static float GapPixels(int gapPx, float scale)
+        => gapPx < 0 ? -MathF.Max(1f, MathF.Round(scale)) : MathF.Round(gapPx * scale);
+
+    // The slots of a row (pips, bars) must fill the box EXACTLY, so a row of pips is as wide as a bar of the same size, whatever the
+    // gap (a negative one overlaps them) and whether the width divides by the number of slots: the pixels left over by the division go to
+    // the slots in the middle first (the middle pip is one pixel wider than the other two).
+    private static (float Offset, float Width) SlotAt(int index, int count, float size, float gap)
+    {
+        var share = MathF.Floor(size - gap * (count - 1));
+        var baseWidth = MathF.Floor(share / count);
+        var extra = (int)(share - baseWidth * count);
+
+        var offset = 0f;
+        var width = 0f;
+        for (var i = 0; i <= index; i++)
+        {
+            var w = baseWidth + (HasExtraPixel(i, count, extra) ? 1f : 0f);
+            if (i == index)
+                width = w;
+            else
+                offset += w + gap;
+        }
+
+        return (offset, width);
+    }
+
+    // Which slots get an extra pixel, keeping the row SYMMETRIC (it looks odd to the eye otherwise): a lone pixel goes to the middle slot (or,
+    // with an even number of slots, to the left one of the two in the middle: the only case that cannot be symmetric), and the rest go in
+    // pairs to the slots at the ends, outwards first (3 slots with 2 pixels left over: 81 - 80 - 81).
+    private static bool HasExtraPixel(int index, int count, int extra)
+    {
+        if (extra <= 0)
+            return false;
+
+        var remaining = extra;
+        if (remaining % 2 == 1)
+        {
+            if (index == (count - 1) / 2)
+                return true;
+
+            remaining--;
+        }
+
+        var rank = Math.Min(index, count - 1 - index);
+        return rank < remaining / 2;
+    }
+
+    // The width of the whole row of slots.
+    private static float SlotsTotal(int count, float size, float gap) => MathF.Floor(size - gap * (count - 1)) + gap * (count - 1);
+
     private static void DrawPips(ImDrawListPtr drawList, int gapPx, int roundingPx, Vector4 backgroundColor, Vector4 borderColor, Vector4 glowFrameColor, Vector2 pos, Vector2 size, int filled, float partial, Vector4 color, bool glow)
     {
         const int count = 3;
 
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(gapPx * scale);
+        var gap = GapPixels(gapPx, scale);
         var rounding = MathF.Round(roundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -1011,7 +1092,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (pipWidth < 1f || size.Y < 1f)
             return;
 
-        var total = pipWidth * count + gap * (count - 1);
+        var total = SlotsTotal(count, size.X, gap);
         var left = pos.X + MathF.Round((size.X - total) / 2f);
 
         var background = ImGui.GetColorU32(backgroundColor);
@@ -1022,18 +1103,18 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         for (var i = 0; i < count; i++)
         {
-            var a = new Vector2(left + i * (pipWidth + gap), pos.Y);
-            var b = new Vector2(a.X + pipWidth, pos.Y + size.Y);
+            var a = new Vector2(left + SlotAt(i, count, size.X, gap).Offset, pos.Y);
+            var b = new Vector2(a.X + SlotAt(i, count, size.X, gap).Width, pos.Y + size.Y);
 
             drawList.AddRectFilled(a, b, background, rounding);
 
             if (i < filled)
             {
-                drawList.AddRectFilled(a, b, fill, rounding);
+                BarGradient.Fill(drawList, a, b, fill, rounding, ImDrawFlags.None, left, left + total);
             }
             else if (i == filled && partial > 0f)
             {
-                var right = a.X + MathF.Round(pipWidth * partial);
+                var right = a.X + MathF.Round(SlotAt(i, count, size.X, gap).Width * partial);
                 if (right > a.X)
                     drawList.AddRectFilled(a, new Vector2(right, b.Y), partialFill, rounding);
             }
@@ -1047,16 +1128,15 @@ internal sealed partial class JobGaugeModule : IDisposable
     private void DrawPipText(ImDrawListPtr drawList, FrameTextSettings textSettings, int gapPx, Vector2 pos, Vector2 size, int pipIndex, string text)
     {
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(gapPx * scale);
-        var pipWidth = MathF.Floor((size.X - gap * 2f) / 3f);
-        if (pipWidth < 1f)
+        var gap = GapPixels(gapPx, scale);
+        if (MathF.Floor((size.X - gap * 2f) / 3f) < 1f)
             return;
 
-        var total = pipWidth * 3f + gap * 2f;
+        var total = SlotsTotal(3, size.X, gap);
         var left = pos.X + MathF.Round((size.X - total) / 2f);
-        var centerX = left + pipIndex * (pipWidth + gap) + pipWidth / 2f;
+        var (offset, width) = SlotAt(pipIndex, 3, size.X, gap);
 
-        plugin.HudBarSystem.DrawText(drawList, text, textSettings, new Vector2(centerX - pipWidth / 2f, pos.Y), new Vector2(pipWidth, size.Y), OverlayFont.NahjaDisplayBold);
+        QueueText(drawList, text, textSettings, new Vector2(left + offset, pos.Y), new Vector2(width, size.Y));
     }
 
     // ---------------------------------------------------------------- healers: Scholar, Astrologian, Sage
@@ -1130,7 +1210,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(gapPx * scale);
+        var gap = GapPixels(gapPx, scale);
         var rounding = MathF.Round(roundingPx * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -1138,16 +1218,19 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (width < 1f || size.Y < 1f)
             return;
 
-        var total = width * slots.Length + gap * (slots.Length - 1);
+        var total = SlotsTotal(slots.Length, size.X, gap);
         var left = pos.X + MathF.Round((size.X - total) / 2f);
         var background = ImGui.GetColorU32(backgroundColor);
         var border = ImGui.GetColorU32(borderColor);
 
         for (var i = 0; i < slots.Length; i++)
         {
-            var a = new Vector2(left + i * (width + gap), pos.Y);
-            var b = new Vector2(a.X + width, pos.Y + size.Y);
-            drawList.AddRectFilled(a, b, slots[i] is { } color ? ImGui.GetColorU32(color) : background, rounding);
+            var a = new Vector2(left + SlotAt(i, slots.Length, size.X, gap).Offset, pos.Y);
+            var b = new Vector2(a.X + SlotAt(i, slots.Length, size.X, gap).Width, pos.Y + size.Y);
+            if (slots[i] is { } color)
+                BarGradient.Fill(drawList, a, b, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, left, left + total);
+            else
+                drawList.AddRectFilled(a, b, background, rounding);
             drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
         }
     }
@@ -1173,13 +1256,13 @@ internal sealed partial class JobGaugeModule : IDisposable
         if (fillWidth > 0f)
         {
             drawList.PushClipRect(pos, new Vector2(pos.X + fillWidth, end.Y), true);
-            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(color), rounding);
+            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
             drawList.PopClipRect();
         }
 
         drawList.AddRect(pos, end, ImGui.GetColorU32(borderColor), rounding, ImDrawFlags.None, thickness);
 
         if (text is not null)
-            plugin.HudBarSystem.DrawText(drawList, text, textSettings, pos, size, OverlayFont.NahjaDisplayBold);
+            QueueText(drawList, text, textSettings, pos, size);
     }
 }

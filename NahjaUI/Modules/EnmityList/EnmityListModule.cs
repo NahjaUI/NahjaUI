@@ -224,7 +224,7 @@ internal sealed class EnmityListModule : IDisposable
         if (fillRight > pos.X)
         {
             drawList.PushClipRect(pos, new Vector2(fillRight, max.Y), true);
-            drawList.AddRectFilled(pos, max, ImGui.GetColorU32(settings.HpColor), rounding);
+            BarGradient.Fill(drawList, pos, max, ImGui.GetColorU32(settings.HpColor), rounding, ImDrawFlags.None, pos.X, fillRight);
             drawList.PopClipRect();
         }
 
@@ -323,7 +323,7 @@ internal sealed class EnmityListModule : IDisposable
         if (fillRight > min.X)
         {
             drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
-            drawList.AddRectFilled(min, max, ImGui.GetColorU32(color), rounding);
+            BarGradient.Fill(drawList, min, max, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, min.X, fillRight);
             drawList.PopClipRect();
         }
 

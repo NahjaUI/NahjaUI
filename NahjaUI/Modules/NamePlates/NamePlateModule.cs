@@ -433,7 +433,7 @@ internal sealed class NamePlateModule : IDisposable
             if (fillRight > min.X)
             {
                 drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
-                drawList.AddRectFilled(min, max, ImGui.GetColorU32(gameBarColor ?? FallbackBarColor(plate.Relation)), rounding);
+                BarGradient.Fill(drawList, min, max, ImGui.GetColorU32(gameBarColor ?? FallbackBarColor(plate.Relation)), rounding, ImDrawFlags.None, min.X, fillRight);
                 drawList.PopClipRect();
             }
 
@@ -668,7 +668,7 @@ internal sealed class NamePlateModule : IDisposable
         if (fillRight > min.X)
         {
             drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
-            drawList.AddRectFilled(min, max, ImGui.GetColorU32(color), rounding);
+            BarGradient.Fill(drawList, min, max, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, min.X, fillRight);
             drawList.PopClipRect();
         }
 

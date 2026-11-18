@@ -27,7 +27,7 @@ internal static class Theme
     public static readonly Vector4 BarBackground = new(0.05f, 0.06f, 0.10f, 0.90f);
     public static readonly Vector4 BarBorder = new(0f, 0f, 0f, 1f);
     public static readonly Vector4 Gold = new(1f, 0.82f, 0.30f, 1f);   // marks, glows, "ready" frames, levels
-    public static readonly Vector4 ProgressBarViolet = new(0.55f, 0.49f, 1f, 1f);   // yours, and any action that cannot be interrupted
+    public static readonly Vector4 ProgressBarViolet = Accent;   // yours, and any action that cannot be interrupted: EXACTLY the accent color of the plugin
     public static readonly Vector4 ProgressBarRed = new(0.92f, 0.36f, 0.36f, 1f);   // what enemies and your target cast
 
     public static readonly Vector4 Text = Rgb(232, 234, 248);

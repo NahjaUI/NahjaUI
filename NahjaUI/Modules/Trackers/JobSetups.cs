@@ -186,6 +186,16 @@ internal static class JobSetups
 
                 foreach (var move in job.Moves)
                 {
+                    // A tracker of the same name that already loads on this job (the default settings have one Peloton for many jobs) is
+                    // replaced by this one, not doubled: the job is taken out of the other one (or the other one goes if it was only for this job).
+                    foreach (var other in engine.MembersOf(general).Where(a => a.Definition.Name == move.Name && a.Definition.Load.JobIds.Contains(job.Id)).ToList())
+                    {
+                        if (other.Definition.Load.JobIds.Count <= 1)
+                            engine.Remove(other);
+                        else
+                            other.Definition.Load.JobIds.Remove(job.Id);
+                    }
+
                     var stores = known.Any(info => info.Name == move.Name && (info.MaxCharges > 1 || ActionManager.GetMaxCharges(info.Id, 100) > 1));
                     builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: false);
                     PutInJobOrder(engine, general, job.Id);
@@ -519,7 +529,8 @@ internal static class JobSetups
         layout.OffsetX = (centered ? frame.OffsetX - frame.Width / 2 : -470) - 6;
         layout.OffsetY = centered ? frame.OffsetY : 190;
 
-        all.Cd(group, "Sprint", new[] { "Sprint" }, new[] { "Sprint" });
+        // Sprint is shown only while it is on you or on cooldown: ready, it would just take room for nothing.
+        all.Cd(group, "Sprint", new[] { "Sprint" }, new[] { "Sprint" }, showWhenReady: false);
         all.PlainStatus(group, "Jog");
         all.Finish();
         report.Add(all.Count, all.Missing);

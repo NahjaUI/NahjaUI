@@ -144,7 +144,7 @@ internal sealed partial class JobGaugeModule
         {
             // Clipped to the bar so the fill keeps its rounded outline.
             drawList.PushClipRect(pos, new Vector2(pos.X + fillWidth, end.Y), true);
-            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(settings.ColorOf(def, part.Variant)), rounding);
+            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(settings.ColorOf(def, part.Variant)), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
             drawList.PopClipRect();
         }
 
@@ -160,7 +160,7 @@ internal sealed partial class JobGaugeModule
         drawList.AddRect(pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (!string.IsNullOrEmpty(part.Text))
-            plugin.HudBarSystem.DrawText(drawList, part.Text, settings.Text, pos, size, OverlayFont.NahjaDisplayBold);
+            QueueText(drawList, part.Text, settings.Text, pos, size);
     }
 
     // Slots side by side. Each slot colour is an index into the row's colours (-1 is an empty slot). In a row of pips the next slot after
@@ -171,7 +171,7 @@ internal sealed partial class JobGaugeModule
             return;
 
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(settings.GapPx * scale);
+        var gap = GapPixels(settings.GapPx, scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -179,25 +179,25 @@ internal sealed partial class JobGaugeModule
         if (width < 1f || size.Y < 1f)
             return;
 
-        var total = width * slots.Length + gap * (slots.Length - 1);
+        var total = SlotsTotal(slots.Length, size.X, gap);
         var left = pos.X + MathF.Round((size.X - total) / 2f);
         var background = ImGui.GetColorU32(settings.BackgroundColor);
         var border = ImGui.GetColorU32(settings.BorderColor);
 
         for (var i = 0; i < slots.Length; i++)
         {
-            var a = new Vector2(left + i * (width + gap), pos.Y);
-            var b = new Vector2(a.X + width, pos.Y + size.Y);
+            var a = new Vector2(left + SlotAt(i, slots.Length, size.X, gap).Offset, pos.Y);
+            var b = new Vector2(a.X + SlotAt(i, slots.Length, size.X, gap).Width, pos.Y + size.Y);
 
             drawList.AddRectFilled(a, b, background, rounding);
 
             if (slots[i] >= 0)
             {
-                drawList.AddRectFilled(a, b, ImGui.GetColorU32(settings.ColorOf(def, slots[i])), rounding);
+                BarGradient.Fill(drawList, a, b, ImGui.GetColorU32(settings.ColorOf(def, slots[i])), rounding, ImDrawFlags.None, left, left + total);
             }
             else if (i == filled && partial > 0f)
             {
-                var right = a.X + MathF.Round(width * partial);
+                var right = a.X + MathF.Round(SlotAt(i, slots.Length, size.X, gap).Width * partial);
                 if (right > a.X)
                     drawList.AddRectFilled(a, new Vector2(right, b.Y), ImGui.GetColorU32(Theme.WithAlpha(settings.ColorOf(def, partialVariant), 0.65f)), rounding);
             }
@@ -206,6 +206,6 @@ internal sealed partial class JobGaugeModule
         }
 
         if (!string.IsNullOrEmpty(text))
-            plugin.HudBarSystem.DrawText(drawList, text, settings.Text, pos, size, OverlayFont.NahjaDisplayBold);
+            QueueText(drawList, text, settings.Text, pos, size);
     }
 }

@@ -162,7 +162,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt("Space between pips (px)", ref gap, 0, 30))
+            if (ImGui.SliderInt("Space between pips (px)", ref gap, -1, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -233,7 +233,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt($"Space between bars (px)##{id}", ref gap, 0, 30))
+            if (ImGui.SliderInt($"Space between bars (px)##{id}", ref gap, -1, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -288,7 +288,7 @@ internal sealed class JobGaugeEditor
 
     private void Slider(string label, int value, int max, Action<int> set)
     {
-        if (ImGui.SliderInt(label, ref value, 0, max))
+        if (ImGui.SliderInt(label, ref value, -1, max))
         {
             set(value);
             plugin.RequestSave();
@@ -468,7 +468,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt($"Space between cartridges (px)##{id}", ref gap, 0, 30))
+            if (ImGui.SliderInt($"Space between cartridges (px)##{id}", ref gap, -1, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -615,7 +615,7 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
 
             var gap = settings.GapPx;
-            if (ImGui.SliderInt($"Space between stacks (px)##{id}", ref gap, 0, 30))
+            if (ImGui.SliderInt($"Space between stacks (px)##{id}", ref gap, -1, 30))
             {
                 settings.GapPx = gap;
                 plugin.RequestSave();
@@ -682,7 +682,7 @@ internal sealed class JobGaugeEditor
             Check("Show the Inner Release pips", settings.ShowInnerRelease, v => settings.ShowInnerRelease = v);
             ImGui.Spacing();
             SizeControls("Inner Release pips", plugin.JobGaugeSystem.WarriorReleaseElement.Layout);
-            Slider("Space between the pips (px)", settings.InnerReleaseGapPx, 0, 20, v => settings.InnerReleaseGapPx = v);
+            Slider("Space between the pips (px)", settings.InnerReleaseGapPx, -1, 20, v => settings.InnerReleaseGapPx = v);
             ImGui.Spacing();
             Pick("Pip color", settings.InnerReleaseColor, v => settings.InnerReleaseColor = v, original.InnerReleaseColor);
         });
@@ -724,21 +724,6 @@ internal sealed class JobGaugeEditor
             }
         });
 
-        Widgets.Card("##card_gauge_war_wrath", 7, () =>
-        {
-            Widgets.SectionLabel("Warrior (Primal Wrath)");
-            Check("Show the arch above the character while Primal Wrath can be used", settings.ShowWrathAura, v => settings.ShowWrathAura = v);
-            ImGui.Spacing();
-            SizeControls("Primal Wrath arch (the image keeps its proportions)", plugin.JobGaugeSystem.WarriorWrathElement.Layout);
-
-            var opacity = settings.WrathAuraOpacity;
-            if (ImGui.SliderFloat($"Arch opacity##{id}", ref opacity, 0.1f, 1f))
-            {
-                settings.WrathAuraOpacity = opacity;
-                plugin.RequestSave();
-            }
-        });
-
         Widgets.Card("##card_gauge_war_combo", 13, () =>
         {
             Widgets.SectionLabel("Warrior (combo)");
@@ -746,7 +731,7 @@ internal sealed class JobGaugeEditor
             Check("Show empty combo pips while there is no combo", settings.ShowComboOutline, v => settings.ShowComboOutline = v);
             ImGui.Spacing();
             SizeControls("Combo pips", plugin.JobGaugeSystem.WarriorComboElement.Layout);
-            Slider("Space between the combo pips (px)", settings.ComboGapPx, 0, 20, v => settings.ComboGapPx = v);
+            Slider("Space between the combo pips (px)", settings.ComboGapPx, -1, 20, v => settings.ComboGapPx = v);
             Slider("Last pip changes color when Surging Tempest has less than (seconds, 0 = off)", settings.ComboRefreshSeconds, 0, 60, v => settings.ComboRefreshSeconds = v);
             ImGui.Spacing();
             Pick("Pip color", settings.ComboColor, v => settings.ComboColor = v, original.ComboColor);

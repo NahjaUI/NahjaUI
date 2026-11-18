@@ -35,6 +35,12 @@ internal sealed class GameDataProvider : IDisposable
     private Dictionary<(uint Unit, uint Status, uint Source), (float Reported, long Stamp)> statusClock = new();
     private Dictionary<(uint Unit, uint Status, uint Source), (float Reported, long Stamp)> nextStatusClock = new();
 
+    // A status the game has just listed can have its time still empty (0) for a frame or two. Those statuses wait here (when they were first seen)
+    // and are not reported until their time arrives, so no tracker or aura is drawn first without a time and then fixed. See ToStatuses.
+    private Dictionary<(uint Unit, uint Status, uint Source), long> statusPending = new();
+    private Dictionary<(uint Unit, uint Status, uint Source), long> nextStatusPending = new();
+    private const double StatusTimeWaitSeconds = 0.4;
+
     // Your chocobo companion: found by scanning the object table now and then (not every frame), then looked up by id.
     private uint chocoboId;
     private long nextChocoboSearchFrame;
@@ -112,10 +118,12 @@ internal sealed class GameDataProvider : IDisposable
         if (localPlayer is null || !Plugin.PlayerState.IsLoaded)
         {
             statusClock.Clear();
+            statusPending.Clear();
             return GameSnapshot.Empty with { Frame = frame };
         }
 
         nextStatusClock.Clear();
+        nextStatusPending.Clear();
 
         var target = Plugin.TargetManager.Target;
 
@@ -170,6 +178,7 @@ internal sealed class GameDataProvider : IDisposable
 
         // The statuses seen this frame are the ones to remember for the next one.
         (statusClock, nextStatusClock) = (nextStatusClock, statusClock);
+        (statusPending, nextStatusPending) = (nextStatusPending, statusPending);
         return snapshot;
     }
 
@@ -1048,6 +1057,20 @@ internal sealed class GameDataProvider : IDisposable
                 var raw = ((FFXIVClientStructs.FFXIV.Client.Game.Status*)status.Address)->RemainingTime;
                 if (raw < 0f || GameNames.StatusIsPermanent(status.StatusId))
                     remaining = 0f;
+            }
+
+            // New status whose time reads exactly 0: wait for the time (at most StatusTimeWaitSeconds) before reporting it. A status that never gets one
+            // (a real one without duration) shows up after that wait.
+            if (status.RemainingTime == 0f && !GameNames.StatusIsPermanent(status.StatusId))
+            {
+                var pendingKey = (unitId, status.StatusId, status.SourceId);
+                if (!statusClock.ContainsKey(pendingKey))
+                {
+                    var first = statusPending.TryGetValue(pendingKey, out var seen) ? seen : Stopwatch.GetTimestamp();
+                    nextStatusPending[pendingKey] = first;
+                    if (Stopwatch.GetElapsedTime(first).TotalSeconds < StatusTimeWaitSeconds)
+                        continue;
+                }
             }
 
             result.Add(new StatusSnapshot(status.StatusId, status.SourceId, SmoothRemaining(unitId, status.StatusId, status.SourceId, remaining), status.Param));

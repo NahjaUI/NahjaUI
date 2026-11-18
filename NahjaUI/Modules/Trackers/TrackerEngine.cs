@@ -713,7 +713,8 @@ internal sealed class TrackerEngine
     private static Vector2[] Arrange(TrackerGroupDefinition group, Vector2 anchorPos, Vector2 anchorSize, IReadOnlyList<Vector2> sizes)
     {
         var scale = UiScale.Overlay;
-        var gap = MathF.Round(Math.Max(0, group.Spacing) * scale);
+        // A NEGATIVE spacing (-1) overlaps the icons by exactly one border, so neighbours share the same border line.
+        var gap = group.Spacing < 0 ? -MathF.Max(1f, MathF.Round(scale)) : MathF.Round(group.Spacing * scale);
         var count = sizes.Count;
         var positions = new Vector2[count];
 

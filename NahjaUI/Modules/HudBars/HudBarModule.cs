@@ -505,7 +505,7 @@ internal sealed class HudBarModule : IDisposable
             // The whole rounded bar, cut at the end of the HP: the fill never sticks out of the rounded corners
             // (with a straight end it did when the HP was between about 95% and 100%).
             drawList.PushClipRect(pos, new Vector2(fillRight, max.Y), true);
-            drawList.AddRectFilled(pos, max, ImGui.GetColorU32(fillColor), rounding);
+            BarGradient.Fill(drawList, pos, max, ImGui.GetColorU32(fillColor), rounding, ImDrawFlags.None, pos.X, fillRight);
             drawList.PopClipRect();
         }
 
@@ -617,7 +617,7 @@ internal sealed class HudBarModule : IDisposable
         if (fillRight > min.X)
         {
             drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
-            drawList.AddRectFilled(min, max, ImGui.GetColorU32(settings.MpColor), rounding);
+            BarGradient.Fill(drawList, min, max, ImGui.GetColorU32(settings.MpColor), rounding, ImDrawFlags.None, min.X, fillRight);
             drawList.PopClipRect();
         }
 

@@ -4750,22 +4750,6 @@
           "Red": false,
           "Dim": true,
           "Sweep": false
-        },
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 4,
-          "Unit": 0,
-          "StatusId": 0,
-          "ActionId": 3,
-          "OnlyMine": false,
-          "Texts": [],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
         }
       ],
       "Load": {
@@ -5122,171 +5106,6 @@
         "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
         "JobIds": [
           32
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "6b5b0f22cddd4f3cbf54f59dca1e1c7f",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          28
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "dcd03662ce9e46c9895de2fa863eeaf0",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          33
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "578f2de71240431c9e70bbdc738351b9",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          41
         ],
         "Where": 0
       }
@@ -24014,8 +23833,8 @@
       },
       "BarColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -24039,15 +23858,15 @@
       "SlideCastMs": 500,
       "SlideCastColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 1.0,
-        "Y": 0.82,
-        "Z": 0.3,
+        "X": 0.35686275,
+        "Y": 0.6156863,
+        "Z": 0.92156863,
         "W": 1.0
       },
       "UninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       }
@@ -24162,15 +23981,15 @@
       "SlideCastMs": 500,
       "SlideCastColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 1.0,
-        "Y": 0.82,
-        "Z": 0.3,
+        "X": 0.35686275,
+        "Y": 0.6156863,
+        "Z": 0.92156863,
         "W": 1.0
       },
       "UninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       }
@@ -24239,15 +24058,15 @@
       "SlideCastMs": 500,
       "SlideCastColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 1.0,
-        "Y": 0.82,
-        "Z": 0.3,
+        "X": 0.35686275,
+        "Y": 0.6156863,
+        "Z": 0.92156863,
         "W": 1.0
       },
       "UninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       }
@@ -41096,8 +40915,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -41283,8 +41102,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -41470,8 +41289,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -41657,8 +41476,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -41844,8 +41663,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -42037,8 +41856,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -42224,8 +42043,8 @@
       },
       "ProgressBarUninterruptibleColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.55,
-        "Y": 0.49,
+        "X": 0.54509807,
+        "Y": 0.4862745,
         "Z": 1.0,
         "W": 1.0
       },
@@ -42445,8 +42264,8 @@
     },
     "ProgressBarUninterruptibleColor": {
       "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-      "X": 0.55,
-      "Y": 0.49,
+      "X": 0.54509807,
+      "Y": 0.4862745,
       "Z": 1.0,
       "W": 1.0
     },

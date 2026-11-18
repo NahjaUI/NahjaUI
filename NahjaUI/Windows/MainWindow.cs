@@ -602,6 +602,16 @@ public class MainWindow : Window, IDisposable
             ImGui.TextColored(Theme.TextMuted, "0 gives square corners. It applies to every bar, gauge, frame and icon.");
 
             ImGui.Spacing();
+            var gradientPercent = config.BarGradientPercent;
+            if (ImGui.SliderInt("Bar gradient (%)", ref gradientPercent, 0, 200))
+            {
+                config.BarGradientPercent = gradientPercent;
+                plugin.RequestSave();
+            }
+
+            ImGui.TextColored(Theme.TextMuted, "The filled part of every bar and pip goes from a slightly darker color to a slightly lighter one, with a small change of hue. 0 gives the flat color, 100 is the default and 200 is twice as strong.");
+
+            ImGui.Spacing();
             plugin.HudBarEditorPage.DrawRoleColors();
         });
     }

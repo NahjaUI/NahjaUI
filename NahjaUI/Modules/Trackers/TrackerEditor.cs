@@ -1146,7 +1146,7 @@ internal sealed class TrackerEditor
             var spacing = definition.Spacing;
             if (ImGui.InputInt("Space between icons (px)", ref spacing, 1, 5))
             {
-                definition.Spacing = Math.Clamp(spacing, 0, 128);
+                definition.Spacing = Math.Clamp(spacing, -1, 128);
                 plugin.RequestSave();
             }
 

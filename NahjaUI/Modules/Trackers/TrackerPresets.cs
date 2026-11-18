@@ -233,7 +233,7 @@ internal static class TrackerPresets
 
         // An ability: while its follow-up can be used, the follow-up; while its effect is on you, the time of the effect; otherwise its cooldown (dimmed while it cannot be used).
         // Alternative names (an ability that is replaced at a higher level) go newest first: the engine skips the ones not learned.
-        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false, bool spender = false, bool effectOnlyMine = false, string? followUp = null)
+        public void Cd(TrackerGroupRuntime group, string trackerName, string[] abilities, string[]? effects = null, bool charges = false, bool glow = true, bool effectStacks = false, bool abilityIcon = false, bool spender = false, bool effectOnlyMine = false, string? followUp = null, bool showWhenReady = true)
         {
             var tracker = NewTracker(group, trackerName);
 
@@ -325,11 +325,15 @@ internal static class TrackerPresets
                 }
 
                 // Ready: no text (only the charges of an ability that has them: with all of them, nothing else is drawn).
-                var offCooldown = AbilityRule(abilityName, ConditionKind.AbilityOffCooldown);
-                offCooldown.Dim = spender;
-                if (charges)
-                    AddCooldownTexts(offCooldown, charges);
-                tracker.Rules.Add(offCooldown);
+                // showWhenReady = false (Sprint): no rule for it, so the tracker is hidden while the ability is ready.
+                if (showWhenReady)
+                {
+                    var offCooldown = AbilityRule(abilityName, ConditionKind.AbilityOffCooldown);
+                    offCooldown.Dim = spender;
+                    if (charges)
+                        AddCooldownTexts(offCooldown, charges);
+                    tracker.Rules.Add(offCooldown);
+                }
             }
         }
 

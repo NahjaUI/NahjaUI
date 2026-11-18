@@ -67,6 +67,9 @@ public class Configuration : IPluginConfiguration
     // Layout page: the X/Y offsets of the elements are shown, typed and dragged in real screen pixels instead of logical ones (see OffsetField).
     public bool PixelPerfectLayout { get; set; }
 
+    // Appearance page: how much gradient the filled part of bars and pips has, from 0 (flat color) to 200 (100 is the default, see BarGradient).
+    public int BarGradientPercent { get; set; } = 100;
+
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
 

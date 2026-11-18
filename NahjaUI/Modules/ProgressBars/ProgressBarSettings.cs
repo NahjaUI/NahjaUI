@@ -77,7 +77,7 @@ public class ProgressBarSettings
     /// </summary>
     public int SlideCastMs { get; set; } = 500;
 
-    public Vector4 SlideCastColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
+    public Vector4 SlideCastColor { get; set; } = NahjaUI.Core.Ui.Theme.Info;
 
     /// <summary>Colour of the bar while a cast cannot be interrupted (target bar only). It starts like the bar of the player.</summary>
     public Vector4 UninterruptibleColor

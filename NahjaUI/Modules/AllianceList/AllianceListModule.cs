@@ -242,7 +242,7 @@ internal sealed class AllianceListModule : IDisposable
         if (fillRight > pos.X)
         {
             drawList.PushClipRect(pos, new Vector2(MathF.Min(fillRight, max.X), max.Y), true);
-            drawList.AddRectFilled(pos, max, ImGui.GetColorU32(fillColor), rounding);
+            BarGradient.Fill(drawList, pos, max, ImGui.GetColorU32(fillColor), rounding, ImDrawFlags.None, pos.X, MathF.Min(fillRight, max.X));
             drawList.PopClipRect();
         }
 

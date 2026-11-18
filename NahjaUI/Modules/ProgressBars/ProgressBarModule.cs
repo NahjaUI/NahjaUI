@@ -201,7 +201,7 @@ internal sealed class ProgressBarModule : IDisposable
 
         var fillRight = MathF.Round(pos.X + size.X * fraction);
         if (fillRight > pos.X)
-            FillShape(drawList, pos, max, pos.X, fillRight, ImGui.GetColorU32(settings.BarColor), rounding, ImDrawFlags.RoundCornersAll);
+            FillShape(drawList, pos, max, pos.X, fillRight, ImGui.GetColorU32(settings.BarColor), rounding, ImDrawFlags.RoundCornersAll, true);
 
         // The queue window: from 0.5 s before the end to the end. An action pressed here is kept and used right when the cooldown ends.
         var queue = settings.QueueMs / 1000f;
@@ -294,7 +294,7 @@ internal sealed class ProgressBarModule : IDisposable
         var shapeMin = new Vector2(barLeft, pos.Y);
 
         if (fillRight > barLeft)
-            FillShape(drawList, shapeMin, max, barLeft, fillRight, ImGui.GetColorU32(barColor), rounding, shapeFlags);
+            FillShape(drawList, shapeMin, max, barLeft, fillRight, ImGui.GetColorU32(barColor), rounding, shapeFlags, true);
 
         var thickness = MathF.Max(1f, MathF.Round(scale));
 
@@ -315,10 +315,13 @@ internal sealed class ProgressBarModule : IDisposable
     }
 
     // A fill that follows the rounded shape of the bar: the full shape cut by a clip rectangle, so it never sticks out of a corner.
-    private static void FillShape(ImDrawListPtr drawList, Vector2 shapeMin, Vector2 max, float clipLeft, float clipRight, uint color, float rounding, ImDrawFlags flags)
+    private static void FillShape(ImDrawListPtr drawList, Vector2 shapeMin, Vector2 max, float clipLeft, float clipRight, uint color, float rounding, ImDrawFlags flags, bool gradient = false)
     {
         drawList.PushClipRect(new Vector2(clipLeft, shapeMin.Y), new Vector2(clipRight, max.Y), true);
-        drawList.AddRectFilled(shapeMin, max, color, rounding, flags);
+        if (gradient)
+            BarGradient.Fill(drawList, shapeMin, max, color, rounding, flags, clipLeft, clipRight);
+        else
+            drawList.AddRectFilled(shapeMin, max, color, rounding, flags);
         drawList.PopClipRect();
     }
 

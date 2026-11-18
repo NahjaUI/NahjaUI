@@ -40,6 +40,23 @@ internal sealed partial class JobGaugeModule
     private static uint innerReleaseId;
     private static uint nascentChaosId;
     private static uint surgingTempestId;
+    // The game can list a new status for a frame or two before its time is filled in (the time reads 0). Until a real time has been read once, the aura shows
+    // the full time of its proc instead of an empty one. After that the time is used as it comes, so the aura still empties at the end.
+    private static bool rendTimed;
+    private static bool ruinationTimed;
+    private static bool wrathTimed;
+
+    private static float ProcSeconds(float remaining, ref bool timed, float maxSeconds)
+    {
+        if (remaining > 0f)
+        {
+            timed = true;
+            return remaining;
+        }
+
+        return timed ? 0f : maxSeconds;
+    }
+
     private static uint primalRendReadyId;
     private static uint primalRuinationReadyId;
     private static uint wrathfulId;
@@ -207,19 +224,24 @@ internal sealed partial class JobGaugeModule
             else if (status.Id == wrathfulId)
             {
                 wrath = true;
-                wrathSeconds = MathF.Max(status.RemainingTime, 0f);
+                wrathSeconds = ProcSeconds(status.RemainingTime, ref wrathTimed, WrathMaxSeconds);
             }
             else if (status.Id == primalRendReadyId)
             {
                 rend = true;
-                rendSeconds = MathF.Max(status.RemainingTime, 0f);
+                rendSeconds = ProcSeconds(status.RemainingTime, ref rendTimed, RendMaxSeconds);
             }
             else if (status.Id == primalRuinationReadyId)
             {
                 ruination = true;
-                ruinationSeconds = MathF.Max(status.RemainingTime, 0f);
+                ruinationSeconds = ProcSeconds(status.RemainingTime, ref ruinationTimed, RuinationMaxSeconds);
             }
         }
+
+        // A proc that is gone forgets that its time was read, so the next one starts again from its full time.
+        if (!wrath) wrathTimed = false;
+        if (!rend) rendTimed = false;
+        if (!ruination) ruinationTimed = false;
 
         var (length, done) = ReadWarriorCombo(combo);
         return new WarriorState(stacks, nascentChaos, tempest, rend, ruination, ruination ? ruinationSeconds : rendSeconds, length, done, wrath, wrathSeconds);
@@ -371,7 +393,7 @@ internal sealed partial class JobGaugeModule
     }
 
     // The arch of Primal Wrath (Wrathful, 30 seconds): one crescent above the character while the status is on. It keeps the proportions of its image inside
-    // the box. Like the wings it works as a timer: the desaturated arch is always there and the one in color shrinks from the top down.
+    // the box. Like the wings it works as a timer: the desaturated arch is always there and the gray spreads from the center to both sides over the one in color.
     private void DrawWrathAura(ImDrawListPtr drawList, WarriorGaugeSettings settings, WarriorState state)
     {
         if (!settings.ShowWrathAura || !state.WrathReady || !LayoutManager.IsShownNow(WarriorWrathElement)
@@ -390,9 +412,18 @@ internal sealed partial class JobGaugeModule
         var max = min + new Vector2(width, height);
         drawList.AddImage(gray.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
 
-        var top = max.Y - height * Math.Clamp(state.WrathSeconds / WrathMaxSeconds, 0f, 1f);
-        drawList.PushClipRect(new Vector2(min.X, top), max, true);
-        drawList.AddImage(texture.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
-        drawList.PopClipRect();
+        // The gray grows from the center to both sides: the color stays in the two outer parts, and each one shrinks toward its end as the time runs out.
+        var left = Math.Clamp(state.WrathSeconds / WrathMaxSeconds, 0f, 1f);
+        var half = width / 2f * left;
+        var centerX = min.X + width / 2f;
+        foreach (var (from, to) in new[] { (min.X, MathF.Round(min.X + half)), (MathF.Round(max.X - half), max.X) })
+        {
+            if (to - from < 1f)
+                continue;
+
+            drawList.PushClipRect(new Vector2(from, min.Y), new Vector2(to, max.Y), true);
+            drawList.AddImage(texture.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
+            drawList.PopClipRect();
+        }
     }
 }

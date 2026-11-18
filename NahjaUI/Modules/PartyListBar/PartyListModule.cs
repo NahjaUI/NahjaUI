@@ -415,7 +415,7 @@ internal sealed class PartyListModule : IDisposable
     private static void FillRounded(ImDrawListPtr drawList, Vector2 min, Vector2 max, float clipRight, uint color, float rounding, ImDrawFlags flags)
     {
         drawList.PushClipRect(min, new Vector2(MathF.Min(clipRight, max.X), max.Y), true);
-        drawList.AddRectFilled(min, max, color, rounding, flags);
+        BarGradient.Fill(drawList, min, max, color, rounding, flags, min.X, MathF.Min(clipRight, max.X));
         drawList.PopClipRect();
     }
 
