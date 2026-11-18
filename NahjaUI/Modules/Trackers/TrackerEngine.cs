@@ -714,7 +714,7 @@ internal sealed class TrackerEngine
     {
         var scale = UiScale.Overlay;
         // A NEGATIVE spacing (-1) overlaps the icons by exactly one border, so neighbours share the same border line.
-        var gap = group.Spacing < 0 ? -MathF.Max(1f, MathF.Round(scale)) : MathF.Round(group.Spacing * scale);
+        var gap = group.Spacing < 0 ? -MathF.Max(1f, MathF.Round(scale)) : group.Spacing == 0 ? 0f : MathF.Max(1f, MathF.Round(group.Spacing * scale));
         var count = sizes.Count;
         var positions = new Vector2[count];
 

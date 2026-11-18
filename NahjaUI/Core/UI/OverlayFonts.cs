@@ -74,8 +74,9 @@ internal sealed class OverlayFonts : IDisposable
     public IDisposable? PushClosest(OverlayFont font, float wantedPx, bool applyInterfaceScale = true)
     {
         // The text of the menu windows passes false: the "Interface scale" is only for what NahjaUI draws over the game.
+        // The fonts are built times the scale of Dalamud, so the size wanted on the screen is divided by it to find the font.
         if (applyInterfaceScale)
-            wantedPx *= UiScale.Interface;
+            wantedPx *= UiScale.Interface / ImGuiHelpers.GlobalScale;
 
         var handle = FindClosest(GetSet(font), wantedPx);
 
@@ -126,7 +127,7 @@ internal sealed class OverlayFonts : IDisposable
         }
 
         // The "Interface scale" is applied by choosing a bigger (or smaller) font, never by stretching one.
-        var wantedLine = capPx * UiScale.Interface / ratios.Height;
+        var wantedLine = capPx * UiScale.Interface / ImGuiHelpers.GlobalScale / ratios.Height;
 
         // Same choice as PushClosest, but keeping the LOGICAL size of the font that was chosen.
         var handle = FindClosest(GetSet(font), wantedLine, out var builtPx);

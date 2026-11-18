@@ -61,8 +61,11 @@ public class Configuration : IPluginConfiguration
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
 
-    // Scale of everything NahjaUI draws over the game, on top of the scale of Dalamud (1 = no change, see UiScale).
+    // Scale of everything NahjaUI draws over the game (1 = one logical pixel is one screen pixel; the scale of Dalamud does not matter, see UiScale).
     public float InterfaceScale { get; set; } = 1f;
+
+    // 0 = saved when this value was multiplied by the scale of Dalamud; 1 = it is in screen pixels (the plugin converts it once, in Plugin.Draw).
+    public int InterfaceScaleBasis { get; set; }
 
     // Layout page: the X/Y offsets of the elements are shown, typed and dragged in real screen pixels instead of logical ones (see OffsetField).
     public bool PixelPerfectLayout { get; set; }

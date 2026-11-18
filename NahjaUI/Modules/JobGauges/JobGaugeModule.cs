@@ -1028,8 +1028,10 @@ internal sealed partial class JobGaugeModule : IDisposable
     // is filled by <partial> (0 to 1) from the left, like a small bar.
     // Space between pips in screen pixels. A NEGATIVE value overlaps the pips by exactly one border, so the borders of two pips
     // are the same line instead of a double line.
+    // A gap that was asked for never disappears: 1 or more logical pixels is at least one screen pixel (at 50 % a gap of 1 would round to 0).
+    // Negative overlaps exactly one border; 0 is no gap.
     private static float GapPixels(int gapPx, float scale)
-        => gapPx < 0 ? -MathF.Max(1f, MathF.Round(scale)) : MathF.Round(gapPx * scale);
+        => gapPx < 0 ? -MathF.Max(1f, MathF.Round(scale)) : gapPx == 0 ? 0f : MathF.Max(1f, MathF.Round(gapPx * scale));
 
     // The slots of a row (pips, bars) must fill the box EXACTLY, so a row of pips is as wide as a bar of the same size, whatever the
     // gap (a negative one overlaps them) and whether the width divides by the number of slots: the pixels left over by the division go to

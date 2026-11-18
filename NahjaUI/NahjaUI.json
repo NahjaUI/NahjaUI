@@ -18,5 +18,5 @@
     "UI",
     "HUD"
   ],
-  "Changelog": "New: class support. Trackers made for a job now also work on its starting class (a Black Mage tracker on Thaumaturge), showing only the actions the class has already learned; actions that belong only to the job stay hidden until you unlock it. The tracker list of the menu shows them too. Appearance: Interface scale is now a list (50, 100, 150, 200, 300 %) and only scales what NahjaUI draws over the game, not the text of the menu; the menu text size goes up to 32 px. Fix: the menu text no longer grows with Interface scale."
+  "Changelog": "Changed: Interface scale now sets the size of everything NahjaUI draws over the game in screen pixels (100 % = one pixel per logical pixel) and no longer depends on the scale of Dalamud, so changing Dalamud's scale does not resize the HUD. Your saved value is converted once so the HUD keeps its size. The menu still follows Dalamud. Fix: a gap of 1 pixel or more between pips and between tracker icons never disappears at low scales (at 50 % a gap of 1 used to become 0). Interface scale goes up to 600 %."
 }

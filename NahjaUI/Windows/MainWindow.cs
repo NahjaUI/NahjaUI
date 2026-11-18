@@ -532,8 +532,8 @@ public class MainWindow : Window, IDisposable
                 ImGui.EndCombo();
             }
 
-            ImGui.TextColored(Theme.TextMuted, "Scales what NahjaUI draws over the game (bars, trackers, gauges, nameplates), on top of Dalamud's scale. Not this menu.");
-            ImGui.TextColored(Theme.TextMuted, "What matters is Dalamud's scale times this one: a whole number (1, 2, 3) keeps lines sharp, anything else may be a pixel off. Re-place your elements in Unlock mode after changing it.");
+            ImGui.TextColored(Theme.TextMuted, "Size of everything NahjaUI draws over the game (bars, trackers, gauges, nameplates), in screen pixels: 100 % is one pixel per logical pixel. Dalamud's scale does not change it, and it does not change this menu.");
+            ImGui.TextColored(Theme.TextMuted, "100, 200 and 300 % keep lines sharp; 150 % may be a pixel off. Re-place your elements in Unlock mode after changing it.");
 
             var inBar = config.ShowInServerBar;
             if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))
