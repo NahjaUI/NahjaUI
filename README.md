@@ -4,14 +4,16 @@ A complete, modular interface for Final Fantasy XIV, as a [Dalamud](https://gith
 
 You build it piece by piece. Switch on only what you want: everything else stays exactly as the game made it.
 
-> **Early version.** NahjaUI is in an early test phase. Things can break, and your settings may be lost between versions. Please report what you find (see below).
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20testers-5865F2?logo=discord&logoColor=white)](https://nahjaui.github.io/discord)
+
+> **Early version.** NahjaUI is in an early test phase. Things can break, and your settings may be lost between versions. Please report what you find, here or on our [Discord](https://nahjaui.github.io/discord).
 
 ## What it has
 
 - **HUD bars:** parameter bar (HP and MP), target, target of target, focus target and party list.
 - **Progress bars:** your casts and your target's, with a slidecast marker, plus a global cooldown bar that shows the queue and weave windows.
 - **Job gauges, status effects, nameplates and enmity list**, each one with its own style.
-- **Trackers:** pick the enhancements, enfeebling effects and cooldowns you want to see. Every job comes with ready-made presets.
+- **Trackers:** pick the Enhancements, Enfeeblements and cooldowns you want to see. Every job comes with ready-made presets.
 - **Profiles:** save, copy and share your whole setup.
 - **Shared style:** one set of colors and one corner rounding for the whole interface, with its own font family (Saira).
 
@@ -34,9 +36,13 @@ You build it piece by piece. Switch on only what you want: everything else stays
 - In **Trackers**, open the presets button to load the ready-made trackers for your job.
 - Turn on only the parts you want; the game keeps drawing everything you leave off.
 
+## Community and feedback
+
+Join the **[NahjaUI Discord](https://nahjaui.github.io/discord)** for news, early builds, bug reports and suggestions. It is the fastest way to reach us.
+
 ## Report a problem
 
-Please open an issue here: <https://github.com/NahjaUI/NahjaUI/issues>
+Post it in **#bug-reports** on the [Discord](https://nahjaui.github.io/discord), or open an issue here: <https://github.com/NahjaUI/NahjaUI/issues>
 
 It helps a lot if you tell us:
 
