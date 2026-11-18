@@ -17,6 +17,8 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
+    private static readonly int[] InterfaceScaleOptions = { 50, 100, 150, 200, 300 };
+
     private static readonly string[] Pages = { "General", "Trackers", "HUD bars", "Progress bars", "Job gauges", "Status effects", "Nameplates", "Enmity list", "Others", "Filters", "Tooltip", "Appearance", "Layout", "Profiles" };
 
     private readonly Plugin plugin;
@@ -494,7 +496,7 @@ public class MainWindow : Window, IDisposable
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 13, () =>
+        Widgets.Card("##card_theme", 14, () =>
         {
             Widgets.SectionLabel("Theme");
 
@@ -514,14 +516,24 @@ public class MainWindow : Window, IDisposable
 
             // Everything NahjaUI draws over the game (bars, trackers, gauges, nameplates, texts) gets bigger or smaller. It multiplies the scale
             // of Dalamud; the game's own HUD scale does not change it. The windows of NahjaUI keep the scale of Dalamud.
+            // Fixed steps, like the scale of Dalamud and the game: 50, 100, 150, 200 and 300 %.
             var scalePercent = (int)MathF.Round(config.InterfaceScale * 100f);
-            if (ImGui.SliderInt("Interface scale (%)", ref scalePercent, (int)(UiScale.MinInterface * 100f), (int)(UiScale.MaxInterface * 100f)))
+            if (ImGui.BeginCombo("Interface scale (%)", $"{scalePercent} %"))
             {
-                config.InterfaceScale = scalePercent / 100f;
-                plugin.RequestSave();
+                foreach (var option in InterfaceScaleOptions)
+                {
+                    if (ImGui.Selectable($"{option} %", option == scalePercent))
+                    {
+                        config.InterfaceScale = option / 100f;
+                        plugin.RequestSave();
+                    }
+                }
+
+                ImGui.EndCombo();
             }
 
-            ImGui.TextColored(Theme.TextMuted, "Makes everything NahjaUI draws over the game bigger or smaller, on top of the scale of Dalamud. Text uses the closest font size that exists.");
+            ImGui.TextColored(Theme.TextMuted, "Scales what NahjaUI draws over the game (bars, trackers, gauges, nameplates), on top of Dalamud's scale. Not this menu.");
+            ImGui.TextColored(Theme.TextMuted, "What matters is Dalamud's scale times this one: a whole number (1, 2, 3) keeps lines sharp, anything else may be a pixel off. Re-place your elements in Unlock mode after changing it.");
 
             var inBar = config.ShowInServerBar;
             if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))

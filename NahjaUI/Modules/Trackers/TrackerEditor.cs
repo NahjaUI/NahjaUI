@@ -368,7 +368,7 @@ internal sealed class TrackerEditor
 
         // A tracker passes the filter when it loads on every job or on the chosen one.
         bool Passes(TrackerRuntime tracker) =>
-            (filterJob is null || tracker.Definition.Load.JobIds.Count == 0 || tracker.Definition.Load.JobIds.Contains(filterJob.Value))
+            (filterJob is null || tracker.Definition.Load.JobIds.Count == 0 || tracker.Definition.Load.JobIds.Any(id => GameNames.JobMatches(filterJob.Value, id)))
             && (filterPvp is null || tracker.Definition.Load.Where == TrackerPvpMode.Everywhere
                 || (filterPvp.Value ? tracker.Definition.Load.Where == TrackerPvpMode.PvpOnly : tracker.Definition.Load.Where == TrackerPvpMode.PveOnly));
 

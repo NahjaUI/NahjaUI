@@ -792,6 +792,10 @@ internal sealed class TrackerEngine
             if (rule.IsAbility && rule.ActionId != 0 && GameNames.ActionLevel(rule.ActionId) > player.Level && !GameNames.IsRoleAction(rule.ActionId))
                 continue;
 
+            // An action of the job that the class does not have (Thaumaturge: the Black Mage ones) is not available until the job is unlocked.
+            if (rule.IsAbility && rule.ActionId != 0 && !GameNames.ActionUsableBy(player.JobId, rule.ActionId))
+                continue;
+
             var state = Match(rule, snapshot, player);
             if (state.Visible)
                 return state;
@@ -948,12 +952,12 @@ internal sealed class TrackerEngine
         if (tracker.Load.Where == TrackerPvpMode.PvpOnly && !inPvp)
             return false;
 
-        return job is null || tracker.Load.JobIds.Count == 0 || tracker.Load.JobIds.Contains(job.Value);
+        return job is null || tracker.Load.JobIds.Count == 0 || tracker.Load.JobIds.Any(id => GameNames.JobMatches(job.Value, id));
     }
 
     private static bool IsLoaded(TrackerLoadConditions load, UnitSnapshot player, ContextSnapshot context)
     {
-        if (load.JobIds.Count > 0 && !load.JobIds.Contains(player.JobId))
+        if (load.JobIds.Count > 0 && !load.JobIds.Any(id => GameNames.JobMatches(player.JobId, id)))
             return false;
 
         if (load.Where == TrackerPvpMode.PveOnly && context.InPvP)

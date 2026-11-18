@@ -39,7 +39,7 @@ internal sealed class OverlayFonts : IDisposable
     private static readonly int[] BuiltOverlaySizes = { 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 34, 36, 40, 42, 46, 48, 52, 56, 60, 64, 72 };
 
     /// <summary>The sizes the menu text can use. They are all prepared.</summary>
-    public static IReadOnlyList<int> MenuTextSizes { get; } = new[] { 12, 13, 14, 15, 16, 17, 18, 20 };
+    public static IReadOnlyList<int> MenuTextSizes { get; } = new[] { 12, 13, 14, 15, 16, 17, 18, 20, 22, 24, 26, 28, 32 };
 
     // Every size that is built: the overlay sizes plus the extra menu sizes.
     private static readonly float[] Sizes = BuiltOverlaySizes.Concat(MenuTextSizes).Distinct().OrderBy(size => size).Select(size => (float)size).ToArray();
@@ -71,9 +71,12 @@ internal sealed class OverlayFonts : IDisposable
     /// the UI scale, so never multiply it by ImGuiHelpers.GlobalScale before calling this. The "Interface scale" is applied here: the font chosen is
     /// the one closest to the size times that scale. Returns null (and changes nothing) when no font is ready yet; <c>using (null)</c> is fine in C#.
     /// </summary>
-    public IDisposable? PushClosest(OverlayFont font, float wantedPx)
+    public IDisposable? PushClosest(OverlayFont font, float wantedPx, bool applyInterfaceScale = true)
     {
-        wantedPx *= UiScale.Interface;
+        // The text of the menu windows passes false: the "Interface scale" is only for what NahjaUI draws over the game.
+        if (applyInterfaceScale)
+            wantedPx *= UiScale.Interface;
+
         var handle = FindClosest(GetSet(font), wantedPx);
 
         // The family is still loading: use the default one meanwhile.

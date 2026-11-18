@@ -204,6 +204,45 @@ internal static class GameNames
         return level;
     }
 
+    private static readonly Dictionary<(uint Job, uint Action), bool> ClassActions = new();
+
+    /// <summary>
+    /// Can the player use this action while on the given class or job? A base class (Thaumaturge) learns only the actions that belong to it;
+    /// the actions of its job (Black Mage) are not available until the job is unlocked, even at the same level. A job can use every action
+    /// of its starting class. Role and unowned actions are always allowed.
+    /// </summary>
+    public static bool ActionUsableBy(uint jobId, uint actionId)
+    {
+        if (ClassActions.TryGetValue((jobId, actionId), out var cached))
+            return cached;
+
+        var usable = true;
+        if (Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var action)
+            && action.ClassJob.RowId != 0
+            && Plugin.DataManager.GetExcelSheet<ClassJob>().TryGetRow(jobId, out var job))
+        {
+            // Only a base class (its own parent) is limited; a job keeps every action as before.
+            var parent = job.ClassJobParent.RowId;
+            if (parent == jobId)
+                usable = action.ClassJob.RowId == jobId;
+        }
+
+        ClassActions[(jobId, actionId)] = usable;
+        return usable;
+    }
+
+    /// <summary>True if the player's current class or job is the given job, or the starting class of the given job (Thaumaturge for Black Mage).</summary>
+    public static bool JobMatches(uint playerJobId, uint trackerJobId)
+    {
+        if (playerJobId == trackerJobId)
+            return true;
+
+        // A tracker of the job loads on its starting class (Black Mage tracker on Thaumaturge), and a tracker of the class loads on its jobs.
+        var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
+        return (sheet.TryGetRow(trackerJobId, out var trackerJob) && trackerJob.ClassJobParent.RowId == playerJobId)
+            || (sheet.TryGetRow(playerJobId, out var playerJob) && playerJob.ClassJobParent.RowId == trackerJobId);
+    }
+
     private static readonly Dictionary<uint, bool> RoleActions = new();
 
     /// <summary>
