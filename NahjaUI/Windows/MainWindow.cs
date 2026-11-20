@@ -144,18 +144,28 @@ public class MainWindow : Window, IDisposable
         lastSize = ImGui.GetWindowSize();
         TopRight = new Vector2(windowPos.X + lastSize.X, windowPos.Y);
 
+        // The animated background of the whole window, under everything (the title bar and the cards are drawn over it).
+        AnimatedBackground.Draw(
+            ImGui.GetWindowDrawList(),
+            windowPos,
+            windowPos + lastSize,
+            MathF.Round(Theme.WindowRounding * scale),
+            ImDrawFlags.RoundCornersAll,
+            plugin.Configuration.AnimatedBackground,
+            0.75f);
+
         // The title bar: icon and name at the left, arrow (minimize) and cross (close) at the right. It is also the handle to move the window.
         var titleHeight = DrawTitleBar(scale, windowPos);
         if (titleHeight < 0f)
             return;
 
-        // The content starts under the title bar.
-        ImGui.SetCursorPos(new Vector2(ImGui.GetStyle().WindowPadding.X, titleHeight));
+        // The content starts under the title bar, with the same margin as at the left and at the bottom.
+        ImGui.SetCursorPos(new Vector2(ImGui.GetStyle().WindowPadding.X, titleHeight + ImGui.GetStyle().WindowPadding.Y));
 
         // Padding of buttons and fields goes here, not in PreDraw, so the title bar buttons do not overlap.
         using var contentStyle = new ContentStyleScope();
 
-        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Sidebar))
+        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.WithAlpha(Theme.Sidebar, 0.62f)))
         using (var sidebar = ImRaii.Child("##nui_sidebar", new Vector2(200f * scale, 0f), false))
         {
             if (sidebar.Success)
@@ -168,7 +178,8 @@ public class MainWindow : Window, IDisposable
         var tabbedPage = plugin.Configuration.SelectedPage is "HUD bars" or "Progress bars" or "Nameplates" or "Status effects" or "Enmity list" or "Others" or "Layout";
         var contentFlags = tabbedPage ? ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse : ImGuiWindowFlags.None;
 
-        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Background))
+        // See-through: the animated background shows between the cards.
+        using (ImRaii.PushColor(ImGuiCol.ChildBg, Vector4.Zero))
         using (var content = ImRaii.Child("##nui_content", Vector2.Zero, false, contentFlags))
         {
             if (content.Success)
@@ -423,7 +434,7 @@ public class MainWindow : Window, IDisposable
         });
 
         // ---- Getting started
-        Widgets.Card("##card_start", 9, () =>
+        Widgets.Card("##card_start", 11, () =>
         {
             Widgets.SectionLabel("Getting started");
 
@@ -445,6 +456,13 @@ public class MainWindow : Window, IDisposable
 
             ImGui.SameLine();
             ImGui.TextColored(Theme.TextMuted, "or type /nui unlock");
+
+            ImGui.Spacing();
+            if (ImGui.Button("Run the setup again"))
+                plugin.OpenSetup();
+
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.TextMuted, "or type /nui setup");
 
             ImGui.Spacing();
             ImGui.TextColored(Theme.Accent, "4");
@@ -495,7 +513,7 @@ public class MainWindow : Window, IDisposable
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 11, () =>
+        Widgets.Card("##card_theme", 12, () =>
         {
             Widgets.SectionLabel("Theme");
 
@@ -543,6 +561,13 @@ public class MainWindow : Window, IDisposable
 
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Gives everyone a different invented name, yours included.");
+
+            var animated = config.AnimatedBackground;
+            if (ImGui.Checkbox("Animated background", ref animated))
+            {
+                config.AnimatedBackground = animated;
+                plugin.RequestSave();
+            }
 
             ImGui.Spacing();
             if (ImGui.Button("Reset window"))

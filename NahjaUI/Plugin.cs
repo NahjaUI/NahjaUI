@@ -58,6 +58,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private MainWindow MainWindow { get; init; }
     private MiniBarWindow MiniBar { get; init; }
+    private SetupWindow SetupWindow { get; init; }
     private UnlockOverlay UnlockOverlay { get; init; }
     internal OverlayFonts Fonts { get; init; }
     internal TrackerEngine TrackerSystem { get; init; }
@@ -89,13 +90,22 @@ public sealed class Plugin : IDalamudPlugin
     private bool wasUnlocked;
     private bool reopenWindowAfterUnlock;
     private bool reopenMiniBarAfterUnlock;
+    private bool reopenSetupAfterUnlock;
+
+    // The setup window opens by itself once per session while the configuration says it is pending.
+    private bool setupAutoOpened;
 
     public Plugin()
     {
         // A new install starts from the author's interface (see DefaultConfiguration); a settings file that already exists is never touched.
+        var isNewInstall = !PluginInterface.ConfigFile.Exists;
         NahjaUI.Core.Profiles.DefaultConfiguration.WriteIfMissing();
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+        // Only a new install gets the setup window; someone who already has settings never does (they can still open it from General).
+        if (isNewInstall)
+            Configuration.SetupPending = true;
 
         // A plain copy of the saved file when the plugin was updated (or the format must be converted), then the conversion itself.
         NahjaUI.Core.Profiles.ConfigSafety.BeforeUpdate(Configuration);
@@ -166,9 +176,12 @@ public sealed class Plugin : IDalamudPlugin
         MiniBar = new MiniBarWindow(this);
         WindowSystem.AddWindow(MiniBar);
 
+        SetupWindow = new SetupWindow(this);
+        WindowSystem.AddWindow(SetupWindow);
+
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open or close the NahjaUI window.\n/nui unlock \u2192 move the elements of the interface wherever you want; use it again to lock them."
+            HelpMessage = "Open or close the NahjaUI window.\n/nui unlock \u2192 move the elements of the interface wherever you want; use it again to lock them.\n/nui setup \u2192 run the setup again."
         });
 
         PluginInterface.UiBuilder.Draw += Draw;
@@ -212,6 +225,7 @@ public sealed class Plugin : IDalamudPlugin
     private void Draw()
     {
         Guard("unlock mode", FollowUnlockMode);
+        Guard("setup", AutoOpenSetup);
 
         BarGradient.Strength = System.Math.Clamp(Configuration.BarGradientPercent, 0, 200) / 100f;
 
@@ -310,8 +324,11 @@ public sealed class Plugin : IDalamudPlugin
         {
             reopenWindowAfterUnlock = MainWindow.IsOpen;
             reopenMiniBarAfterUnlock = MiniBar.IsOpen;
+            reopenSetupAfterUnlock = SetupWindow.IsOpen;
             MainWindow.IsOpen = false;
             MiniBar.IsOpen = false;
+            if (reopenSetupAfterUnlock)
+                SetupWindow.HideForUnlock();
         }
         else
         {
@@ -321,10 +338,27 @@ public sealed class Plugin : IDalamudPlugin
             if (reopenMiniBarAfterUnlock)
                 MiniBar.IsOpen = true;
 
+            if (reopenSetupAfterUnlock)
+                SetupWindow.ShowAfterUnlock();
+
             reopenWindowAfterUnlock = false;
             reopenMiniBarAfterUnlock = false;
+            reopenSetupAfterUnlock = false;
         }
     }
+
+    // Opens the setup window by itself, once, on a new install (when the player is in the game, not on the login screen).
+    private void AutoOpenSetup()
+    {
+        if (setupAutoOpened || !Configuration.SetupPending || !GameData.Current.IsLoggedIn)
+            return;
+
+        setupAutoOpened = true;
+        SetupWindow.Open();
+    }
+
+    /// <summary>Opens the setup window from its first step.</summary>
+    public void OpenSetup() => SetupWindow.Open();
 
     private void OnCommand(string command, string args)
     {
@@ -332,6 +366,12 @@ public sealed class Plugin : IDalamudPlugin
         if (argument == "unlock")
         {
             Layout.UnlockMode = !Layout.UnlockMode;
+            return;
+        }
+
+        if (argument == "setup")
+        {
+            OpenSetup();
             return;
         }
 

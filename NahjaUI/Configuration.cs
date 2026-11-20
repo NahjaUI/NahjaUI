@@ -61,6 +61,9 @@ public class Configuration : IPluginConfiguration
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
 
+    // Appearance page: the slow animated background of the setup window and the menu (a plain one when off).
+    public bool AnimatedBackground { get; set; } = true;
+
     // Appearance page: how much gradient the filled part of bars and pips has, from 0 (flat color) to 200 (100 is the default, see BarGradient).
     public int BarGradientPercent { get; set; } = 100;
 
@@ -104,6 +107,9 @@ public class Configuration : IPluginConfiguration
 
     // The box that describes an enhancement or enfeeblement under the mouse.
     public TooltipSettings Tooltip { get; set; } = new();
+
+    // True on a new install until the setup window is finished or skipped: it opens by itself while this is true.
+    public bool SetupPending { get; set; }
 
     // Test: the Black Mage "effect is active" triggers got the white pulse (applied once, then it is the user's choice).
     public bool BlackMagePulseTestApplied { get; set; }

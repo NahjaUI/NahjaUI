@@ -45,7 +45,8 @@ internal static class Widgets
         var scale = ImGuiHelpers.GlobalScale;
         var estimate = lines * ImGui.GetTextLineHeightWithSpacing() + 24f * scale;
 
-        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Card))
+        // A little see-through, so the animated background of the window shows behind the card.
+        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.WithAlpha(Theme.Card, 0.72f)))
             DrawBox(id, estimate, content, true);
 
         ImGui.Spacing();

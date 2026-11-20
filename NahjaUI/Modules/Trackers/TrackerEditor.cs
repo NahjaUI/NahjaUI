@@ -230,7 +230,7 @@ internal sealed class TrackerEditor
         var scale = ImGuiHelpers.GlobalScale;
         var width = ImGui.GetContentRegionAvail().X - 16f * scale;
 
-        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.Card))
+        using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.WithAlpha(Theme.Card, 0.72f)))
         using (var card = ImRaii.Child("##tracker_explorer", new Vector2(width, Math.Max(0f, height)), true))
         {
             if (card.Success)

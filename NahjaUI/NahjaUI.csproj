@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.6.4.0</Version>
+    <Version>0.6.5.0</Version>
     <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
     <Author>Nahja Stark</Author>
     <Name>NahjaUI</Name>
@@ -47,6 +47,8 @@ Join the testers on Discord: https://nahjaui.github.io/discord</Description>
     <EmbeddedResource Include="Assets\Auras\thunderhead.png" LogicalName="Aura.thunderhead.png" />
     <EmbeddedResource Include="Assets\Auras\firestarter_left.png" LogicalName="Aura.firestarter_left.png" />
     <EmbeddedResource Include="Assets\Auras\firestarter_right.png" LogicalName="Aura.firestarter_right.png" />
+    <EmbeddedResource Include="Assets\Auras\paradox_left.png" LogicalName="Aura.paradox_left.png" />
+    <EmbeddedResource Include="Assets\Auras\paradox_right.png" LogicalName="Aura.paradox_right.png" />
   </ItemGroup>
 
   <!-- The licence of the embedded font (SIL OFL) travels with the plugin. -->

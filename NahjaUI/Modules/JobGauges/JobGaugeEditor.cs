@@ -791,6 +791,28 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
         });
+
+        Widgets.Card("##card_gauge_blm_paradox", 6, () =>
+        {
+            Widgets.SectionLabel("Black Mage (Paradox)");
+
+            var show = settings.ShowParadoxAura;
+            if (ImGui.Checkbox("Show the Paradox auras##blmp", ref show))
+            {
+                settings.ShowParadoxAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Paradox auras (the box holds both spirals)", plugin.JobGaugeSystem.ParadoxElement.Layout);
+
+            var opacity = settings.ParadoxAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##blmp", ref opacity, 0.1f, 1f))
+            {
+                settings.ParadoxAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
+        });
     }
 
     // What goes inside the card of the Beast Gauge: the flash while Nascent Chaos is on (it changes the Beast Gauge, so it lives there).

@@ -22,14 +22,18 @@ internal sealed class HudBarModule : IDisposable
 {
     // The game's own bars: yours (HP and MP), the main part of the target info
     // (it includes the target of target) and the focus. The target's statuses (_TargetInfoBuffDebuff) are hidden only while
-    // our own enhancement or enfeeblement rows of the target frame are on. The target cursor (_TargetCursor) is left alone. This needs the target info set to separate parts in the game's HUD layout.
+    // our own enhancement or enfeeblement rows of the target frame are on. The target cursor (_TargetCursor) is left alone. With the target info set to one single window in the game's HUD layout, that window (_TargetInfo) is hidden whole.
     private const string NativePlayerBar = "_ParameterWidget";
     private const string NativeTargetBar = "_TargetInfoMainTarget";
     private const string NativeFocusBar = "_FocusTargetInfo";
 
     private const string NativeTargetStatuses = "_TargetInfoBuffDebuff";
 
-    private static readonly string[] NativeBars = { NativePlayerBar, NativeTargetBar, NativeFocusBar, NativeTargetStatuses };
+    // With "Display Target Info Independently" off in the game's HUD layout, the game draws the target as one single window
+    // (_TargetInfo: bar, statuses and cast bar together) and the separate parts above do not exist. It is hidden together with the bar.
+    private const string NativeTargetCombined = "_TargetInfo";
+
+    private static readonly string[] NativeBars = { NativePlayerBar, NativeTargetBar, NativeFocusBar, NativeTargetStatuses, NativeTargetCombined };
 
     // What is shown in the preview when the real unit is not there.
     private static readonly UnitSnapshot SamplePlayer = new(
@@ -273,6 +277,7 @@ internal sealed class HudBarModule : IDisposable
                 return frames.Player.Enabled;
 
             case NativeTargetBar:
+            case NativeTargetCombined:
                 return frames.Target.Enabled;
 
             case NativeFocusBar:

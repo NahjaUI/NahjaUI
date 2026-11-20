@@ -816,6 +816,9 @@ internal sealed class GameDataProvider : IDisposable
         if (BlackMageLearned(player, "Flare Star"))
             parts.Add(Pips("soul", gauge.AstralSoulStacks, 6));
 
+        // Not a row of the gauge: the Paradox marker (Paradox can be cast), read by the aura of the Black Mage. The rows are matched by name, so this one is never drawn as a row.
+        parts.Add(Pips("paradox", gauge.IsParadoxActive ? 1 : 0, 1));
+
         return parts.ToArray();
     }
 

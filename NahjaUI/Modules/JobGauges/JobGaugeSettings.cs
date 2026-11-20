@@ -217,6 +217,11 @@ public class BlackMageAuraSettings
     public bool ShowFirestarterAura { get; set; } = true;
 
     public float FirestarterAuraOpacity { get; set; } = 1f;
+
+    /// <summary>The two ice and fire spirals at both sides of the character while the Paradox marker of the gauge is on (Paradox can be cast). No timer.</summary>
+    public bool ShowParadoxAura { get; set; } = true;
+
+    public float ParadoxAuraOpacity { get; set; } = 1f;
 }
 
 /// <summary>The Paladin gauge: the Oath Gauge. Holy Sheltron and Intervention cost 50.</summary>

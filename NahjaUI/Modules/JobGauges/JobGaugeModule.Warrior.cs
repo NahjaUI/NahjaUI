@@ -70,7 +70,7 @@ internal sealed partial class JobGaugeModule
     {
         "primal_rend_left", "primal_rend_right", "primal_ruination_left", "primal_ruination_right",
         "primal_rend_left_gray", "primal_rend_right_gray", "primal_ruination_left_gray", "primal_ruination_right_gray",
-        "wrathful", "wrathful_gray", "thunderhead", "firestarter_left", "firestarter_right"
+        "wrathful", "wrathful_gray", "thunderhead", "firestarter_left", "firestarter_right", "paradox_left", "paradox_right"
     };
 
     // The width of the Primal Wrath arch over its height (the image is 640 x 240).

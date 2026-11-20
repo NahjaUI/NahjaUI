@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
@@ -10,12 +11,16 @@ namespace NahjaUI.Modules.JobGauges;
 /// <summary>
 /// The auras of the Black Mage procs. They have no timer and no desaturated copy: each one is drawn while the status of the player is on and it
 /// is not drawn otherwise. Thunderhead (the next Thunder is instant) is one arch above the character; Firestarter (the next Fire III is instant
-/// and free) is two arcs, one at each side, like the wings of the Warrior.
+/// and free) is two arcs, one at each side, like the wings of the Warrior. Paradox is not a status but a marker of the gauge: its aura (two spirals of
+/// fire and ice, one at each side) is drawn while the marker is on.
 /// </summary>
 internal sealed partial class JobGaugeModule
 {
     // The width of the Thunderhead arch over its height (the image is 960 x 360).
     private const float ThunderheadAspect = 960f / 360f;
+
+    // The width of each Paradox spiral over its height (the images are 240 x 720).
+    private const float ParadoxAspect = 240f / 720f;
 
     private static uint thunderheadId;
     private static uint firestarterId;
@@ -24,6 +29,8 @@ internal sealed partial class JobGaugeModule
     public LayoutElement ThunderheadElement { get; private set; } = null!;
 
     public LayoutElement FirestarterElement { get; private set; } = null!;
+
+    public LayoutElement ParadoxElement { get; private set; } = null!;
 
     private void RegisterThunderheadElement()
     {
@@ -48,7 +55,22 @@ internal sealed partial class JobGaugeModule
             Width = 380,
             Height = 270
         });
+
+        // Wider than the Firestarter box, so the two auras can be on together without covering each other.
+        ParadoxElement = plugin.Layout.Register("gauge.blm.paradox", "Black Mage Paradox auras", new ElementLayout
+        {
+            ScreenAnchor = AnchorPoint.Center,
+            SelfAnchor = AnchorPoint.Center,
+            OffsetX = 0,
+            OffsetY = 20,
+            Width = 520,
+            Height = 300
+        });
     }
+
+    // The Paradox marker of the Black Mage gauge (the snapshot has it as a part that no row of the gauge uses).
+    private static bool ParadoxActive(GameSnapshot snapshot)
+        => snapshot.ExtraGauge is { JobId: 25u } extra && extra.Parts.Any(p => p.Id == "paradox" && p.Value >= 1f);
 
     private static void FindBlackMageIds()
     {
@@ -76,7 +98,7 @@ internal sealed partial class JobGaugeModule
 
     // The real statuses while playing; a sample of both while the page is open or the elements are unlocked, so they can be placed.
     // They work for the Thaumaturge too (isBlackMage counts the class before the job): the procs come before the job does.
-    private void DrawBlackMageAuras(BlackMageAuraSettings settings, UnitSnapshot? player, uint previewJob, bool unlock, bool isBlackMage)
+    private void DrawBlackMageAuras(BlackMageAuraSettings settings, UnitSnapshot? player, uint previewJob, bool unlock, bool isBlackMage, bool paradoxActive)
     {
         var shown = previewJob == BlackMageJobId || (isBlackMage && (unlock || player is not null));
         if (!shown)
@@ -93,6 +115,9 @@ internal sealed partial class JobGaugeModule
 
         if (settings.ShowFirestarterAura && firestarter)
             Cover(sample, () => DrawFirestarterAura(settings), FirestarterElement);
+
+        if (settings.ShowParadoxAura && (sample || paradoxActive))
+            Cover(sample, () => DrawParadoxAura(settings), ParadoxElement);
     }
 
     // The arch keeps the proportions of its image inside the box.
@@ -126,6 +151,26 @@ internal sealed partial class JobGaugeModule
 
         var width = MathF.Min(MathF.Round(size.Y * AuraAspect), MathF.Round(size.X / 2f));
         var tint = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, Math.Clamp(settings.FirestarterAuraOpacity, 0f, 1f)));
+        var end = pos + size;
+        var drawList = ImGui.GetBackgroundDrawList();
+
+        drawList.AddImage(left.Handle, pos, new Vector2(pos.X + width, end.Y), new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
+        drawList.AddImage(right.Handle, new Vector2(end.X - width, pos.Y), end, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
+    }
+
+    // The two Paradox spirals: one at the left edge of the box and the mirrored one at the right edge, each as tall as the box (images of 1:3).
+    private void DrawParadoxAura(BlackMageAuraSettings settings)
+    {
+        if (!LayoutManager.IsShownNow(ParadoxElement)
+            || !auraTextures.TryGetValue("paradox_left", out var left) || !auraTextures.TryGetValue("paradox_right", out var right))
+            return;
+
+        var (pos, size) = LayoutManager.GetRect(ParadoxElement.Layout);
+        if (size.X < 2f || size.Y < 2f)
+            return;
+
+        var width = MathF.Min(MathF.Round(size.Y * ParadoxAspect), MathF.Round(size.X / 2f));
+        var tint = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, Math.Clamp(settings.ParadoxAuraOpacity, 0f, 1f)));
         var end = pos + size;
         var drawList = ImGui.GetBackgroundDrawList();
 

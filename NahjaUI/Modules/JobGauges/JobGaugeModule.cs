@@ -544,6 +544,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             WarriorWrathElement.IsHidden = true;
             ThunderheadElement.IsHidden = true;
             FirestarterElement.IsHidden = true;
+            ParadoxElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -582,6 +583,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         var blackMageAura = plugin.Configuration.JobGauges.BlackMage;
         ThunderheadElement.IsHidden = !isBlackMage || !blackMageAura.ShowThunderheadAura;
         FirestarterElement.IsHidden = !isBlackMage || !blackMageAura.ShowFirestarterAura;
+        ParadoxElement.IsHidden = !isBlackMage || !blackMageAura.ShowParadoxAura;
 
         var isPaladin = player is null || player.JobId == PaladinJobId;
         PaladinElement.IsHidden = !isPaladin;
@@ -635,8 +637,8 @@ internal sealed partial class JobGaugeModule : IDisposable
             }
         }
 
-        // The auras of the Black Mage procs (Thunderhead and Firestarter).
-        DrawBlackMageAuras(blackMageAura, player, previewJob, unlock, isBlackMage);
+        // The auras of the Black Mage procs (Thunderhead and Firestarter) and of its Paradox marker.
+        DrawBlackMageAuras(blackMageAura, player, previewJob, unlock, isBlackMage, ParadoxActive(snapshot));
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)

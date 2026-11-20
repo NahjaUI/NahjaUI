@@ -11,6 +11,9 @@ internal static class PreviewBadge
     /// <summary>The height of the letters of the mark, in logical pixels (like the size of every text of the plugin: the fonts are built already scaled).</summary>
     private const float LetterHeightPx = 12f;
 
+    /// <summary>The space between the mark and the top of the element, in logical pixels.</summary>
+    private const float GapPx = 10f;
+
     /// <summary>Draws "Preview" just above <paramref name="boxTop"/> (the top left corner of the element).</summary>
     public static void Draw(ImDrawListPtr drawList, Vector2 boxTop)
     {
@@ -23,12 +26,12 @@ internal static class PreviewBadge
         {
             using var face = fonts.PushCap(OverlayFont.NahjaDisplay, LetterHeightPx);
             var letters = face.Measure(text);
-            face.Draw(drawList, new Vector2(boxTop.X, boxTop.Y - letters.Y - 2f * scale), text, color);
+            face.Draw(drawList, new Vector2(boxTop.X, boxTop.Y - letters.Y - GapPx * scale), text, color);
             return;
         }
 
         // The fonts are not there yet: the default font of ImGui.
         var size = ImGui.CalcTextSize(text);
-        OutlinedText.Draw(drawList, new Vector2(boxTop.X, boxTop.Y - size.Y - 2f * scale), text, color);
+        OutlinedText.Draw(drawList, new Vector2(boxTop.X, boxTop.Y - size.Y - GapPx * scale), text, color);
     }
 }
