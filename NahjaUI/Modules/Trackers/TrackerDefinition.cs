@@ -100,6 +100,9 @@ public class TrackerRule
     // The three effects of a trigger: applied whenever the trigger matches.
     public bool Glow { get; set; }
 
+    /// <summary>A soft white pulse over the icon, while this trigger decides (for triggers that mean "the effect is active", to tell it apart from a recharge).</summary>
+    public bool Pulse { get; set; }
+
     /// <summary>A red mask over the icon (the border stays black).</summary>
     public bool Red { get; set; }
 

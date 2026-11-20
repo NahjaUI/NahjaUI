@@ -47,15 +47,22 @@ internal sealed class StatusEffectsModule : IDisposable
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeWindows, OnNativePreDraw);
     }
 
-    private LayoutElement Register(string id, string name, int offsetY) => plugin.Layout.Register(id, name, new ElementLayout
+    private LayoutElement Register(string id, string name, int offsetY)
     {
-        ScreenAnchor = AnchorPoint.TopRight,
-        SelfAnchor = AnchorPoint.TopRight,
-        OffsetX = -260,
-        OffsetY = 20 + offsetY,
-        Width = 350,
-        Height = 24
-    });
+        var element = plugin.Layout.Register(id, name, new ElementLayout
+        {
+            ScreenAnchor = AnchorPoint.TopRight,
+            SelfAnchor = AnchorPoint.TopRight,
+            OffsetX = -260,
+            OffsetY = 20 + offsetY,
+            Width = 350,
+            Height = 24
+        });
+
+        // The size is recomputed every frame from the icon settings, so it is not edited in unlock mode.
+        element.SizeIsAutomatic = true;
+        return element;
+    }
 
     public void Dispose()
     {

@@ -28,6 +28,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     // Job ids of the game (White Mage 24, Warrior 21).
     private const uint WhiteMageJobId = 24;
     private const uint WarriorJobId = 21;
+    private const uint BlackMageJobId = 25;
 
     // The game's own Paladin gauge.
     private const string NativePaladinGauge = "JobHudPLD0";
@@ -165,6 +166,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         });
 
         RegisterWarriorElements();
+        RegisterThunderheadElement();
 
         PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
         {
@@ -540,6 +542,8 @@ internal sealed partial class JobGaugeModule : IDisposable
             WarriorTempestElement.IsHidden = true;
             WarriorAurasElement.IsHidden = true;
             WarriorWrathElement.IsHidden = true;
+            ThunderheadElement.IsHidden = true;
+            FirestarterElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -572,6 +576,12 @@ internal sealed partial class JobGaugeModule : IDisposable
         WarriorTempestElement.IsHidden = !isWarrior || !warriorSettings.ShowSurgingTempest;
         WarriorAurasElement.IsHidden = !isWarrior || !warriorSettings.ShowProcAuras;
         WarriorWrathElement.IsHidden = !isWarrior || !warriorSettings.ShowWrathAura;
+
+        // Thunderhead comes before the job does, so the Thaumaturge shows its aura too (the gauge of the job does not exist until the job).
+        var isBlackMage = player is null || NahjaUI.Game.GameNames.ProfileJobId(player.JobId) == BlackMageJobId;
+        var blackMageAura = plugin.Configuration.JobGauges.BlackMage;
+        ThunderheadElement.IsHidden = !isBlackMage || !blackMageAura.ShowThunderheadAura;
+        FirestarterElement.IsHidden = !isBlackMage || !blackMageAura.ShowFirestarterAura;
 
         var isPaladin = player is null || player.JobId == PaladinJobId;
         PaladinElement.IsHidden = !isPaladin;
@@ -624,6 +634,9 @@ internal sealed partial class JobGaugeModule : IDisposable
                 Cover(sample, () => DrawWarrior(warrior, gauge, warriorState), WarriorCoverElements(warrior));
             }
         }
+
+        // The auras of the Black Mage procs (Thunderhead and Firestarter).
+        DrawBlackMageAuras(blackMageAura, player, previewJob, unlock, isBlackMage);
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)

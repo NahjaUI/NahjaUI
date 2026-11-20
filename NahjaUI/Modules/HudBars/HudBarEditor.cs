@@ -321,7 +321,7 @@ internal sealed class HudBarEditor
     // What is only about the party: space between bars, MP bar, and how the targeted member is marked.
     private void DrawPartyOptions(PartyListSettings party)
     {
-        Widgets.Card("##card_pf_options", 31, () =>
+        Widgets.Card("##card_pf_options", 40, () =>
         {
             Widgets.SectionLabel("Party options");
 
@@ -432,6 +432,57 @@ internal sealed class HudBarEditor
                 if (ImGui.InputInt("Cutscene icon: offset Y (px)", ref cutsceneOffsetY, 1, 5))
                 {
                     party.CutsceneIconOffsetY = -Math.Clamp(cutsceneOffsetY, -500, 500);
+                    plugin.RequestSave();
+                }
+            }
+
+            // The icon of the raise that is being cast on a dead member: it is placed like the cutscene icon but sits behind the text.
+            ImGui.Spacing();
+            var showRaise = party.ShowRaiseIcon;
+            if (ImGui.Checkbox("Show the raise that is being cast on a dead member", ref showRaise))
+            {
+                party.ShowRaiseIcon = showRaise;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The text of a dead member changes from Dead to Raising and the icon of the action being cast (Raise, Resurrection, Ascend, Egeiro, Verraise) shows behind it. It only knows the casts of members of your party that the game has loaded near you.");
+
+            if (party.ShowRaiseIcon)
+            {
+                var raiseSize = party.RaiseIconSizePx;
+                if (ImGui.SliderInt("Raise icon size (px)", ref raiseSize, 8, 64))
+                {
+                    party.RaiseIconSizePx = raiseSize;
+                    plugin.RequestSave();
+                }
+
+                var raiseBarAnchor = party.RaiseIconBarAnchor;
+                if (EnumCombo("Raise icon: anchor on the bar", ref raiseBarAnchor, point => point.Label()))
+                {
+                    party.RaiseIconBarAnchor = raiseBarAnchor;
+                    plugin.RequestSave();
+                }
+
+                var raiseSelfAnchor = party.RaiseIconSelfAnchor;
+                if (EnumCombo("Raise icon: anchor of the icon", ref raiseSelfAnchor, point => point.Label()))
+                {
+                    party.RaiseIconSelfAnchor = raiseSelfAnchor;
+                    plugin.RequestSave();
+                }
+
+                var raiseOffsetX = party.RaiseIconOffsetX;
+                if (ImGui.InputInt("Raise icon: offset X (px)", ref raiseOffsetX, 1, 5))
+                {
+                    party.RaiseIconOffsetX = Math.Clamp(raiseOffsetX, -500, 500);
+                    plugin.RequestSave();
+                }
+
+                // Up is plus (the saved value counts downwards).
+                var raiseOffsetY = -party.RaiseIconOffsetY;
+                if (ImGui.InputInt("Raise icon: offset Y (px)", ref raiseOffsetY, 1, 5))
+                {
+                    party.RaiseIconOffsetY = -Math.Clamp(raiseOffsetY, -500, 500);
                     plugin.RequestSave();
                 }
             }

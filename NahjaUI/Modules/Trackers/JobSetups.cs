@@ -1224,8 +1224,10 @@ internal static class JobSetups
     private static void BlackMageRotation(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The Thunder DoT always up, then what the other buttons give (Firestarter, Thunderhead) and Paradox.
+        // Only one Thunder can be on an enemy at a time: the single-target ones and the area ones (Thunder II, Thunder IV, High Thunder II) replace
+        // each other, so they are all in this one tracker (newest first; the icon is the one of the Thunder that is on).
         // Flare Star and the Polyglot spells depend on the gauge.
-        b.Enfeeblement(row, "High Thunder", "Thunder III", "Thunder");
+        b.Enfeeblement(row, "High Thunder", "High Thunder II", "Thunder III", "Thunder IV", "Thunder II", "Thunder");
         b.Enhancement(row, "Firestarter");
         b.Enhancement(row, "Thunderhead");
         b.Step(row, "Paradox");

@@ -28,6 +28,9 @@ public class JobGaugesSettings
 
     public SageGaugeSettings Sage { get; set; } = new();
 
+    /// <summary>The Thunderhead aura of the Black Mage (the rest of its gauge is the generic one, see Extra).</summary>
+    public BlackMageAuraSettings BlackMage { get; set; } = new();
+
     /// <summary>The jobs that use the generic gauge (melee, physical ranged and casters), by abbreviation.</summary>
     public ExtraGaugesSettings Extra { get; set; } = new();
 
@@ -200,6 +203,20 @@ public class WarriorGaugeSettings : BarGaugeSettings
     public int ComboRefreshSeconds { get; set; }
 
     public Vector4 ComboRefreshColor { get; set; } = new(0.92f, 0.22f, 0.16f, 1f);
+}
+
+/// <summary>The aura of the Black Mage: an arch above the character while Thunderhead is on (the next Thunder is instant). It has no timer: it is there or it is not.</summary>
+[Serializable]
+public class BlackMageAuraSettings
+{
+    public bool ShowThunderheadAura { get; set; } = true;
+
+    public float ThunderheadAuraOpacity { get; set; } = 1f;
+
+    /// <summary>The two fire arcs at both sides of the character while Firestarter is on (the next Fire III is instant and free). No timer.</summary>
+    public bool ShowFirestarterAura { get; set; } = true;
+
+    public float FirestarterAuraOpacity { get; set; } = 1f;
 }
 
 /// <summary>The Paladin gauge: the Oath Gauge. Holy Sheltron and Intervention cost 50.</summary>

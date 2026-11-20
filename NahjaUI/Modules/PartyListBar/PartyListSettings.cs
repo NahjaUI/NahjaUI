@@ -299,6 +299,25 @@ public class PartyListSettings
 
     public int CutsceneIconOffsetY { get; set; }
 
+    /// <summary>
+    /// While someone of the party is casting a raise on a dead member, his text changes from "Dead" to "Raising" and the game's icon of that action
+    /// shows behind the text. It only knows casts of members of your party that the game has loaded near you.
+    /// </summary>
+    public bool ShowRaiseIcon { get; set; } = true;
+
+    /// <summary>Size of the raise icon in pixels.</summary>
+    public int RaiseIconSizePx { get; set; } = 20;
+
+    // Where the raise icon goes, like the cutscene icon: a point of the icon goes on a point of the member's bar, then the offsets move it
+    // (the saved Y counts downwards). It sits behind the text.
+    public AnchorPoint RaiseIconBarAnchor { get; set; } = AnchorPoint.Center;
+
+    public AnchorPoint RaiseIconSelfAnchor { get; set; } = AnchorPoint.Center;
+
+    public int RaiseIconOffsetX { get; set; }
+
+    public int RaiseIconOffsetY { get; set; }
+
     /// <summary>The enhancements of each member, at the left of the bar by default.</summary>
     public StatusRowSettings Enhancements { get; set; } = StatusRowSettings.CreateEnhancements();
 

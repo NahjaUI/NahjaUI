@@ -617,13 +617,14 @@ internal sealed class GameDataProvider : IDisposable
             23 => BuildBard(),
             31 => BuildMachinist(),
             38 => BuildDancer(),
-            25 => BuildBlackMage(player),
+            25 or 7 => BuildBlackMage(player),    // Thaumaturge has the same gauge, with only what it has learned so far
             27 => BuildSummoner(),
             42 => BuildPictomancer(),
             _ => null
         };
 
-        return parts is null ? null : new ExtraGaugeSnapshot(player.JobId, parts);
+        // The Thaumaturge (7) uses the gauge of the Black Mage (25).
+        return parts is null ? null : new ExtraGaugeSnapshot(player.JobId == 7 ? 25u : player.JobId, parts);
     }
 
     private static GaugePartSnapshot[] BuildMonk()
@@ -787,24 +788,50 @@ internal sealed class GameDataProvider : IDisposable
     {
         var gauge = Plugin.JobGauges.Get<BLMGauge>();
 
-        // Astral Fire (status 165) or Umbral Ice (status 166): the stacks are in the gauge, the seconds in the status.
+        // Astral Fire or Umbral Ice: the stacks are in the gauge. They do not expire (since patch 7.2), so there is no time to show.
+        // The row only has as many pips as stacks the job can hold at its level (Aspect Mastery: 1 stack from the start, 2 at level 20, 3 at level 35),
+        // so the pips fill the whole width. Without an aspect the pips are empty.
         var fire = gauge.InAstralFire;
         var ice = gauge.InUmbralIce;
         var stacks = fire ? gauge.AstralFireStacks : ice ? gauge.UmbralIceStacks : 0;
-        var status = player.Statuses.FirstOrDefault(s => s.Id == (fire ? 165u : 166u));
-        var text = (fire || ice) && status is { RemainingTime: > 0f } ? Secs(status.RemainingTime * 1000f) : null;
+        var maxStacks = player.Level >= 35 ? 3 : player.Level >= 20 ? 2 : 1;
 
-        // The game counts the Polyglot timer down from 30 seconds while Enochian is on.
-        var polyglot = gauge.PolyglotStacks;
-        var partial = gauge.IsEnochianActive && polyglot < 3 ? Math.Clamp((30000f - gauge.EnochianTimer) / 30000f, 0f, 1f) : 0f;
+        var parts = new List<GaugePartSnapshot> { Pips("element", stacks, maxStacks, 0f, null, fire ? 0 : 1) };
 
-        return new[]
+        // The other rows only exist once the player can use them: the level is high enough AND the action that gives or spends them is learned
+        // (a Thaumaturge has not learned the actions of the Black Mage). A row that is not there is not drawn.
+        if (BlackMageLearned(player, "Umbral Soul"))
+            parts.Add(Pips("hearts", gauge.UmbralHearts, 3));
+
+        // Polyglot: 1 stack from level 70 (Foul), 2 from level 80 and 3 from level 98. The game counts the Polyglot timer down from 30 seconds while Enochian is on.
+        if (BlackMageLearned(player, "Foul"))
         {
-            Pips("element", stacks, 3, 0f, text, fire ? 0 : ice ? 1 : 2),
-            Pips("hearts", gauge.UmbralHearts, 3),
-            Pips("polyglot", polyglot, 3, partial),
-            Pips("soul", gauge.AstralSoulStacks, 6)
-        };
+            var maxPolyglot = player.Level >= 98 ? 3 : player.Level >= 80 ? 2 : 1;
+            var polyglot = Math.Min((int)gauge.PolyglotStacks, maxPolyglot);
+            var partial = gauge.IsEnochianActive && polyglot < maxPolyglot ? Math.Clamp((30000f - gauge.EnochianTimer) / 30000f, 0f, 1f) : 0f;
+            parts.Add(Pips("polyglot", polyglot, maxPolyglot, partial));
+        }
+
+        // Astral Soul: from level 100 (Flare Star).
+        if (BlackMageLearned(player, "Flare Star"))
+            parts.Add(Pips("soul", gauge.AstralSoulStacks, 6));
+
+        return parts.ToArray();
+    }
+
+    // The Black Mage actions that unlock the rows of the gauge, found by name once.
+    private static readonly Dictionary<string, uint> BlackMageActionIds = new();
+
+    // The action is learned: the level of the player (the one the game uses, with the sync) reaches it and the class (not the Thaumaturge) has it.
+    private static bool BlackMageLearned(UnitSnapshot player, string actionName)
+    {
+        if (!BlackMageActionIds.TryGetValue(actionName, out var id))
+        {
+            id = NahjaUI.Modules.Trackers.TrackerPresets.FindAction(actionName, 25);
+            BlackMageActionIds[actionName] = id;
+        }
+
+        return id != 0 && GameNames.ActionLevel(id) <= player.Level && GameNames.ActionUsableBy(player.JobId, id);
     }
 
     private GaugePartSnapshot[] BuildSummoner()
@@ -1032,7 +1059,7 @@ internal sealed class GameDataProvider : IDisposable
         if (!chara.IsCasting)
             return null;
 
-        return new CastSnapshot(chara.CastActionId, chara.CurrentCastTime, chara.TotalCastTime, chara.IsCastInterruptible, chara.CastActionType);
+        return new CastSnapshot(chara.CastActionId, chara.CurrentCastTime, chara.TotalCastTime, chara.IsCastInterruptible, chara.CastActionType, (uint)(ulong)chara.CastTargetObjectId);
     }
 
     private unsafe IReadOnlyList<StatusSnapshot> ToStatuses(uint unitId, StatusList statusList)
@@ -1233,8 +1260,10 @@ internal sealed class GameDataProvider : IDisposable
     private IReadOnlyList<UnitSnapshot> BuildParty()
     {
         var partyList = Plugin.PartyList;
+
+        // A cross-world party outside of a duty: the game keeps its members in its cross-world list, not in the normal party list.
         if (partyList.Length == 0)
-            return Array.Empty<UnitSnapshot>();
+            return BuildCrossRealmParty();
 
         var result = new List<UnitSnapshot>(partyList.Length);
 
@@ -1243,6 +1272,74 @@ internal sealed class GameDataProvider : IDisposable
 
         // The game's own party list has its own order (the "sort" option of the game: you first, by role...). The party list of
         // Dalamud does not follow it, so the position of each member in the game's list is read and used here.
+        var order = ReadGameListOrder();
+        if (order is not null && result.Count > 1)
+            return result.OrderBy(unit => order.TryGetValue(unit.EntityId, out var position) ? position : int.MaxValue).ToList();
+
+        return result;
+    }
+
+    // The members of a cross-world party (the group of the local player in the game's cross-world list). The game gives each one his name, job, level
+    // and entity id. HP, statuses and casts only exist for the ones whose character is loaded next to you (found by entity id); the others
+    // are drawn like the game draws them: name and job, no HP, as "Out of range".
+    private unsafe IReadOnlyList<UnitSnapshot> BuildCrossRealmParty()
+    {
+        var proxy = FFXIVClientStructs.FFXIV.Client.UI.Info.InfoProxyCrossRealm.Instance();
+        if (proxy == null || !proxy->IsInCrossRealmParty)
+            return Array.Empty<UnitSnapshot>();
+
+        var groups = proxy->CrossRealmGroups;
+        var groupIndex = proxy->LocalPlayerGroupIndex;
+        if (groupIndex >= groups.Length)
+            return Array.Empty<UnitSnapshot>();
+
+        var group = groups[groupIndex];
+        var count = Math.Min((int)group.GroupMemberCount, group.GroupMembers.Length);
+        var result = new List<UnitSnapshot>(count);
+        var localId = Plugin.ObjectTable.LocalPlayer?.EntityId ?? 0u;
+
+        for (var i = 0; i < count; i++)
+        {
+            var member = group.GroupMembers[i];
+            if (member.EntityId == 0)
+                continue;
+
+            try
+            {
+                // A member whose character is loaded gets everything the game has (HP, statuses, cast).
+                var loaded = Plugin.ObjectTable.SearchByEntityId(member.EntityId) is IBattleChara chara ? ToUnit(chara) : null;
+                if (loaded is not null)
+                {
+                    result.Add(loaded);
+                    continue;
+                }
+
+                result.Add(new UnitSnapshot(
+                    member.EntityId,
+                    StreamerMode.Name(CleanName(member.NameString), true),
+                    member.ClassJobId,
+                    member.Level,
+                    0u, 0u, 0u, 0u,
+                    false,
+                    null,
+                    Array.Empty<StatusSnapshot>(),
+                    Presence: Presence.OutOfRange));
+            }
+            catch (Exception ex)
+            {
+                // One member that cannot be read is left out; it never breaks the rest of the snapshot.
+                Plugin.Log.Warning(ex, "NahjaUI: a cross-world party member could not be read.");
+            }
+        }
+
+        // You are in your own list; if the game's list did not have you, you go first.
+        if (localId != 0 && result.Count > 0 && !result.Any(unit => unit.EntityId == localId) && Plugin.ObjectTable.LocalPlayer is { } me)
+        {
+            var self = ToUnit(me);
+            if (self is not null)
+                result.Insert(0, self);
+        }
+
         var order = ReadGameListOrder();
         if (order is not null && result.Count > 1)
             return result.OrderBy(unit => order.TryGetValue(unit.EntityId, out var position) ? position : int.MaxValue).ToList();

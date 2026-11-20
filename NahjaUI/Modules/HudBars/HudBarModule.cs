@@ -302,8 +302,8 @@ internal sealed class HudBarModule : IDisposable
         // The HP bar and the MP bar are two things: each one is on or off for the job you play. A box that is off
         // cannot be moved in unlock mode.
         var player = snapshot.IsLoggedIn ? snapshot.Player : null;
-        var hpOn = frames.Player.Enabled && (player is null || frames.Player.IsHpOn(player.JobId));
-        var mpOn = frames.Player.Enabled && (player is null || frames.Player.IsMpOn(player.JobId));
+        var hpOn = frames.Player.Enabled && (player is null || frames.Player.IsHpOn(GameNames.ProfileJobId(player.JobId)));
+        var mpOn = frames.Player.Enabled && (player is null || frames.Player.IsMpOn(GameNames.ProfileJobId(player.JobId)));
 
         PlayerElement.IsHidden = player is not null && !hpOn;
 

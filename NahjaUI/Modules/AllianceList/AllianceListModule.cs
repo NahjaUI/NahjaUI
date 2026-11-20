@@ -170,7 +170,7 @@ internal sealed class AllianceListModule : IDisposable
         }
 
         var scale = UiScale.Overlay;
-        var (pos, size) = LayoutManager.GetRect(AllianceElement.Layout);
+        var (_, size) = LayoutManager.GetRect(AllianceElement.Layout);
         var gap = MathF.Round(settings.SpacingPx * scale);
         var columns = Math.Clamp(settings.Columns, 1, Math.Max(1, members.Count));
         var rows = (members.Count + columns - 1) / columns;
@@ -178,6 +178,9 @@ internal sealed class AllianceListModule : IDisposable
 
         // The whole grid is one box for the unlock mode.
         var box = new Vector2(columns * size.X + (columns - 1) * gap, rows * size.Y + (rows - 1) * gap);
+
+        // The anchors apply to the whole grid, not to its first cell.
+        var pos = LayoutManager.GetBoxPos(AllianceElement.Layout, box);
 
         for (var i = 0; i < members.Count; i++)
         {

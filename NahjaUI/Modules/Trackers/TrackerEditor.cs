@@ -281,8 +281,8 @@ internal sealed class TrackerEditor
         {
             ImGui.TextColored(Theme.TextMuted, "Add the trackers of a job");
 
-            // The preset of the job you are playing first, then the others in the order of the game's job list.
-            var myPreset = TrackerPresets.NameForJob(plugin.GameData.Current.Player?.JobId ?? 0);
+            // The preset of the job you are playing (or of the job of your class: Black Mage for Thaumaturge) first, then the others in the order of the game's job list.
+            var myPreset = TrackerPresets.NameForJob(GameNames.ProfileJobId(plugin.GameData.Current.Player?.JobId ?? 0));
             var ordered = TrackerPresets.Names.OrderBy(name => name == myPreset ? 0 : 1).ToArray();
 
             foreach (var presetName in ordered)
@@ -1536,6 +1536,7 @@ internal sealed class TrackerEditor
 
                 // Effects: applied whenever this trigger matches.
                 rule.Glow = EffectCheckbox("Glow", rule.Glow);
+                rule.Pulse = EffectCheckbox("Pulse", rule.Pulse);
                 rule.Red = EffectCheckbox("Red", rule.Red);
                 rule.Dim = EffectCheckbox("Dimmed", rule.Dim);
 

@@ -14,6 +14,8 @@ using NahjaUI.Game;
 using NahjaUI.Modules.Trackers;
 using NahjaUI.Modules.HudBars;
 
+using ActionSheet = Lumina.Excel.Sheets.Action;
+
 namespace NahjaUI.Modules.PartyListBar;
 
 /// <summary>
@@ -47,6 +49,48 @@ internal sealed class PartyListModule : IDisposable
         Sample("Tobias", 23, 77000, 10000, 10000, 0),
         Sample("Vera", 25, 0, 10000, 10000, 0)
     };
+
+    // The raises: action id -> icon id, looked up once by their English names (PvE player actions only). Whoever casts one on a dead member is "raising" him.
+    private static readonly string[] RaiseNames = { "Raise", "Resurrection", "Ascend", "Egeiro", "Verraise" };
+    private static Dictionary<uint, uint>? raiseActions;
+    private static uint previewRaiseActionId;
+
+    private static Dictionary<uint, uint> RaiseActions()
+    {
+        if (raiseActions is not null)
+            return raiseActions;
+
+        var found = new Dictionary<uint, uint>();
+        foreach (var row in Plugin.DataManager.GetExcelSheet<ActionSheet>(Dalamud.Game.ClientLanguage.English))
+        {
+            if (row.IsPvP || !row.IsPlayerAction)
+                continue;
+
+            if (Array.IndexOf(RaiseNames, row.Name.ToString()) >= 0)
+                found[row.RowId] = row.Icon;
+        }
+
+        raiseActions = found;
+        return found;
+    }
+
+    // Who is being raised right now: the dead member (entity id) -> the raise being cast on him, from the casts of the members of the party.
+    private static Dictionary<uint, uint>? RaisesOn(IReadOnlyList<UnitSnapshot> party)
+    {
+        Dictionary<uint, uint>? result = null;
+        var actions = RaiseActions();
+
+        foreach (var caster in party)
+        {
+            if (caster.Cast is not { ActionType: 1, TargetEntityId: not 0 } cast || !actions.ContainsKey(cast.ActionId))
+                continue;
+
+            result ??= new Dictionary<uint, uint>();
+            result.TryAdd(cast.TargetEntityId, cast.ActionId);
+        }
+
+        return result;
+    }
 
     // In the preview the third member is shown as the one you have targeted, so the ring and the arrow can be seen.
     private const int PreviewSelectedIndex = 2;
@@ -191,8 +235,19 @@ internal sealed class PartyListModule : IDisposable
             members = WithPreviewCutscene(members);
         }
 
+        // The raise: real casts on dead members; the preview shows one dead member being raised so the icon can be placed.
+        var raises = isSample || !settings.ShowRaiseIcon ? null : RaisesOn(snapshot.Party);
+        var previewRaise = -1;
+        if (settings.ShowRaiseIcon)
+        {
+            if (isSample)
+                previewRaise = members.Count - 2;
+            else if (menuPreview)
+                (members, previewRaise) = WithPreviewRaise(members, snapshot.Player?.EntityId ?? 0u);
+        }
+
         var scale = UiScale.Overlay;
-        var (pos, size) = LayoutManager.GetRect(PartyElement.Layout);
+        var (_, size) = LayoutManager.GetRect(PartyElement.Layout);
 
         // The MP bar is a bar of its own that can sit anywhere around the member's bar. A member that shows it takes the area of the bar and
         // the MP bar together, one that does not takes the bar alone: so the visible space between two members is always the same.
@@ -209,6 +264,9 @@ internal sealed class PartyListModule : IDisposable
         // The box of the list holds the 9 slots with the biggest extent, so it never changes size.
         var biggest = mpBottom - mpTop;
         var boxHeight = (BoxSlots - 1) * (biggest + gap) + biggest;
+
+        // The anchors apply to the whole box of the list, not to its first bar.
+        var pos = LayoutManager.GetBoxPos(PartyElement.Layout, new Vector2(size.X, boxHeight));
 
         // Top and height of the slot of each member.
         var tops = new float[members.Count];
@@ -240,10 +298,14 @@ internal sealed class PartyListModule : IDisposable
 
             var index = i;
 
+            // The raise being cast on this member (0 = none).
+            var raiseActionId = index == previewRaise ? PreviewRaiseActionId()
+                : raises is not null && raises.TryGetValue(member.EntityId, out var castRaise) ? castRaise : 0u;
+
             // Drawn around the game's own right click menu, never over it.
             plugin.GameCover.Draw(rowPos, size, 400f * scale, () =>
             {
-                DrawMember(drawList, settings, member, rowPos, size, selected);
+                DrawMember(drawList, settings, member, rowPos, size, selected, raiseActionId);
 
                 // The rows of enhancements and enfeeblements next to the bar.
                 var playerId = snapshot.Player?.EntityId ?? 0u;
@@ -310,6 +372,42 @@ internal sealed class PartyListModule : IDisposable
         return copy;
     }
 
+    // The page of the menu shows one dead member being raised (a copy: the real data is not touched). The last member who is not you is the one;
+    // when there is nobody else, a made-up dead member is added before the chocobo.
+    private static (IReadOnlyList<UnitSnapshot> Members, int Index) WithPreviewRaise(IReadOnlyList<UnitSnapshot> members, uint playerId)
+    {
+        var index = -1;
+        for (var i = members.Count - 1; i >= 0; i--)
+        {
+            if (!members[i].IsCompanion && members[i].EntityId != playerId && members[i].Presence == Presence.Here)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        var copy = new List<UnitSnapshot>(members);
+
+        if (index < 0)
+        {
+            var at = copy.FindIndex(m => m.IsCompanion);
+            index = at < 0 ? copy.Count : at;
+            copy.Insert(index, SampleParty[^1]);
+            return (copy, index);
+        }
+
+        copy[index] = copy[index] with { IsDead = true, Hp = 0 };
+        return (copy, index);
+    }
+
+    private static uint PreviewRaiseActionId()
+    {
+        if (previewRaiseActionId == 0)
+            previewRaiseActionId = TrackerPresets.FindAction("Raise", 24);
+
+        return previewRaiseActionId;
+    }
+
     private bool IsHovered(Vector2 pos, Vector2 size)
     {
         if (plugin.GameCover.Contains(ImGui.GetIO().MousePos))
@@ -322,7 +420,7 @@ internal sealed class PartyListModule : IDisposable
     private static uint JobIconId(uint jobId, PartyJobIconStyle style) =>
         (style == PartyJobIconStyle.Light ? 62100u : 62000u) + jobId;
 
-    private void DrawMember(ImDrawListPtr drawList, PartyListSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size, bool selected)
+    private void DrawMember(ImDrawListPtr drawList, PartyListSettings settings, UnitSnapshot member, Vector2 pos, Vector2 size, bool selected, uint raiseActionId = 0)
     {
         var fadeMark = DrawListFade.Mark(drawList);
         var look = settings.Look;
@@ -371,10 +469,31 @@ internal sealed class PartyListModule : IDisposable
 
         // The texts last, over everything (the ring too: a name at the very top of the bar must not be cut by it).
         // A member who is away (offline, in another area, too far) or dead is faded, and his name is replaced by what is happening.
-        var away = AwayTag(member);
+        var raising = raiseActionId != 0 && settings.ShowRaiseIcon && member.Presence == Presence.Here && (member.IsDead || member.Hp == 0);
+        var away = AwayTag(member, raising);
         var name = away is not null
             ? away
             : UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
+
+        // The icon of the raise goes behind the text, placed like the cutscene icon (an anchor on the bar, an anchor on the icon and offsets), and it is
+        // not faded like the dead bar: the bar is faded first, then the icon, then the texts start a new fade of their own.
+        if (raising)
+        {
+            DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
+
+            if (RaiseActions().TryGetValue(raiseActionId, out var raiseIconId) && raiseIconId != 0)
+            {
+                var side = MathF.Max(MathF.Round(settings.RaiseIconSizePx * scale), 4f);
+                var attach = pos + size * settings.RaiseIconBarAnchor.Fraction() + new Vector2(settings.RaiseIconOffsetX, settings.RaiseIconOffsetY) * scale;
+                var raiseMin = attach - new Vector2(side, side) * settings.RaiseIconSelfAnchor.Fraction();
+                raiseMin = new Vector2(MathF.Round(raiseMin.X), MathF.Round(raiseMin.Y));
+                var raiseTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(raiseIconId)).GetWrapOrEmpty();
+
+                drawList.AddImage(raiseTexture.Handle, raiseMin, raiseMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
+            }
+
+            fadeMark = DrawListFade.Mark(drawList);
+        }
         // The name is shortened with "..." when it would go out of the bar or run into the HP text.
         var hpText = UnitTextFormatter.FormatValue(look, member.Hp, member.MaxHp);
         var hpArea = plugin.HudBarSystem.MeasureText(hpText, look.Hp, pos, size);
@@ -401,13 +520,13 @@ internal sealed class PartyListModule : IDisposable
     // ---------------------------------------------------------------- helpers
 
     // What keeps a member from being "here": offline, another area, too far, or dead. Null when he is fine.
-    private static string? AwayTag(UnitSnapshot member) => member.Presence switch
+    private static string? AwayTag(UnitSnapshot member, bool raising = false) => member.Presence switch
     {
         Presence.Offline => "Offline",
         Presence.OtherArea => "Other area",
         Presence.OutOfRange => "Out of range",
         Presence.ViewingCutscene => "Viewing cutscene",
-        _ => member.IsDead || member.Hp == 0 ? "Dead" : null
+        _ => member.IsDead || member.Hp == 0 ? (raising ? "Raising" : "Dead") : null
     };
 
     // Fills a rounded box only up to <clipRight>. The box keeps its full rounded shape and is cut by a clip rectangle, so a

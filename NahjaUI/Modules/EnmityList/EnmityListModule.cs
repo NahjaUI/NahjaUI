@@ -154,10 +154,7 @@ internal sealed class EnmityListModule : IDisposable
 
         var scale = UiScale.Overlay;
         var drawList = ImGui.GetBackgroundDrawList();
-        var (pos, size) = LayoutManager.GetRect(Element.Layout);
-
-        if (isSample && !plugin.Layout.UnlockMode)
-            PreviewBadge.Draw(drawList, pos);
+        var (_, size) = LayoutManager.GetRect(Element.Layout);
 
         // The part of a cast that hangs below its bar takes room in the column (the next bar starts under it); at the sides it takes none.
         var progressBarBlock = 0f;
@@ -172,6 +169,18 @@ internal sealed class EnmityListModule : IDisposable
         // The box is always 8 rows tall. With "Start from the bottom" the rows sit at the bottom of it (empty slots on top).
         var slots = Math.Max(BoxSlots, enemies.Count);
         var slotOffset = settings.StartFromBottom ? slots - enemies.Count : 0;
+
+        // The anchors apply to the whole box of the list (all its rows and their casts), not to its first bar: the box is measured
+        // around the origin and then put where the anchors say.
+        var (firstMin0, firstMax0) = RowBounds(settings, scale, Vector2.Zero, size);
+        var (lastMin0, lastMax0) = RowBounds(settings, scale, new Vector2(0f, MathF.Round(step * (slots - 1))), size);
+        var boxOrigin = Vector2.Min(firstMin0, lastMin0);
+        var boxSize = Vector2.Max(firstMax0, lastMax0) - boxOrigin;
+        var boxPos = LayoutManager.GetBoxPos(Element.Layout, boxSize);
+        var pos = new Vector2(MathF.Round(boxPos.X - boxOrigin.X), MathF.Round(boxPos.Y - boxOrigin.Y));
+
+        if (isSample && !plugin.Layout.UnlockMode)
+            PreviewBadge.Draw(drawList, pos);
 
         var (firstMin, firstMax) = RowBounds(settings, scale, new Vector2(pos.X, MathF.Round(pos.Y)), size);
         var (lastMin, lastMax) = RowBounds(settings, scale, new Vector2(pos.X, MathF.Round(pos.Y + step * (slots - 1))), size);

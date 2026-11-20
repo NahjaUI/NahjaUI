@@ -25,7 +25,7 @@ internal sealed class JobGaugeEditor
         // Cards follow the order of the game's job list: tanks (PLD, WAR, DRK, GNB), healers (WHM, SCH, AST, SGE),
         // melee (MNK, DRG, NIN, SAM, RPR, VPR, BST), physical ranged (BRD, MCH, DNC), magical ranged (BLM, SMN, RDM, PCT, BLU).
         // New jobs are added in their place in this list.
-        var current = plugin.GameData.Current.Player?.JobId ?? 0;
+        var current = NahjaUI.Game.GameNames.ProfileJobId(plugin.GameData.Current.Player?.JobId ?? 0);
         var currentEntry = Array.FindIndex(Entries, entry => entry.JobId == current);
 
         // By default the gauge of the job being played. The combo lets the user edit another job's gauge meanwhile.
@@ -70,6 +70,12 @@ internal sealed class JobGaugeEditor
                 break;
             case 40:
                 DrawSage(plugin.Configuration.JobGauges.Sage);
+                break;
+            case 25:
+                if (ExtraGauges.ByJob.TryGetValue(25, out var blackMage))
+                    DrawExtra(blackMage);
+
+                DrawBlackMageAura(plugin.Configuration.JobGauges.BlackMage);
                 break;
             case 21:
                 DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge", extra: () => DrawWarriorBeastExtras(plugin.Configuration.JobGauges.Warrior));
@@ -736,6 +742,54 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
             Pick("Pip color", settings.ComboColor, v => settings.ComboColor = v, original.ComboColor);
             Pick("Last pip color when Surging Tempest is low", settings.ComboRefreshColor, v => settings.ComboRefreshColor = v, original.ComboRefreshColor);
+        });
+    }
+
+    // The Thunderhead aura of the Black Mage: on or off, with a size and an opacity. It has no timer.
+    private void DrawBlackMageAura(BlackMageAuraSettings settings)
+    {
+        Widgets.Card("##card_gauge_blm_thunderhead", 6, () =>
+        {
+            Widgets.SectionLabel("Black Mage (Thunderhead)");
+
+            var show = settings.ShowThunderheadAura;
+            if (ImGui.Checkbox("Show the Thunderhead aura##blmx", ref show))
+            {
+                settings.ShowThunderheadAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Thunderhead aura", plugin.JobGaugeSystem.ThunderheadElement.Layout);
+
+            var opacity = settings.ThunderheadAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##blmx", ref opacity, 0.1f, 1f))
+            {
+                settings.ThunderheadAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
+        });
+
+        Widgets.Card("##card_gauge_blm_firestarter", 6, () =>
+        {
+            Widgets.SectionLabel("Black Mage (Firestarter)");
+
+            var show = settings.ShowFirestarterAura;
+            if (ImGui.Checkbox("Show the Firestarter auras##blmf", ref show))
+            {
+                settings.ShowFirestarterAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Firestarter auras (the box holds both arcs)", plugin.JobGaugeSystem.FirestarterElement.Layout);
+
+            var opacity = settings.FirestarterAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##blmf", ref opacity, 0.1f, 1f))
+            {
+                settings.FirestarterAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
         });
     }
 

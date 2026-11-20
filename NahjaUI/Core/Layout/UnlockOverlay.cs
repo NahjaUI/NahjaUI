@@ -148,23 +148,18 @@ internal sealed class UnlockOverlay
                 dragStartY = data.OffsetY;
             }
 
-            // Dragging: the mouse moves in physical pixels, offsets are logical pixels (the scale of everything drawn over the game,
-            // not only the one of Dalamud). With Pixel perfect on, it moves by whole real pixels.
+            // Dragging: the mouse moves in physical pixels, offsets are logical pixels (the scale of Dalamud).
             if (ImGui.IsItemActive() && !data.Locked)
             {
                 var overlayScale = UiScale.Overlay;
                 dragTotal += ImGui.GetIO().MouseDelta;
 
-                if (UiScale.PixelPerfect)
-                {
-                    data.OffsetX = (MathF.Round(dragStartX * overlayScale) + MathF.Round(dragTotal.X)) / overlayScale;
-                    data.OffsetY = (MathF.Round(dragStartY * overlayScale) + MathF.Round(dragTotal.Y)) / overlayScale;
-                }
-                else
-                {
-                    data.OffsetX = MathF.Round(dragStartX) + MathF.Round(dragTotal.X / overlayScale);
-                    data.OffsetY = MathF.Round(dragStartY) + MathF.Round(dragTotal.Y / overlayScale);
-                }
+                // The box stops at the edges of the screen: an element cannot be dragged out of it.
+                var newX = MathF.Round(dragStartX) + MathF.Round(dragTotal.X / overlayScale);
+                var newY = MathF.Round(dragStartY) + MathF.Round(dragTotal.Y / overlayScale);
+                LayoutManager.KeepOnScreen(element, ref newX, ref newY);
+                data.OffsetX = newX;
+                data.OffsetY = newY;
 
                 plugin.RequestSave();
             }
@@ -234,22 +229,48 @@ internal sealed class UnlockOverlay
         var (pos, size) = LayoutManager.GetDisplayRect(selected);
         var viewport = ImGui.GetMainViewport();
 
-        // Where to put the panel: under the box (and its tag), or above it when the box is near the bottom.
-        var panelWidth = 300f * scale;
-        var estimatedHeight = 265f * scale;
+        // Where to put the panel: under the box (and its tag), or above it when the box is near the bottom, or beside it when neither
+        // fits (a tall box near the left or right edge). It never leaves the screen: the size of the last frame is used (the panel
+        // sizes itself), and a panel taller than the screen gets a scrollbar.
+        var margin = 8f * scale;
+        var viewMin = viewport.Pos;
+        var viewMax = viewport.Pos + viewport.Size;
+        var maxHeight = Math.Max(100f * scale, viewport.Size.Y - margin * 2f);
 
-        var minX = viewport.Pos.X + panelWidth * 0.5f;
-        var maxX = Math.Max(minX, viewport.Pos.X + viewport.Size.X - panelWidth * 0.5f);
-        var centerX = Math.Clamp(pos.X + size.X * 0.5f, minX, maxX);
+        var panelW = panelShown && panelSize.X > 0f ? panelSize.X : 300f * scale;
+        var panelH = Math.Min(panelShown && panelSize.Y > 0f ? panelSize.Y : 430f * scale, maxHeight);
+        var gap = 30f * scale;
 
-        var below = pos.Y + size.Y + 30f * scale;
-        var fitsBelow = below + estimatedHeight <= viewport.Pos.Y + viewport.Size.Y;
+        var centeredX = pos.X + size.X * 0.5f - panelW * 0.5f;
+        var below = pos.Y + size.Y + gap;
+        var above = pos.Y - gap - panelH;
 
-        var anchorY = fitsBelow ? below : pos.Y - 30f * scale;
-        var pivot = fitsBelow ? new Vector2(0.5f, 0f) : new Vector2(0.5f, 1f);
+        float panelX;
+        float panelY;
+        if (below + panelH <= viewMax.Y - margin)
+        {
+            panelX = centeredX;
+            panelY = below;
+        }
+        else if (above >= viewMin.Y + margin)
+        {
+            panelX = centeredX;
+            panelY = above;
+        }
+        else
+        {
+            var roomRight = viewMax.X - (pos.X + size.X);
+            var roomLeft = pos.X - viewMin.X;
+            panelX = roomRight >= roomLeft ? pos.X + size.X + margin : pos.X - panelW - margin;
+            panelY = pos.Y;
+        }
+
+        panelX = Math.Clamp(panelX, viewMin.X + margin, Math.Max(viewMin.X + margin, viewMax.X - panelW - margin));
+        panelY = Math.Clamp(panelY, viewMin.Y + margin, Math.Max(viewMin.Y + margin, viewMax.Y - panelH - margin));
 
         ImGuiHelpers.ForceNextWindowMainViewport();
-        ImGui.SetNextWindowPos(new Vector2(MathF.Round(centerX), MathF.Round(anchorY)), ImGuiCond.Always, pivot);
+        ImGui.SetNextWindowPos(new Vector2(MathF.Round(panelX), MathF.Round(panelY)), ImGuiCond.Always, Vector2.Zero);
+        ImGui.SetNextWindowSizeConstraints(Vector2.Zero, new Vector2(float.MaxValue, maxHeight));
 
         var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize |
                     ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoMove;
@@ -258,7 +279,7 @@ internal sealed class UnlockOverlay
         if (ImGui.Begin("##nui_unlock_inspector", ref open, flags))
         {
             ImGui.TextColored(Theme.Accent, selected.Name);
-            ImGui.TextColored(Theme.TextMuted, UiScale.PixelPerfect ? "Offset in real screen pixels from the anchor point" : "Offset in pixels from the anchor point");
+            ImGui.TextColored(Theme.TextMuted, "Offset in pixels from the anchor point");
             ImGui.Spacing();
 
             // Exact position: type a value, or use the small +/- buttons (1 px, or 10 px with Ctrl held).
@@ -268,7 +289,10 @@ internal sealed class UnlockOverlay
             var x = data.OffsetX;
             if (OffsetField.Draw("X", ref x, false) && !data.Locked)
             {
+                var keptY = data.OffsetY;
+                LayoutManager.KeepOnScreen(selected, ref x, ref keptY);
                 data.OffsetX = x;
+                data.OffsetY = keptY;
                 plugin.RequestSave();
             }
 
@@ -279,7 +303,27 @@ internal sealed class UnlockOverlay
             var y = data.OffsetY;
             if (OffsetField.Draw("Y", ref y, true) && !data.Locked)
             {
+                var keptX = data.OffsetX;
+                LayoutManager.KeepOnScreen(selected, ref keptX, ref y);
+                data.OffsetX = keptX;
                 data.OffsetY = y;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+
+            // Size (not for tracker groups or status effects: their size comes from their icon settings).
+            if (AnchorControls.DrawSize(selected, fieldWidth))
+                plugin.RequestSave();
+
+            // Where it is attached and which points are joined.
+            ImGui.Spacing();
+            if (data.Locked)
+            {
+                ImGui.TextColored(Theme.TextMuted, "Untick Locked to change the size and the anchors.");
+            }
+            else if (AnchorControls.DrawAnchors(layout, selected, fieldWidth * 2f + ImGui.GetStyle().ItemSpacing.X))
+            {
                 plugin.RequestSave();
             }
 

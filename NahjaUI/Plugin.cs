@@ -213,25 +213,13 @@ public sealed class Plugin : IDalamudPlugin
     {
         Guard("unlock mode", FollowUnlockMode);
 
-        // Before, the scale of the HUD was the one of Dalamud times "Interface scale". Now it is only "Interface scale", so a saved
-        // value is converted once (times the scale of Dalamud it was multiplied by) and the HUD keeps exactly the size it had.
-        if (Configuration.InterfaceScaleBasis < 1)
-        {
-            Configuration.InterfaceScale = System.Math.Clamp(Configuration.InterfaceScale * Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale, UiScale.MinInterface, UiScale.MaxInterface);
-            Configuration.InterfaceScaleBasis = 1;
-            RequestSave();
-        }
-
-        // The scale everything drawn over the game uses: the "Interface scale" of Appearance, whatever the scale of Dalamud is.
-        UiScale.Interface = System.Math.Clamp(Configuration.InterfaceScale, UiScale.MinInterface, UiScale.MaxInterface);
-        UiScale.PixelPerfect = Configuration.PixelPerfectLayout;
         BarGradient.Strength = System.Math.Clamp(Configuration.BarGradientPercent, 0, 200) / 100f;
 
         // The elements that have a position for each job show the one of the job being played.
         Guard("layout", () =>
         {
             var currentSnapshot = GameData.Current;
-            Layout.SyncJob(currentSnapshot.IsLoggedIn ? currentSnapshot.Player?.JobId ?? 0u : 0u, currentSnapshot.Context.InPvP);
+            Layout.SyncJob(currentSnapshot.IsLoggedIn ? GameNames.ProfileJobId(currentSnapshot.Player?.JobId ?? 0u) : 0u, currentSnapshot.Context.InPvP);
         });
 
         // Which game windows cover the screen right now (the frames are not drawn over them).

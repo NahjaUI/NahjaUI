@@ -16,7 +16,8 @@ internal sealed record StatusSnapshot(uint Id, uint SourceId, float RemainingTim
 
 /// <summary>An action a unit is casting right now.</summary>
 /// <param name="ActionType">What is being cast: 1 = an action (spell, weaponskill or ability), 2 = an item, 5 = a general action, 13 = a mount.</param>
-internal sealed record CastSnapshot(uint ActionId, float CurrentTime, float TotalTime, bool Interruptible, byte ActionType = 1);
+/// <param name="TargetEntityId">Entity id of who the cast is aimed at (0 when it has no target).</param>
+internal sealed record CastSnapshot(uint ActionId, float CurrentTime, float TotalTime, bool Interruptible, byte ActionType = 1, uint TargetEntityId = 0);
 
 /// <summary>The cooldown state of one player action (an ability).</summary>
 /// <param name="ActionId">The action id that was asked for.</param>

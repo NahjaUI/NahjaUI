@@ -434,6 +434,9 @@ internal static class TrackerPresets
                 Unit = TrackerUnit.Player,
                 StatusId = id,
                 Glow = glow,
+
+                // Test: the Black Mage triggers of "the effect is active" pulse.
+                Pulse = jobIds.Contains(25u),
             };
         }
 

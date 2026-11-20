@@ -17,7 +17,6 @@ namespace NahjaUI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private static readonly int[] InterfaceScaleOptions = { 50, 100, 150, 200, 300 };
 
     private static readonly string[] Pages = { "General", "Trackers", "HUD bars", "Progress bars", "Job gauges", "Status effects", "Nameplates", "Enmity list", "Others", "Filters", "Tooltip", "Appearance", "Layout", "Profiles" };
 
@@ -496,7 +495,7 @@ public class MainWindow : Window, IDisposable
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 14, () =>
+        Widgets.Card("##card_theme", 11, () =>
         {
             Widgets.SectionLabel("Theme");
 
@@ -513,27 +512,6 @@ public class MainWindow : Window, IDisposable
 
                 ImGui.EndCombo();
             }
-
-            // Everything NahjaUI draws over the game (bars, trackers, gauges, nameplates, texts) gets bigger or smaller. It multiplies the scale
-            // of Dalamud; the game's own HUD scale does not change it. The windows of NahjaUI keep the scale of Dalamud.
-            // Fixed steps, like the scale of Dalamud and the game: 50, 100, 150, 200 and 300 %.
-            var scalePercent = (int)MathF.Round(config.InterfaceScale * 100f);
-            if (ImGui.BeginCombo("Interface scale (%)", $"{scalePercent} %"))
-            {
-                foreach (var option in InterfaceScaleOptions)
-                {
-                    if (ImGui.Selectable($"{option} %", option == scalePercent))
-                    {
-                        config.InterfaceScale = option / 100f;
-                        plugin.RequestSave();
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
-
-            ImGui.TextColored(Theme.TextMuted, "Size of everything NahjaUI draws over the game (bars, trackers, gauges, nameplates), in screen pixels: 100 % is one pixel per logical pixel. Dalamud's scale does not change it, and it does not change this menu.");
-            ImGui.TextColored(Theme.TextMuted, "100, 200 and 300 % keep lines sharp; 150 % may be a pixel off. Re-place your elements in Unlock mode after changing it.");
 
             var inBar = config.ShowInServerBar;
             if (ImGui.Checkbox("Show NahjaUI in the server info bar", ref inBar))
@@ -638,24 +616,14 @@ public class MainWindow : Window, IDisposable
         // The explanation and the button stay pinned at the top; the rest of the page scrolls under them.
         Widgets.Callout(
             "##callout_unlock",
-            "Unlock mode shows every element as a box you can drag. Select one to get X/Y fields next to it for exact positions. Positions are saved automatically.",
+            "Unlock mode shows every element as a box you can drag. Select one to get its position, size and anchors next to it. Everything is saved automatically, and the size follows the UI scale of Dalamud.",
             Theme.Info,
-            5,
+            4,
             () =>
             {
                 ImGui.Spacing();
                 if (Widgets.PrimaryButton("Unlock elements"))
                     layout.UnlockMode = true;
-
-                var pixelPerfect = plugin.Configuration.PixelPerfectLayout;
-                if (ImGui.Checkbox("Pixel perfect (offsets in real screen pixels)", ref pixelPerfect))
-                {
-                    plugin.Configuration.PixelPerfectLayout = pixelPerfect;
-                    plugin.RequestSave();
-                }
-
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Off: offsets are in logical pixels, so at a scale of 2 one step moves 2 real pixels.\nOn: X and Y are in real screen pixels, so you can ask for a gap of exactly 1 pixel at any scale.\nChanging the interface scale later moves the elements, because they are saved in logical pixels.");
             });
 
         using (Widgets.TabBody("##layout_body"))
@@ -693,47 +661,8 @@ public class MainWindow : Window, IDisposable
         Widgets.SectionLabel(element.Name);
 
         // The element can be placed on the screen or on another element (the enfeeblements under the target bar, for example).
-        var attachName = "Screen";
-        if (!string.IsNullOrEmpty(data.AttachTo))
-            attachName = plugin.Layout.Elements.FirstOrDefault(e => e.Id == data.AttachTo)?.Name ?? "Screen";
-
-        if (ImGui.BeginCombo("Attach to", attachName))
-        {
-            if (ImGui.Selectable("Screen", string.IsNullOrEmpty(data.AttachTo)))
-            {
-                data.AttachTo = null;
-                plugin.RequestSave();
-            }
-
-            foreach (var other in plugin.Layout.Elements)
-            {
-                // Only what is in use: not the groups of other jobs (the one it is attached to now stays in the list).
-                if (ReferenceEquals(other, element) || other.IsManaged || (other.IsHidden && data.AttachTo != other.Id))
-                    continue;
-
-                if (ImGui.Selectable($"{other.Name}##attach_{other.Id}", data.AttachTo == other.Id))
-                {
-                    data.AttachTo = other.Id;
-                    plugin.RequestSave();
-                }
-            }
-
-            ImGui.EndCombo();
-        }
-
-        var screenAnchor = data.ScreenAnchor;
-        if (AnchorCombo(string.IsNullOrEmpty(data.AttachTo) ? "Screen anchor" : "Anchor on that element", ref screenAnchor))
-        {
-            data.ScreenAnchor = screenAnchor;
+        if (AnchorControls.DrawAnchors(plugin.Layout, element))
             plugin.RequestSave();
-        }
-
-        var selfAnchor = data.SelfAnchor;
-        if (AnchorCombo("Element anchor", ref selfAnchor))
-        {
-            data.SelfAnchor = selfAnchor;
-            plugin.RequestSave();
-        }
 
         ImGui.Spacing();
 
@@ -741,7 +670,10 @@ public class MainWindow : Window, IDisposable
         var x = data.OffsetX;
         if (OffsetField.Draw($"Offset X ({OffsetField.Unit})", ref x, false))
         {
+            var keptY = data.OffsetY;
+            LayoutManager.KeepOnScreen(element, ref x, ref keptY);
             data.OffsetX = x;
+            data.OffsetY = keptY;
             plugin.RequestSave();
         }
 
@@ -749,6 +681,9 @@ public class MainWindow : Window, IDisposable
         var y = data.OffsetY;
         if (OffsetField.Draw($"Offset Y ({OffsetField.Unit})", ref y, true))
         {
+            var keptX = data.OffsetX;
+            LayoutManager.KeepOnScreen(element, ref keptX, ref y);
+            data.OffsetX = keptX;
             data.OffsetY = y;
             plugin.RequestSave();
         }
@@ -778,26 +713,5 @@ public class MainWindow : Window, IDisposable
             element.ResetToDefaults();
             plugin.RequestSave();
         }
-    }
-
-    private static bool AnchorCombo(string label, ref AnchorPoint value)
-    {
-        var changed = false;
-
-        if (ImGui.BeginCombo(label, value.Label(), ImGuiComboFlags.None))
-        {
-            foreach (var point in AnchorPointExtensions.All)
-            {
-                if (ImGui.Selectable(point.Label(), point == value))
-                {
-                    value = point;
-                    changed = true;
-                }
-            }
-
-            ImGui.EndCombo();
-        }
-
-        return changed;
     }
 }

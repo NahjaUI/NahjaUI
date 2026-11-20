@@ -61,7 +61,8 @@ internal sealed partial class JobGaugeModule
             var elements = extraElements[def.Abbr];
 
             // Unlock mode only offers the rows of the job you are playing (all of them while the job is unknown) that are not switched off.
-            var isJob = player is null || player.JobId == def.JobId;
+            // The Thaumaturge (7) has the gauge of the Black Mage (25).
+            var isJob = player is null || player.JobId == def.JobId || (def.JobId == 25 && player.JobId == 7);
             for (var i = 0; i < elements.Length; i++)
                 elements[i].IsHidden = !isJob || !settings.Part(def.Parts[i].Id).Show;
 

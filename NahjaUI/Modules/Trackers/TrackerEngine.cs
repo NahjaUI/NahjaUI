@@ -102,6 +102,10 @@ internal sealed class TrackerEngine
     // A tracker that throws this many errors in a row is switched off until the plugin is reloaded.
     private const int MaxConsecutiveErrors = 5;
 
+    // The white pulse of a trigger: one breath every this many seconds, up to this much white.
+    private const float PulsePeriodSeconds = 1.4f;
+    private const float PulseMaxAlpha = 0.35f;
+
     // A cooldown up to this many seconds is the global cooldown, not a real cooldown.
     private const float GlobalCooldownSeconds = 3.5f;
 
@@ -138,6 +142,25 @@ internal sealed class TrackerEngine
 
     private void LoadFromConfiguration()
     {
+        // Test, once: the "effect is active" triggers (a status on the player) of the Black Mage trackers pulse. After that it is the user's choice.
+        if (!plugin.Configuration.BlackMagePulseTestApplied)
+        {
+            foreach (var tracker in plugin.Configuration.Trackers)
+            {
+                if (!tracker.Load.JobIds.Contains(25u))
+                    continue;
+
+                foreach (var rule in tracker.Rules)
+                {
+                    if (rule.Kind == ConditionKind.StatusPresent && rule.Unit == TrackerUnit.Player)
+                        rule.Pulse = true;
+                }
+            }
+
+            plugin.Configuration.BlackMagePulseTestApplied = true;
+            plugin.RequestSave();
+        }
+
         foreach (var definition in plugin.Configuration.TrackerGroups)
             RegisterGroup(definition);
 
@@ -621,15 +644,22 @@ internal sealed class TrackerEngine
         // 3. Line up and draw the groups.
         foreach (var group in groups)
         {
-            // A group whose trackers all belong to other jobs is not offered for positioning.
-            var anyApplies = group.Members.Count == 0;
-            foreach (var member in group.Members)
+            // A group whose trackers all belong to other jobs is not offered for positioning. Every tracker of the group counts,
+            // also the ones that are switched off (Members only has the enabled ones): a group of a job with all its trackers off
+            // must not show up on other jobs. A group with no trackers at all has no job, so it is always offered.
+            var hasTrackers = false;
+            var anyApplies = false;
+            foreach (var runtime in runtimes)
             {
-                if (AppliesToJob(member.Definition, currentJob, snapshot.Context.InPvP))
+                if (!ReferenceEquals(FindGroup(runtime.Definition.GroupId), group))
+                    continue;
+
+                hasTrackers = true;
+                if (AppliesToJob(runtime.Definition, currentJob, snapshot.Context.InPvP))
                     anyApplies = true;
             }
 
-            group.Element.IsHidden = !anyApplies;
+            group.Element.IsHidden = hasTrackers && !anyApplies;
             group.Element.PositionGroup = group.Definition.PositionGroup;
 
             // In unlock mode every enabled member is drawn as a ghost, so the group can be placed
@@ -1031,6 +1061,13 @@ internal sealed class TrackerEngine
         // The dark sweep that covers the part of the icon that is still recharging.
         if (cooling && activeRule is { Sweep: true } && state.Total > 0f)
             DrawSweep(drawList, pos, size, state.Remaining / state.Total, rounding);
+
+        // A soft white pulse over the icon, as the trigger that decides asks for: it tells "the effect is active" apart from a recharge.
+        if (!ghost && activeRule is { Pulse: true })
+        {
+            var wave = 0.5f + 0.5f * MathF.Sin((float)ImGui.GetTime() * MathF.PI * 2f / PulsePeriodSeconds);
+            drawList.AddRectFilled(pos, pos + size, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, PulseMaxAlpha * wave)), rounding);
+        }
 
         // 1 px border (it grows with the UI scale so it always looks 1 px thick):
         // black, accent colour for a ghost.

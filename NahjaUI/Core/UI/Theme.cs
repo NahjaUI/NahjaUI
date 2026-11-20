@@ -64,7 +64,7 @@ internal sealed class ThemeScope : IDisposable
         var scale = ImGuiHelpers.GlobalScale;
 
         // Logical pixels: the fonts are already built for the UI scale.
-        fontScope = OverlayFonts.Current?.PushClosest(OverlayFont.NahjaText, config.MenuTextSize, applyInterfaceScale: false);
+        fontScope = OverlayFonts.Current?.PushClosest(OverlayFont.NahjaText, config.MenuTextSize);
         var accent = Theme.Accent;
 
         var accentHover = Theme.Mix(accent, Vector4.One, 0.15f);

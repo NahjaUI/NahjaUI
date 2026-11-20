@@ -73,7 +73,7 @@ internal static class DefensiveFilters
             "+Higanbana",                                                    // Samurai
             "+Death's Design",                                               // Reaper
             "+Stormbite", "+Windbite", "+Caustic Bite", "+Venomous Bite",    // Bard
-            "+High Thunder", "+Thunder III", "+Thunder",                     // Black Mage
+            "+High Thunder", "+High Thunder II", "+Thunder III", "+Thunder IV", "+Thunder II", "+Thunder", // Black Mage (only one Thunder can be on an enemy: they replace each other)
             "+Demolish"                                                      // Monk
         })
     };

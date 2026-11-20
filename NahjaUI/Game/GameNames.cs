@@ -243,6 +243,49 @@ internal static class GameNames
             || (sheet.TryGetRow(playerJobId, out var playerJob) && playerJob.ClassJobParent.RowId == trackerJobId);
     }
 
+    private const uint ArcanistId = 26;
+    private const uint SummonerId = 27;
+    private static readonly Dictionary<uint, uint> ProfileJobs = new();
+
+    /// <summary>
+    /// The job whose settings a class uses: Thaumaturge uses Black Mage's (the MP bar, the positions...), Conjurer White Mage's and so on.
+    /// Arcanist uses Summoner's (a DPS) and not Scholar's. A job, or a class with no job, returns itself.
+    /// </summary>
+    public static uint ProfileJobId(uint jobId)
+    {
+        if (jobId == 0)
+            return 0;
+
+        if (ProfileJobs.TryGetValue(jobId, out var cached))
+            return cached;
+
+        var result = jobId;
+        var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
+
+        // Only a starting class is its own parent.
+        if (sheet.TryGetRow(jobId, out var row) && row.ClassJobParent.RowId == jobId)
+        {
+            if (jobId == ArcanistId)
+            {
+                result = SummonerId;
+            }
+            else
+            {
+                foreach (var other in sheet)
+                {
+                    if (other.RowId != jobId && other.ClassJobParent.RowId == jobId)
+                    {
+                        result = other.RowId;
+                        break;
+                    }
+                }
+            }
+        }
+
+        ProfileJobs[jobId] = result;
+        return result;
+    }
+
     private static readonly Dictionary<uint, bool> RoleActions = new();
 
     /// <summary>

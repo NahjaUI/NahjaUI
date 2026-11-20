@@ -54,6 +54,9 @@ internal sealed class LayoutElement
     /// <summary>True when only the place (anchors and offsets) is shared between jobs and the size stays the element's own (tracker groups).</summary>
     public bool PlacementOnly { get; set; }
 
+    /// <summary>True when the module decides the size of the element every frame (the status effects, from their icon settings), so unlock mode does not offer width/height fields.</summary>
+    public bool SizeIsAutomatic { get; set; }
+
     /// <summary>True when the element has its own common position in PvP (the progress bars: PvP has another column of bars).</summary>
     public bool SeparatePvp { get; set; }
 
@@ -468,9 +471,9 @@ internal sealed class LayoutManager
     /// Final position and size in physical screen pixels, rounded to whole pixels
     /// so edges and text stay sharp.
     /// </summary>
-    public static (Vector2 Pos, Vector2 Size) GetRect(ElementLayout layout)
+    /// <summary>The point of the screen (or of the element it is attached to) the anchors of a layout are measured from, in physical pixels.</summary>
+    private static Vector2 AnchorScreenPoint(ElementLayout layout)
     {
-        var scale = UiScale.Overlay;
         var viewport = ImGui.GetMainViewport();
 
         var screenPoint = viewport.Pos + viewport.Size * layout.ScreenAnchor.Fraction();
@@ -493,6 +496,53 @@ internal sealed class LayoutManager
                 }
             }
         }
+
+        return screenPoint;
+    }
+
+    /// <summary>
+    /// Where the top-left corner of a box of the given size goes (physical pixels), when the anchors apply to that whole box and not to
+    /// the size saved in the layout. Lists (party, alliance, enmity) use it, so "Center" or "Bottom" in the element anchor centers or
+    /// ends the whole list and not just its first row.
+    /// </summary>
+    public static Vector2 GetBoxPos(ElementLayout layout, Vector2 boxSize)
+    {
+        var pos = AnchorScreenPoint(layout) + new Vector2(layout.OffsetX, layout.OffsetY) * UiScale.Overlay - boxSize * layout.SelfAnchor.Fraction();
+        return new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y));
+    }
+
+    /// <summary>
+    /// Moves the offsets an element is going to get the least needed so the whole box of the element stays inside the screen
+    /// (a box bigger than the screen keeps its top-left corner in). Nobody can lose an element out of the screen.
+    /// </summary>
+    public static void KeepOnScreen(LayoutElement element, ref float offsetX, ref float offsetY)
+    {
+        var scale = UiScale.Overlay;
+        var viewport = ImGui.GetMainViewport();
+        var data = element.Layout;
+
+        var (pos, size) = GetDisplayRect(element);
+        pos += new Vector2(offsetX - data.OffsetX, offsetY - data.OffsetY) * scale;
+
+        var min = viewport.Pos;
+        var max = viewport.Pos + viewport.Size - size;
+        max = Vector2.Max(min, max);
+
+        var shiftX = pos.X < min.X ? min.X - pos.X : (pos.X > max.X ? max.X - pos.X : 0f);
+        var shiftY = pos.Y < min.Y ? min.Y - pos.Y : (pos.Y > max.Y ? max.Y - pos.Y : 0f);
+
+        // Rounded away from zero, so the box ends inside and not a pixel out.
+        if (shiftX != 0f)
+            offsetX += shiftX > 0f ? MathF.Ceiling(shiftX / scale) : MathF.Floor(shiftX / scale);
+
+        if (shiftY != 0f)
+            offsetY += shiftY > 0f ? MathF.Ceiling(shiftY / scale) : MathF.Floor(shiftY / scale);
+    }
+
+    public static (Vector2 Pos, Vector2 Size) GetRect(ElementLayout layout)
+    {
+        var scale = UiScale.Overlay;
+        var screenPoint = AnchorScreenPoint(layout);
 
         var size = new Vector2(
             MathF.Round(Math.Max(1, layout.Width) * scale),

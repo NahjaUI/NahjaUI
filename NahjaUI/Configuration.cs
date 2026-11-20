@@ -61,15 +61,6 @@ public class Configuration : IPluginConfiguration
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
 
-    // Scale of everything NahjaUI draws over the game (1 = one logical pixel is one screen pixel; the scale of Dalamud does not matter, see UiScale).
-    public float InterfaceScale { get; set; } = 1f;
-
-    // 0 = saved when this value was multiplied by the scale of Dalamud; 1 = it is in screen pixels (the plugin converts it once, in Plugin.Draw).
-    public int InterfaceScaleBasis { get; set; }
-
-    // Layout page: the X/Y offsets of the elements are shown, typed and dragged in real screen pixels instead of logical ones (see OffsetField).
-    public bool PixelPerfectLayout { get; set; }
-
     // Appearance page: how much gradient the filled part of bars and pips has, from 0 (flat color) to 200 (100 is the default, see BarGradient).
     public int BarGradientPercent { get; set; } = 100;
 
@@ -113,6 +104,9 @@ public class Configuration : IPluginConfiguration
 
     // The box that describes an enhancement or enfeeblement under the mouse.
     public TooltipSettings Tooltip { get; set; } = new();
+
+    // Test: the Black Mage "effect is active" triggers got the white pulse (applied once, then it is the user's choice).
+    public bool BlackMagePulseTestApplied { get; set; }
 
     // The top level of the Trackers explorer, in the order the user chose: groups and loose trackers mixed.
     // Entries look like "group:<id>" or "tracker:<id>". Trackers inside a group are not listed here.
