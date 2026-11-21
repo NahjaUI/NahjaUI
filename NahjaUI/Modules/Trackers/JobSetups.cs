@@ -50,30 +50,33 @@ internal static class JobSetups
         string? Stance = null,
         bool Spellbook = false);
 
-    // The gauge elements go from the top one to the bottom one.
+    // The gauge elements go from the top one to the bottom one. What the job learns first goes at the bottom and what it learns later goes above it
+    // (the White Mage learns the lilies before the blood lilies: lilies at the bottom, blood lilies on top, hung from the Rotation row).
+    // The rows that are learned at the same level keep the order they have in the settings of the job. Single-row jobs (PLD, WAR, GNB) have no order.
+    //   SCH: Aetherflow, Faerie. SGE: Addersgall, Addersting. BRD: Soul Voice, Song, Repertoire. PCT: Paint, Palette, Motifs. RDM: Mana stacks, White Mana, Black Mana.
     private static readonly Dictionary<string, Job> Jobs = new()
     {
         ["Paladin"] = new Job(19, "PLD", p => new[] { p.JobGaugeSystem.PaladinElement }, PaladinRotation, PaladinCooldowns, PaladinDefensives, Stance: "Iron Will"),
         ["Warrior"] = new Job(21, "WAR", p => new[] { p.JobGaugeSystem.WarriorElement }, WarriorRotation, WarriorCooldowns, WarriorDefensives, Stance: "Defiance"),
-        ["Dark Knight"] = new Job(32, "DRK", p => new[] { p.JobGaugeSystem.DarkBloodElement, p.JobGaugeSystem.DarksideElement }, DarkKnightRotation, DarkKnightCooldowns, DarkKnightDefensives, MpBar: true, Moves: new[] { new Move("Shadowstride", true) }, Stance: "Grit"),
+        ["Dark Knight"] = new Job(32, "DRK", p => new[] { p.JobGaugeSystem.DarksideElement, p.JobGaugeSystem.DarkBloodElement }, DarkKnightRotation, DarkKnightCooldowns, DarkKnightDefensives, MpBar: true, Moves: new[] { new Move("Shadowstride", true) }, Stance: "Grit"),
         ["Gunbreaker"] = new Job(37, "GNB", p => new[] { p.JobGaugeSystem.GunbreakerElement }, GunbreakerRotation, GunbreakerCooldowns, GunbreakerDefensives, Moves: new[] { new Move("Trajectory", true) }, Stance: "Royal Guard"),
-        ["White Mage"] = new Job(24, "WHM", p => new[] { p.JobGaugeSystem.LilyElement, p.JobGaugeSystem.BloodLilyElement }, WhiteMageRotation, WhiteMageCooldowns, WhiteMageDefensives, Moves: new[] { new Move("Aetherial Shift") }),
+        ["White Mage"] = new Job(24, "WHM", p => new[] { p.JobGaugeSystem.BloodLilyElement, p.JobGaugeSystem.LilyElement }, WhiteMageRotation, WhiteMageCooldowns, WhiteMageDefensives, Moves: new[] { new Move("Aetherial Shift") }),
         ["Scholar"] = new Job(28, "SCH", p => new[] { p.JobGaugeSystem.AetherflowElement, p.JobGaugeSystem.FaerieElement }, ScholarRotation, ScholarCooldowns, ScholarDefensives),
-        ["Astrologian"] = new Job(33, "AST", p => new[] { p.JobGaugeSystem.CardsElement, p.JobGaugeSystem.CrownElement }, AstrologianRotation, AstrologianCooldowns, AstrologianDefensives),
+        ["Astrologian"] = new Job(33, "AST", p => new[] { p.JobGaugeSystem.CrownElement, p.JobGaugeSystem.CardsElement }, AstrologianRotation, AstrologianCooldowns, AstrologianDefensives),
         ["Sage"] = new Job(40, "SGE", p => new[] { p.JobGaugeSystem.AddersgallElement, p.JobGaugeSystem.AdderstingElement }, SageRotation, SageCooldowns, SageDefensives, Moves: new[] { new Move("Icarus") }),
-        ["Monk"] = new Job(20, "MNK", p => p.JobGaugeSystem.ElementsOf("MNK"), MonkRotation, MonkCooldowns, MonkDefensives, Moves: new[] { new Move("Thunderclap", true) }),
-        ["Dragoon"] = new Job(22, "DRG", p => p.JobGaugeSystem.ElementsOf("DRG"), DragoonRotation, DragoonCooldowns, NoAbilities, Moves: new[] { new Move("Winged Glide", true), new Move("Elusive Jump") }),
-        ["Ninja"] = new Job(30, "NIN", p => p.JobGaugeSystem.ElementsOf("NIN"), NinjaRotation, NinjaCooldowns, NinjaDefensives, Moves: new[] { new Move("Shukuchi", true) }),
-        ["Samurai"] = new Job(34, "SAM", p => p.JobGaugeSystem.ElementsOf("SAM"), SamuraiRotation, SamuraiCooldowns, SamuraiDefensives),
-        ["Reaper"] = new Job(39, "RPR", p => p.JobGaugeSystem.ElementsOf("RPR"), ReaperRotation, ReaperCooldowns, ReaperDefensives, Moves: new[] { new Move("Hell's Ingress"), new Move("Hell's Egress") }),
-        ["Viper"] = new Job(41, "VPR", p => p.JobGaugeSystem.ElementsOf("VPR"), ViperRotation, ViperCooldowns, NoAbilities, Moves: new[] { new Move("Slither", true) }),
-        ["Bard"] = new Job(23, "BRD", p => p.JobGaugeSystem.ElementsOf("BRD"), BardRotation, BardCooldowns, BardDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("Repelling Shot") }),
-        ["Machinist"] = new Job(31, "MCH", p => p.JobGaugeSystem.ElementsOf("MCH"), MachinistRotation, MachinistCooldowns, MachinistDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false) }),
-        ["Dancer"] = new Job(38, "DNC", p => p.JobGaugeSystem.ElementsOf("DNC"), DancerRotation, DancerCooldowns, DancerDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("En Avant", true) }, Stance: "Closed Position"),
-        ["Black Mage"] = new Job(25, "BLM", p => p.JobGaugeSystem.ElementsOf("BLM"), BlackMageRotation, BlackMageCooldowns, BlackMageDefensives, Moves: new[] { new Move("Aetherial Manipulation") }),
-        ["Summoner"] = new Job(27, "SMN", p => p.JobGaugeSystem.ElementsOf("SMN"), SummonerRotation, SummonerCooldowns, SummonerDefensives),
-        ["Red Mage"] = new Job(35, "RDM", p => new[] { p.JobGaugeSystem.RedWhiteElement, p.JobGaugeSystem.RedBlackElement, p.JobGaugeSystem.RedStackElement }, RedMageRotation, RedMageCooldowns, RedMageDefensives),
-        ["Pictomancer"] = new Job(42, "PCT", p => p.JobGaugeSystem.ElementsOf("PCT"), PictomancerRotation, PictomancerCooldowns, PictomancerDefensives, Moves: new[] { new Move("Smudge") }),
+        ["Monk"] = new Job(20, "MNK", p => BottomUp(p.JobGaugeSystem.ElementsOf("MNK")), MonkRotation, MonkCooldowns, MonkDefensives, Moves: new[] { new Move("Thunderclap", true) }),
+        ["Dragoon"] = new Job(22, "DRG", p => BottomUp(p.JobGaugeSystem.ElementsOf("DRG")), DragoonRotation, DragoonCooldowns, NoAbilities, Moves: new[] { new Move("Winged Glide", true), new Move("Elusive Jump") }),
+        ["Ninja"] = new Job(30, "NIN", p => BottomUp(p.JobGaugeSystem.ElementsOf("NIN")), NinjaRotation, NinjaCooldowns, NinjaDefensives, Moves: new[] { new Move("Shukuchi", true) }),
+        ["Samurai"] = new Job(34, "SAM", p => BottomUp(p.JobGaugeSystem.ElementsOf("SAM")), SamuraiRotation, SamuraiCooldowns, SamuraiDefensives),
+        ["Reaper"] = new Job(39, "RPR", p => BottomUp(p.JobGaugeSystem.ElementsOf("RPR")), ReaperRotation, ReaperCooldowns, ReaperDefensives, Moves: new[] { new Move("Hell's Ingress"), new Move("Hell's Egress") }),
+        ["Viper"] = new Job(41, "VPR", p => BottomUp(p.JobGaugeSystem.ElementsOf("VPR")), ViperRotation, ViperCooldowns, NoAbilities, Moves: new[] { new Move("Slither", true) }),
+        ["Bard"] = new Job(23, "BRD", p => Pick(p.JobGaugeSystem.ElementsOf("BRD"), 2, 0, 1), BardRotation, BardCooldowns, BardDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("Repelling Shot") }),
+        ["Machinist"] = new Job(31, "MCH", p => BottomUp(p.JobGaugeSystem.ElementsOf("MCH")), MachinistRotation, MachinistCooldowns, MachinistDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false) }),
+        ["Dancer"] = new Job(38, "DNC", p => BottomUp(p.JobGaugeSystem.ElementsOf("DNC")), DancerRotation, DancerCooldowns, DancerDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("En Avant", true) }, Stance: "Closed Position"),
+        ["Black Mage"] = new Job(25, "BLM", p => BottomUp(p.JobGaugeSystem.ElementsOf("BLM")), BlackMageRotation, BlackMageCooldowns, BlackMageDefensives, Moves: new[] { new Move("Aetherial Manipulation") }),
+        ["Summoner"] = new Job(27, "SMN", p => BottomUp(p.JobGaugeSystem.ElementsOf("SMN")), SummonerRotation, SummonerCooldowns, SummonerDefensives),
+        ["Red Mage"] = new Job(35, "RDM", p => new[] { p.JobGaugeSystem.RedStackElement, p.JobGaugeSystem.RedWhiteElement, p.JobGaugeSystem.RedBlackElement }, RedMageRotation, RedMageCooldowns, RedMageDefensives),
+        ["Pictomancer"] = new Job(42, "PCT", p => Pick(p.JobGaugeSystem.ElementsOf("PCT"), 1, 0, 2), PictomancerRotation, PictomancerCooldowns, PictomancerDefensives, Moves: new[] { new Move("Smudge") }),
         // The Blue Mage has no gauge and a spellbook of about 120 spells: only the ones chosen below get a tracker (no safety net).
         ["Blue Mage"] = new Job(36, "BLU", p => Array.Empty<LayoutElement>(), BlueMageRotation, BlueMageCooldowns, BlueMageDefensives, MpBar: true, Spellbook: true),
     };
@@ -83,12 +86,16 @@ internal static class JobSetups
     {
     }
 
+    // The rows of a gauge as the settings list them (top to bottom) turned upside down: the first one the job learns was listed on top and now goes at the bottom.
+    private static LayoutElement[] BottomUp(LayoutElement[] elements) => Enumerable.Reverse(elements).ToArray();
+
+    // The rows in another order (the positions of the list, top to bottom). A list that does not have that many rows is left as it is.
+    private static LayoutElement[] Pick(LayoutElement[] elements, params int[] order)
+        => elements.Length == order.Length ? order.Select(index => elements[index]).ToArray() : elements;
+
     public static string[] Names => Jobs.Keys.ToArray();
 
     public static string? NameOfJob(uint jobId) => Jobs.FirstOrDefault(pair => pair.Value.Id == jobId).Key;
-
-    // One place of the column: an element, the size to give it (0 = keep) and whether it is a gauge of this job (the other jobs have none there).
-    private sealed record Slot(LayoutElement Element, int Width = 0, int Height = 0, bool IsGauge = false);
 
     /// <summary>True when the job already has trackers in the shared rows (Rotation, CDs, Defensive CDs).</summary>
     public static bool IsSetUp(TrackerEngine engine, string jobName)
@@ -322,117 +329,8 @@ internal static class JobSetups
             return $"{jobName}: {came} trackers came back.";
         }
 
-        // The rows of every job share one position each ("Rotation", "CDs", "Defensive CDs"): set once, every job shows it.
-        if (rotation is not null)
-        {
-            rotation.Definition.PositionGroup = "Rotation";
-            rotation.Element.PositionGroup = "Rotation";
-        }
-
-        if (cooldowns is not null)
-        {
-            cooldowns.Definition.PositionGroup = "CDs";
-            cooldowns.Element.PositionGroup = "CDs";
-        }
-
-        if (defensives is not null)
-        {
-            defensives.Definition.PositionGroup = "Defensive CDs";
-            defensives.Element.PositionGroup = "Defensive CDs";
-        }
-
-        var progressBar = new Slot(plugin.ProgressBarSystem.PlayerElement, 240, 18);
-
-        // From the top of the column down.
-        var column = new List<Slot>();
-        if (rotation is not null)
-            column.Add(new Slot(rotation.Element));
-
-        column.AddRange(job.Gauge(plugin).Select(bar => new Slot(bar, 240, 6, true)));
-
-        void AddRows()
-        {
-            if (cooldowns is not null)
-                column.Add(new Slot(cooldowns.Element));
-
-            if (defensives is not null)
-                column.Add(new Slot(defensives.Element));
-        }
-
-        // Dark Knight is the one tank that also needs its MP (Edge of Shadow, The Blackest Night).
-        if (job.MpBar)
-            plugin.Configuration.HudBars.Player.SetMpOn(job.Id, true);
-
-        var player = plugin.Configuration.HudBars.Player;
-        var showsMp = player.IsMpOn(job.Id);
-        if (showsMp)
-            column.Add(new Slot(plugin.HudBarSystem.MpElement, 240, 6));
-
-        // The global cooldown bar sits between the MP bar (or the gauges) and the progress bar.
-        column.Add(new Slot(plugin.ProgressBarSystem.GcdElement, 240, 6));
-        column.Add(progressBar);
-        AddRows();
-
-        if (roleRow is not null)
-            column.Add(new Slot(roleRow.Element));
-
-        // Every element of the column has its own height measured from the middle of the screen (no anchor to the one above, so moving
-        // one of them never drags the others by surprise): 6 px between rows, 1 px between bars (gauges, MP bar, progress bar).
-        // Walked twice: without the gauges of the job (the column every job shares) and with them (the column of this job).
-        int[] Tops(bool withGauges)
-        {
-            var tops = new int[column.Count];
-            var y = TopY;
-            var aboveIsBar = false;
-            var first = true;
-
-            for (var i = 0; i < column.Count; i++)
-            {
-                var slot = column[i];
-                if (slot.IsGauge && !withGauges)
-                    continue;
-
-                var isBar = slot.Width > 0;
-                if (!first)
-                    y += aboveIsBar && isBar ? BarGap : 6;
-
-                tops[i] = y;
-                y += isBar ? slot.Height : slot.Element.Layout.Height;
-                aboveIsBar = isBar;
-                first = false;
-            }
-
-            return tops;
-        }
-
-        var commonTops = Tops(false);
-        var jobTops = Tops(true);
-
-        for (var i = 0; i < column.Count; i++)
-        {
-            var slot = column[i];
-
-            void PlaceAt(ElementLayout layout, int top)
-            {
-                TrackerPresets.Builder.AttachToScreenTop(layout, top);
-
-                if (slot.Width > 0)
-                {
-                    layout.Width = slot.Width;
-                    layout.Height = slot.Height;
-                }
-            }
-
-            var commonTop = commonTops[i];
-            var jobTop = jobTops[i];
-
-            // The gauges are of this job only. The rest has one position for every job; a job whose column is different (it has gauges)
-            // gets its own, and the checkbox "Use a different position for this job" shows it.
-            if (slot.IsGauge)
-                PlaceAt(slot.Element.Layout, jobTop);
-            else
-                plugin.Layout.PlaceForJob(slot.Element, job.Id, false, layout => PlaceAt(layout, commonTop), layout => PlaceAt(layout, jobTop));
-        }
+        // The standard column of the job, all of it hung from the Rotation row (see ArrangeColumn).
+        var showsMp = ArrangeColumn(plugin, job, rotation, cooldowns, defensives, roleRow, false);
 
         // PvP has its own column, from the same top: the Rotation row, then 6 px below it the Frontline gauge, the MP bar of PvP, the global
         // cooldown bar and the progress bar, 1 px apart. There are no job gauges and no CDs rows in PvP, so nothing else is in between,
@@ -480,6 +378,147 @@ internal static class JobSetups
             report += $" Not found in the game data, so those triggers do nothing: {string.Join(", ", builder.Missing.Distinct())}.";
 
         return report;
+    }
+
+    /// <summary>
+    /// Puts the column of a job that already has its trackers in the standard place (the same as <see cref="Apply"/> does when it makes them).
+    /// Used when the presets are imported on a new install: the default settings bring the jobs set up, but each with its own old places.
+    /// </summary>
+    public static void Arrange(Plugin plugin, TrackerEngine engine, string jobName)
+    {
+        if (!Jobs.TryGetValue(jobName, out var job))
+            return;
+
+        // A shared row counts only if the job has trackers in it (a job without defensives has no slot there).
+        TrackerGroupRuntime? RowOf(string id)
+        {
+            var group = engine.EnsureSharedGroup(id);
+            var groupId = group.Definition.Id;
+            return engine.Trackers.Any(t => t.Definition.GroupId == groupId && t.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid))) ? group : null;
+        }
+
+        ArrangeColumn(plugin, job, engine.EnsureSharedGroup(TrackerEngine.SharedRotationId), RowOf(TrackerEngine.SharedCdsId), RowOf(TrackerEngine.SharedDefensiveId), RowOf(TrackerEngine.SharedRoleId), true);
+        plugin.RequestSave();
+    }
+
+    // The standard column of every job, from the top, each piece hung from the one above (the user can still move any of them):
+    //   Rotation (fixed: the middle of the screen, 180 px up) / the parts of the job gauge (3 px under the Rotation row, 0 px between them) /
+    //   the MP bar, if the job shows it (0 px) / the progress bar (0 px) / CDs (3 px) / Defensive CDs (3 px) / Role Actions (3 px).
+    // A job without gauge parts or MP bar hangs the next piece from the Rotation row (3 px). A job without defensives hangs the role row from the CDs.
+    // The rows are shared by every job (one common place); what is different in a job (the progress bar and the MP bar hang from other bars) is saved for that job.
+    // The pieces that depend on the gauge of the job (the gauge parts, the MP bar, the progress bar) are saved for the job ("Use a different position
+    // for this job" is on for them); the rows are common to every job. Nothing is locked. <paramref name="force"/>: the common places are written even if they were
+    // there already (the default settings of a new install). Returns whether the MP bar is shown for the job.
+    private static bool ArrangeColumn(Plugin plugin, Job job, TrackerGroupRuntime? rotation, TrackerGroupRuntime? cooldowns, TrackerGroupRuntime? defensives, TrackerGroupRuntime? roleRow, bool force)
+    {
+        // Dark Knight is the one tank that also needs its MP (Edge of Shadow, The Blackest Night).
+        if (job.MpBar)
+            plugin.Configuration.HudBars.Player.SetMpOn(job.Id, true);
+
+        var showsMp = plugin.Configuration.HudBars.Player.IsMpOn(job.Id);
+        var layouts = plugin.Layout;
+
+        // Hangs a layout under another element, centred, with the given gap. Without an element above it goes where the Rotation row would.
+        void Under(ElementLayout layout, LayoutElement? above, int gap)
+        {
+            if (above is null)
+            {
+                TrackerPresets.Builder.AttachToScreenTop(layout, TopY);
+                return;
+            }
+
+            layout.Locked = false;
+            layout.AttachTo = above.Id;
+            layout.ScreenAnchor = AnchorPoint.Bottom;
+            layout.SelfAnchor = AnchorPoint.Top;
+            layout.OffsetX = 0;
+            layout.OffsetY = gap;
+        }
+
+        // The Rotation row: in the middle of the screen, 180 px up (saved as +180: the field shows it upwards).
+        if (rotation is not null)
+        {
+            layouts.PlaceForAllJobs(rotation.Element, job.Id, layout =>
+            {
+                layout.Locked = false;
+                layout.AttachTo = null;
+                layout.ScreenAnchor = AnchorPoint.Center;
+                layout.SelfAnchor = AnchorPoint.Center;
+                layout.OffsetX = 0;
+                layout.OffsetY = TopY;
+            }, force);
+        }
+
+        var above = rotation?.Element;
+        var aboveIsBar = false;
+
+        // The parts of the job gauge, from the top one down.
+        foreach (var part in job.Gauge(plugin))
+        {
+            var partAbove = above;
+            var partGap = aboveIsBar ? 0 : 3;
+            layouts.PlaceOnlyForJob(part, job.Id, layout =>
+            {
+                Under(layout, partAbove, partGap);
+                layout.Width = 240;
+                layout.Height = 6;
+            });
+
+            above = part;
+            aboveIsBar = true;
+        }
+
+        if (showsMp)
+        {
+            var mpAbove = above;
+            var mpGap = aboveIsBar ? 0 : 3;
+            layouts.PlaceOnlyForJob(plugin.HudBarSystem.MpElement, job.Id, layout =>
+            {
+                Under(layout, mpAbove, mpGap);
+                layout.Width = 240;
+                layout.Height = 6;
+            });
+
+            above = plugin.HudBarSystem.MpElement;
+            aboveIsBar = true;
+        }
+
+        var castAbove = above;
+        var castGap = aboveIsBar ? 0 : 3;
+        var cast = plugin.ProgressBarSystem.PlayerElement;
+        layouts.PlaceOnlyForJob(cast, job.Id, layout =>
+        {
+            Under(layout, castAbove, castGap);
+            layout.Width = 240;
+            layout.Height = 18;
+        });
+
+        // The global cooldown bar is not a piece of the column: it is off by default, and whoever turns it on places it.
+
+        above = cast;
+
+        // A row under the one above it, 3 px apart. If the job has what the common place expects above it, the place is the common one.
+        void Row(TrackerGroupRuntime? row, LayoutElement? commonAbove)
+        {
+            if (row is null)
+                return;
+
+            var rowAbove = above;
+            void Place(ElementLayout layout) => Under(layout, rowAbove, 3);
+
+            if (rowAbove == commonAbove)
+                layouts.PlaceForAllJobs(row.Element, job.Id, Place, force);
+            else
+                layouts.PlaceOnlyForJob(row.Element, job.Id, Place);
+
+            above = row.Element;
+        }
+
+        Row(cooldowns, cast);
+        Row(defensives, cooldowns?.Element);
+        Row(roleRow, defensives?.Element);
+
+        return showsMp;
     }
 
     // The jobs in the order of the game's job list: tanks, healers, melee, physical ranged, magical ranged. Used to order the movement abilities
@@ -591,15 +630,14 @@ internal static class JobSetups
         var group = all.Row("General", 3);
         group.Definition.Growth = GroupGrowth.ToLeft;
 
-        var frame = plugin.HudBarSystem.PlayerElement.Layout;
-        var centered = frame.AttachTo is null && frame.ScreenAnchor == AnchorPoint.Center && frame.SelfAnchor == AnchorPoint.Center;
-
+        // The only group that does not grow from the center: it hangs from the left of the player's frame (its right side 3 px from it) and grows to the left.
         var layout = group.Element.Layout;
-        layout.AttachTo = null;
-        layout.ScreenAnchor = AnchorPoint.Center;
+        layout.Locked = false;
+        layout.AttachTo = plugin.HudBarSystem.PlayerElement.Id;
+        layout.ScreenAnchor = AnchorPoint.Left;
         layout.SelfAnchor = AnchorPoint.Right;
-        layout.OffsetX = (centered ? frame.OffsetX - frame.Width / 2 : -470) - 6;
-        layout.OffsetY = centered ? frame.OffsetY : 190;
+        layout.OffsetX = -3;
+        layout.OffsetY = 0;
 
         // Sprint is shown only while it is on you or on cooldown: ready, it would just take room for nothing.
         all.Cd(group, "Sprint", new[] { "Sprint" }, new[] { "Sprint" }, showWhenReady: false);

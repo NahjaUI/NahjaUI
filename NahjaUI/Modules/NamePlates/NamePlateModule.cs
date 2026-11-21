@@ -450,9 +450,11 @@ internal sealed class NamePlateModule : IDisposable
         }
 
         // A player of your party who is watching a cutscene: the game's own icon of that status, on a point of the HP bar.
-        // The preview of the Party tab always shows it, so it can be placed.
-        if (style.ShowCutsceneIcon && GameDataProvider.CutsceneIconId != 0 && plate.Relation == NamePlateRelation.Party
-            && (isPreview || cutsceneMembers.Contains(plate.EntityId)))
+        // The preview of the Party tab always shows it, so it can be placed. While the plate has no bar (the player is not targeted) the icon goes
+        // centered over his head instead (see below), and it comes back to this place when the bar shows.
+        var showsCutsceneIcon = style.ShowCutsceneIcon && GameDataProvider.CutsceneIconId != 0 && plate.Relation == NamePlateRelation.Party
+                                && (isPreview || cutsceneMembers.Contains(plate.EntityId));
+        if (showsCutsceneIcon && drawBar)
         {
             var cutsceneSide = MathF.Max(MathF.Round(style.CutsceneIconSizePx * scale), 4f);
             var cutsceneAttach = min + (max - min) * style.CutsceneIconBarAnchor.Fraction() + new Vector2(style.CutsceneIconOffsetX, style.CutsceneIconOffsetY) * scale;
@@ -558,6 +560,19 @@ internal sealed class NamePlateModule : IDisposable
                     face.Draw(drawList, new Vector2(titleX, MathF.Round(titleTop)), title, nameColor, edgeColor);
                 }
             }
+        }
+
+        // The cutscene icon of a plate with no bar: centered over the head (over the name when it shows), a little above it.
+        if (showsCutsceneIcon && !drawBar)
+        {
+            var cutsceneSide = MathF.Max(MathF.Round(style.CutsceneIconSizePx * scale), 4f);
+            var cutsceneGap = MathF.Round(2f * scale);
+            var cutsceneMin = new Vector2(MathF.Round(markerCenterX - cutsceneSide / 2f), MathF.Round(markerTop - cutsceneSide - cutsceneGap));
+            var cutsceneTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(GameDataProvider.CutsceneIconId)).GetWrapOrEmpty();
+            drawList.AddImage(cutsceneTexture.Handle, cutsceneMin, cutsceneMin + new Vector2(cutsceneSide, cutsceneSide), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
+
+            // The big marker (if the game has one) goes above this icon.
+            markerTop = cutsceneMin.Y;
         }
 
         // The game's big marker, centered over the name block and sitting on top of it.

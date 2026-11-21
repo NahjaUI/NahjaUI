@@ -55,14 +55,16 @@ internal sealed class HudBarModule : IDisposable
     {
         this.plugin = plugin;
 
+        // The vanilla style: the player's frame ends 210 px at the left of the middle of the screen and the target's starts 210 px at its right, both
+        // 240 px down. The target of target hangs from the right of the target frame and the focus frame from its bottom.
         PlayerElement = plugin.Layout.Register("hudbar.player", "Player frame", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
-            SelfAnchor = AnchorPoint.Center,
-            OffsetX = -330,
-            OffsetY = 190,
-            Width = 280,
-            Height = 26
+            SelfAnchor = AnchorPoint.Right,
+            OffsetX = -210,
+            OffsetY = 240,
+            Width = 180,
+            Height = 24
         });
 
         // The MP bar can live in its own box, for example next to the job gauge.
@@ -92,31 +94,33 @@ internal sealed class HudBarModule : IDisposable
         TargetElement = plugin.Layout.Register("hudbar.target", "Target frame", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
-            SelfAnchor = AnchorPoint.Center,
-            OffsetX = 330,
-            OffsetY = 190,
-            Width = 280,
-            Height = 26
+            SelfAnchor = AnchorPoint.Left,
+            OffsetX = 210,
+            OffsetY = 240,
+            Width = 180,
+            Height = 24
         });
 
         TargetOfTargetElement = plugin.Layout.Register("hudbar.targetoftarget", "Target of target frame", new ElementLayout
         {
-            ScreenAnchor = AnchorPoint.Center,
-            SelfAnchor = AnchorPoint.Center,
-            OffsetX = 395,
-            OffsetY = 218,
+            AttachTo = "hudbar.target",
+            ScreenAnchor = AnchorPoint.Right,
+            SelfAnchor = AnchorPoint.Left,
+            OffsetX = 3,
+            OffsetY = 0,
             Width = 150,
-            Height = 18
+            Height = 24
         });
 
         FocusElement = plugin.Layout.Register("hudbar.focus", "Focus frame", new ElementLayout
         {
-            ScreenAnchor = AnchorPoint.Center,
-            SelfAnchor = AnchorPoint.Center,
-            OffsetX = 395,
-            OffsetY = 162,
-            Width = 150,
-            Height = 18
+            AttachTo = "hudbar.target",
+            ScreenAnchor = AnchorPoint.Bottom,
+            SelfAnchor = AnchorPoint.Top,
+            OffsetX = 0,
+            OffsetY = 90,
+            Width = 180,
+            Height = 24
         });
 
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeBars, OnNativePreDraw);

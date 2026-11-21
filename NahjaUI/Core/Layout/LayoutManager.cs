@@ -401,6 +401,50 @@ internal sealed class LayoutManager
     }
 
     /// <summary>
+    /// Places an element of the standard column for ONE job only (the cast bar, the MP bar... hang from a different element in each job).
+    /// The size is the one of the common layout; only the place (what it hangs from, anchors, offsets) is written by <paramref name="place"/>.
+    /// </summary>
+    public void PlaceOnlyForJob(LayoutElement element, uint jobId, Action<ElementLayout> place)
+    {
+        var common = EnsureCommon(element);
+        var wanted = common[0].Clone();
+        place(wanted);
+
+        if (!config.JobLayouts.TryGetValue(element.Id, out var own))
+        {
+            own = new Dictionary<uint, ElementLayout>();
+            config.JobLayouts[element.Id] = own;
+        }
+
+        own[jobId] = wanted;
+        loadedFrom.Remove(element.Id);
+    }
+
+    /// <summary>
+    /// Places an element of the standard column for EVERY job (Rotation, CDs...). The common place is written only when nothing was saved
+    /// yet, when it is still the place the element started with, or when it is the old fixed place of the first presets (hung from nothing and
+    /// anchored by its top). A place the user chose stays, unless <paramref name="force"/> is set (the default settings of a new install). The job's own place, if it had one, is dropped: it follows the common one.
+    /// </summary>
+    public void PlaceForAllJobs(LayoutElement element, uint jobId, Action<ElementLayout> place, bool force = false)
+    {
+        var existed = config.CommonLayouts.ContainsKey(CommonId(element));
+        var common = EnsureCommon(element);
+        var layout = common[0];
+
+        if (force || !existed || SamePlace(layout, element.Defaults) || (layout.AttachTo is null && layout.SelfAnchor == AnchorPoint.Top))
+            place(layout);
+
+        if (config.JobLayouts.TryGetValue(element.Id, out var own))
+        {
+            own.Remove(jobId);
+            if (own.Count == 0)
+                config.JobLayouts.Remove(element.Id);
+        }
+
+        loadedFrom.Remove(element.Id);
+    }
+
+    /// <summary>
     /// Call once per frame with the job being played (0 when not known) and whether it is in PvP. Every element shows the position of the
     /// job if the job has its own, and the common one otherwise; what is moved or edited is saved in the position that is shown.
     /// </summary>
@@ -560,7 +604,11 @@ internal sealed class LayoutManager
         if (viewport.Size.X < 64f || viewport.Size.Y < 64f)
             return;
 
-        var moved = false;
+        var moved = RepairBrokenAttachments();
+
+        // Offsets further away than this (in logical pixels) are never a real place: the correction below never goes there.
+        var limit = MathF.Max(viewport.Size.X, viewport.Size.Y) * 2f / MathF.Max(UiScale.Overlay, 0.1f);
+
         foreach (var element in elements)
         {
             if (element.IsManaged || element.IsHidden)
@@ -571,8 +619,21 @@ internal sealed class LayoutManager
             KeepOnScreen(element, ref x, ref y);
 
             if (x == element.Layout.OffsetX && y == element.Layout.OffsetY)
+            {
+                keepCorrected.Remove(element.Id);
+                continue;
+            }
+
+            // The box an element draws can be the one of the last frame (a tracker group): if it has not changed since the last correction,
+            // the correction did not arrive yet (or the box is not redrawn), and correcting again would add the same shift again and again.
+            var shown = GetDisplayRect(element).Pos;
+            if (keepCorrected.TryGetValue(element.Id, out var last) && last == shown)
                 continue;
 
+            if (!float.IsFinite(x) || !float.IsFinite(y) || MathF.Abs(x) > limit || MathF.Abs(y) > limit)
+                continue;
+
+            keepCorrected[element.Id] = shown;
             element.Layout.OffsetX = x;
             element.Layout.OffsetY = y;
             moved = true;
@@ -580,6 +641,62 @@ internal sealed class LayoutManager
 
         if (moved)
             Changed?.Invoke();
+    }
+
+    // The rect each element had when it was last corrected (see KeepAllOnScreen).
+    private readonly Dictionary<string, Vector2> keepCorrected = new();
+
+    /// <summary>
+    /// Fixes what would send the screen limit out of control: an offset that is not a number or is absurdly far (put back to 0), and elements attached
+    /// in a circle (A hangs from B and B from A, however long the loop): the one that closes the loop goes back to the middle of the screen.
+    /// Returns true when something changed.
+    /// </summary>
+    private bool RepairBrokenAttachments()
+    {
+        var changed = false;
+        foreach (var element in elements)
+        {
+            var layout = element.Layout;
+            if (!float.IsFinite(layout.OffsetX) || MathF.Abs(layout.OffsetX) > 20000f)
+            {
+                layout.OffsetX = 0f;
+                changed = true;
+            }
+
+            if (!float.IsFinite(layout.OffsetY) || MathF.Abs(layout.OffsetY) > 20000f)
+            {
+                layout.OffsetY = 0f;
+                changed = true;
+            }
+        }
+
+        foreach (var start in elements)
+        {
+            var visited = new HashSet<string> { start.Id };
+            var current = start;
+            while (!string.IsNullOrEmpty(current.Layout.AttachTo))
+            {
+                var parent = elements.Find(e => e.Id == current.Layout.AttachTo);
+                if (parent is null)
+                    break;
+
+                if (!visited.Add(parent.Id))
+                {
+                    // `current` hangs from an element that is already in the chain: the loop is closed here.
+                    current.Layout.AttachTo = null;
+                    current.Layout.ScreenAnchor = AnchorPoint.Center;
+                    current.Layout.SelfAnchor = AnchorPoint.Center;
+                    current.Layout.OffsetX = 0f;
+                    current.Layout.OffsetY = 0f;
+                    changed = true;
+                    break;
+                }
+
+                current = parent;
+            }
+        }
+
+        return changed;
     }
 
     public static (Vector2 Pos, Vector2 Size) GetRect(ElementLayout layout)
@@ -591,7 +708,10 @@ internal sealed class LayoutManager
             MathF.Round(Math.Max(1, layout.Width) * scale),
             MathF.Round(Math.Max(1, layout.Height) * scale));
 
-        var offset = new Vector2(layout.OffsetX, layout.OffsetY) * scale;
+        // A saved offset that is not a number or is absurdly big would make the drawing code of ImGui crash the game: it counts as 0.
+        var offsetX = float.IsFinite(layout.OffsetX) && MathF.Abs(layout.OffsetX) < 100000f ? layout.OffsetX : 0f;
+        var offsetY = float.IsFinite(layout.OffsetY) && MathF.Abs(layout.OffsetY) < 100000f ? layout.OffsetY : 0f;
+        var offset = new Vector2(offsetX, offsetY) * scale;
         var pos = screenPoint + offset - size * layout.SelfAnchor.Fraction();
 
         return (new Vector2(MathF.Round(pos.X), MathF.Round(pos.Y)), size);

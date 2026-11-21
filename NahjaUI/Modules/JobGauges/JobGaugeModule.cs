@@ -304,9 +304,9 @@ internal sealed partial class JobGaugeModule : IDisposable
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = 250,
-            Width = 156,
-            Height = 10
+            OffsetY = -460,
+            Width = 240,
+            Height = 9
         });
 
         LimitBreakPvpElement = plugin.Layout.Register("gauge.limitbreak.pvp", "Limit Break gauge (PvP)", new ElementLayout

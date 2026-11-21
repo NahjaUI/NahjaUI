@@ -63,14 +63,13 @@ internal sealed class ProgressBarModule : IDisposable
             Height = 22
         });
 
-        // The global cooldown bar sits on top of the player's progress bar (1 px apart, like the other stacked bars).
+        // The global cooldown bar is off by default: it waits in the middle of the screen until somebody turns it on and places it.
         GcdElement = plugin.Layout.Register("progressbar.gcd", "Global cooldown bar", new ElementLayout
         {
-            AttachTo = "progressbar.player",
-            ScreenAnchor = AnchorPoint.Top,
-            SelfAnchor = AnchorPoint.Bottom,
+            ScreenAnchor = AnchorPoint.Center,
+            SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = -1,
+            OffsetY = 0,
             Width = 240,
             Height = 6
         });

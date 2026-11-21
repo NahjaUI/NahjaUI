@@ -41,7 +41,17 @@ internal sealed class StatusEffectsModule : IDisposable
         elements = new[]
         {
             Register("status.enhancements", "Enhancements", 0),
-            Register("status.enfeeblements", "Enfeeblements", 70)
+            // The vanilla style: the enfeeblements hang from the bottom of the target's progress bar, 3 px under it.
+            plugin.Layout.Register("status.enfeeblements", "Enfeeblements", new ElementLayout
+            {
+                AttachTo = "progressbar.target",
+                ScreenAnchor = AnchorPoint.Bottom,
+                SelfAnchor = AnchorPoint.Top,
+                OffsetX = 0,
+                OffsetY = 3,
+                Width = 350,
+                Height = 24
+            })
         };
 
         Plugin.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, NativeWindows, OnNativePreDraw);

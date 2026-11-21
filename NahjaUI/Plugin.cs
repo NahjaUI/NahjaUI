@@ -499,6 +499,9 @@ public sealed class Plugin : IDalamudPlugin
         {
             if (!NahjaUI.Modules.Trackers.JobSetups.IsSetUp(TrackerSystem, name))
                 NahjaUI.Modules.Trackers.JobSetups.Apply(this, TrackerSystem, name);
+
+            // Every job gets the standard column, also the ones the default settings bring set up with their own old places.
+            NahjaUI.Modules.Trackers.JobSetups.Arrange(this, TrackerSystem, name);
         }
         catch (System.Exception ex)
         {
