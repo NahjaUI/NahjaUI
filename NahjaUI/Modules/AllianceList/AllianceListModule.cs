@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game;
@@ -10,6 +11,7 @@ using Dalamud.Interface.Utility;
 using NahjaUI.Core.Layout;
 using NahjaUI.Core.Ui;
 using NahjaUI.Game;
+using NahjaUI.Modules.HudBars;
 using NahjaUI.Modules.PartyListBar;
 using NahjaUI.Modules.Trackers;
 
@@ -154,7 +156,7 @@ internal sealed class AllianceListModule : IDisposable
         }
 
         var snapshot = plugin.GameData.Current;
-        IReadOnlyList<UnitSnapshot?>? members = snapshot.Alliance;
+        IReadOnlyList<UnitSnapshot?>? members = snapshot.Alliance is null ? null : ArrangeByRole(snapshot.Alliance);
         var isSample = false;
 
         if (members is null)
@@ -208,6 +210,47 @@ internal sealed class AllianceListModule : IDisposable
 
         AllianceElement.DisplayRect = (pos, box);
     }
+
+    // Inside each party of the alliance: tanks first, then healers, then damage dealers (whoever there is of each), and the empty cells
+    // at the end. Every party keeps its own block of cells (8, or 4 in the small group alliances), in the order of the game, so a party
+    // never moves into the cells of another one.
+    private static UnitSnapshot?[] ArrangeByRole(IReadOnlyList<UnitSnapshot?> slots)
+    {
+        var result = new UnitSnapshot?[slots.Count];
+        var block = slots.Count == 20 ? 4 : 8;
+
+        for (var start = 0; start < slots.Count; start += block)
+        {
+            var end = Math.Min(start + block, slots.Count);
+            var members = new List<UnitSnapshot>();
+            for (var i = start; i < end; i++)
+            {
+                if (slots[i] is { } member)
+                    members.Add(member);
+            }
+
+            // Stable sort: inside a role the order of the game stays. Jobs without a role (crafters...) go last.
+            var sorted = members
+                .Select((member, index) => (member, index))
+                .OrderBy(entry => RoleRank(entry.member.JobId))
+                .ThenBy(entry => entry.index)
+                .Select(entry => entry.member)
+                .ToList();
+
+            for (var i = 0; i < sorted.Count; i++)
+                result[start + i] = sorted[i];
+        }
+
+        return result;
+    }
+
+    private static int RoleRank(uint jobId) => JobRoles.RoleOf(jobId) switch
+    {
+        JobRole.Tank => 0,
+        JobRole.Healer => 1,
+        JobRole.Damage => 2,
+        _ => 3
+    };
 
     private bool IsHovered(Vector2 pos, Vector2 size)
     {

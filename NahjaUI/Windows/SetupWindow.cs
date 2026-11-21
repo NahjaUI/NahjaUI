@@ -6,17 +6,18 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using NahjaUI.Core;
+using NahjaUI.Core.Profiles;
 using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Windows;
 
 /// <summary>
 /// The setup window: opens by itself the first time on a new install, and again from the General page ("Run the setup again") or
-/// with /nui setup. Four short steps; every choice is applied right away, so it can be seen on screen while choosing.
+/// with /nui setup. Five short steps; every choice is applied right away, so it can be seen on screen while choosing.
 /// </summary>
 public sealed class SetupWindow : Window
 {
-    private const int StepCount = 4;
+    private const int StepCount = 5;
 
     // Logical pixels (Dalamud multiplies the size of a window by the UI scale itself).
     private static readonly Vector2 WindowSize = new(600f, 470f);
@@ -26,25 +27,31 @@ public sealed class SetupWindow : Window
     private int step;
     private SetupPackage package = SetupPackage.Full;
 
+    // The arrow of the title bar folds the window to its bar (and unfolds it).
+    private bool folded;
+
     // Set while unlock mode hides the window: closing it then is not the user's choice, so the setup is not marked as done.
     private bool hiddenForUnlock;
 
     public SetupWindow(Plugin plugin)
-        : base("NahjaUI setup###NahjaUISetup", ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+        // No title bar of the game's window system: the window draws its own, like the main window (see DrawTitleBar).
+        // It is moved by that bar, so the window itself cannot be dragged from anywhere else.
+        : base("NahjaUI setup###NahjaUISetup", ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove)
     {
         this.plugin = plugin;
 
+        ShowCloseButton = false;
         AllowPinning = false;
         AllowClickthrough = false;
 
-        Size = WindowSize;
-        SizeCondition = ImGuiCond.Always;
+        // The size is set in PreDraw (it changes when the window is folded), so it is not set here.
     }
 
     /// <summary>Opens the setup from the first step.</summary>
     public void Open()
     {
         step = 0;
+        folded = false;
         hiddenForUnlock = false;
         IsOpen = true;
     }
@@ -66,6 +73,11 @@ public sealed class SetupWindow : Window
     {
         themeScope?.Dispose();
         themeScope = new ThemeScope(plugin.Configuration);
+
+        // Physical pixels: the whole window, or only its title bar when folded.
+        var scale = ImGuiHelpers.GlobalScale;
+        var size = folded ? new Vector2(WindowSize.X * scale, TitleBarHeight(scale)) : WindowSize * scale;
+        ImGui.SetNextWindowSize(size, ImGuiCond.Always);
 
         var viewport = ImGui.GetMainViewport();
         ImGui.SetNextWindowPos(viewport.Pos + viewport.Size / 2f, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
@@ -96,12 +108,17 @@ public sealed class SetupWindow : Window
     {
         var scale = ImGuiHelpers.GlobalScale;
 
-        // The background goes first, under everything the window draws after it.
+        // The background goes first, under everything the window draws after it (the title bar is drawn over it).
         DrawBackground(scale);
 
-        using var contentStyle = new ContentStyleScope();
+        var titleHeight = DrawTitleBar(scale);
+        if (folded)
+            return;
 
-        DrawHeader(scale);
+        // The content starts under the title bar, with the same margin as at the left.
+        ImGui.SetCursorPos(new Vector2(ImGui.GetStyle().WindowPadding.X, titleHeight + ImGui.GetStyle().WindowPadding.Y));
+
+        using var contentStyle = new ContentStyleScope();
 
         // The body has its own area, so the buttons always stay at the bottom. Its background is see-through: the animated one shows.
         var footer = 46f * scale;
@@ -125,6 +142,9 @@ public sealed class SetupWindow : Window
                     case 2:
                         DrawPackage(scale);
                         break;
+                    case 3:
+                        DrawSize();
+                        break;
                     default:
                         DrawPlacement();
                         break;
@@ -138,54 +158,95 @@ public sealed class SetupWindow : Window
         DrawFooter(scale);
     }
 
-    // Everything under the title bar of the window.
+    // The whole window, with its rounded corners; the title bar is drawn over it.
     private void DrawBackground(float scale)
     {
         var windowPos = ImGui.GetWindowPos();
         var windowSize = ImGui.GetWindowSize();
-        var top = ImGui.GetCursorScreenPos().Y - ImGui.GetStyle().WindowPadding.Y;
-        var rounding = MathF.Round(Theme.WindowRounding * scale);
 
         AnimatedBackground.Draw(
             ImGui.GetWindowDrawList(),
-            new Vector2(windowPos.X, top),
+            windowPos,
             windowPos + windowSize,
-            rounding,
-            ImDrawFlags.RoundCornersBottom,
+            MathF.Round(Theme.WindowRounding * scale),
+            ImDrawFlags.RoundCornersAll,
             plugin.Configuration.AnimatedBackground);
     }
 
-    // The mark and the name at the left, and one dot for each step at the right (the one you are on is longer).
-    private void DrawHeader(float scale)
+    private static float TitleBarHeight(float scale) => MathF.Round(MathF.Max(34f * scale, ImGui.GetTextLineHeight() + 14f * scale));
+
+    // The same title bar as the main window: icon and name at the left (with a margin), one dot for each step (the one you are on is
+    // longer), and the arrow (fold) and the cross (close) at the right. It is also the handle to move the window. Returns its height.
+    private float DrawTitleBar(float scale)
     {
         var drawList = ImGui.GetWindowDrawList();
-        var pos = ImGui.GetCursorScreenPos();
-        var markSize = MathF.Round(28f * scale);
+        var windowPos = ImGui.GetWindowPos();
+        var width = ImGui.GetWindowSize().X;
+        var height = TitleBarHeight(scale);
+        var rounding = MathF.Min(MathF.Round(Theme.WindowRounding * scale), height / 2f + 12f * scale);
 
-        NahjaMark.Draw(drawList, pos, markSize);
+        drawList.AddRectFilled(windowPos, windowPos + new Vector2(width, height), ImGui.GetColorU32(Theme.Sidebar), rounding, ImDrawFlags.RoundCornersTop);
 
-        var textPos = new Vector2(MathF.Round(pos.X + markSize + 10f * scale), MathF.Round(pos.Y + (markSize - ImGui.GetTextLineHeight()) / 2f));
-        drawList.AddText(textPos, ImGui.GetColorU32(Theme.Text), "NahjaUI");
+        var padding = MathF.Round(12f * scale);
+        var gap = MathF.Round(4f * scale);
+        var button = TitleButtons.Size;
+        var centerY = windowPos.Y + height / 2f;
 
+        var closePos = new Vector2(MathF.Round(windowPos.X + width - padding - button), MathF.Round(centerY - button / 2f));
+        var foldPos = new Vector2(closePos.X - gap - button, closePos.Y);
+
+        // The icon and the name at the left.
+        var markSize = MathF.Round(22f * scale);
+        var markPos = new Vector2(MathF.Round(windowPos.X + padding), MathF.Round(centerY - markSize / 2f));
+        NahjaMark.Draw(drawList, markPos, markSize);
+
+        var textPos = new Vector2(MathF.Round(markPos.X + markSize + 8f * scale), MathF.Round(centerY - ImGui.GetTextLineHeight() / 2f));
+        drawList.AddText(textPos, ImGui.GetColorU32(Theme.Text), "NahjaUI setup");
+
+        // The steps, just before the buttons.
         var dotHeight = MathF.Round(8f * scale);
-        var gap = MathF.Round(6f * scale);
+        var dotGap = MathF.Round(6f * scale);
         var longDot = MathF.Round(26f * scale);
-        var shortDot = dotHeight;
-        var total = longDot + shortDot * (StepCount - 1) + gap * (StepCount - 1);
-
-        var x = ImGui.GetWindowPos().X + ImGui.GetWindowWidth() - ImGui.GetStyle().WindowPadding.X - total;
-        var y = MathF.Round(pos.Y + (markSize - dotHeight) / 2f);
+        var total = longDot + dotHeight * (StepCount - 1) + dotGap * (StepCount - 1);
+        var x = foldPos.X - gap - 10f * scale - total;
+        var y = MathF.Round(centerY - dotHeight / 2f);
         for (var i = 0; i < StepCount; i++)
         {
-            var width = i == step ? longDot : shortDot;
+            var dotWidth = i == step ? longDot : dotHeight;
             var color = i == step ? Theme.Accent : i < step ? Theme.WithAlpha(Theme.Accent, 0.55f) : Theme.WithAlpha(Theme.TextMuted, 0.45f);
-            drawList.AddRectFilled(new Vector2(MathF.Round(x), y), new Vector2(MathF.Round(x + width), y + dotHeight), ImGui.GetColorU32(color), dotHeight / 2f);
-            x += width + gap;
+            drawList.AddRectFilled(new Vector2(MathF.Round(x), y), new Vector2(MathF.Round(x + dotWidth), y + dotHeight), ImGui.GetColorU32(color), dotHeight / 2f);
+            x += dotWidth + dotGap;
         }
 
-        // The cursor goes under the header, with a space before the body.
-        ImGui.SetCursorScreenPos(new Vector2(pos.X, pos.Y + markSize + 8f * scale));
-        ImGui.Dummy(new Vector2(0f, 4f * scale));
+        // The rest of the bar moves the window; a double click folds it.
+        ImGui.SetCursorScreenPos(windowPos + new Vector2(1f, 1f));
+        ImGui.InvisibleButton("##setup_title_drag", new Vector2(foldPos.X - gap - windowPos.X, height - 2f));
+
+        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            folded = !folded;
+
+        if (ImGui.IsItemActive())
+        {
+            var delta = ImGui.GetIO().MouseDelta;
+            if (delta != Vector2.Zero)
+            {
+                // Never lose the bar: at least a part of it always stays on the screen.
+                var viewport = ImGui.GetMainViewport();
+                var size = ImGui.GetWindowSize();
+                var wanted = windowPos + delta;
+                var nx = Math.Clamp(wanted.X, viewport.Pos.X - size.X + 80f * scale, viewport.Pos.X + viewport.Size.X - 80f * scale);
+                var ny = Math.Clamp(wanted.Y, viewport.Pos.Y, viewport.Pos.Y + viewport.Size.Y - height);
+                ImGui.SetWindowPos(new Vector2(MathF.Round(nx), MathF.Round(ny)));
+            }
+        }
+
+        if (TitleButtons.Draw("##setup_title_fold", foldPos, TitleButtons.Glyph.Arrow, folded ? "Show the setup" : "Fold to the title bar"))
+            folded = !folded;
+
+        if (TitleButtons.Draw("##setup_title_close", closePos, TitleButtons.Glyph.Close, "Close"))
+            IsOpen = false;
+
+        return height;
     }
 
     private static void Muted(string text)
@@ -218,7 +279,7 @@ public sealed class SetupWindow : Window
         ImGui.Spacing();
         ImGui.TextWrapped("This takes less than a minute. You choose a starting point, and everything can be changed later from the menu.");
         ImGui.Spacing();
-        Muted("Nothing here changes how the game plays: NahjaUI only reads the game and draws.");
+        Muted("NahjaUI only reads the game and draws. The one exception is the optional Mouseover actions switch (General page), which is off unless you turn it on.");
     }
 
     private void DrawReplaced()
@@ -256,6 +317,19 @@ public sealed class SetupWindow : Window
                 plugin.RequestSave();
             }
         }
+    }
+
+    // The size of everything: once the frames of the chosen package are on the screen, the user sees how big they are and can change it.
+    private void DrawSize()
+    {
+        Title("How big do you want it?");
+        ImGui.TextWrapped("This is how it looks now. If it is too small or too big for your screen, drag the slider: the interface follows it on the screen, so you can find the size you like.");
+        ImGui.Spacing();
+        Muted("The percentage always counts from the normal size (100 %), so you can go up and down and come back to it. You can change it any time on the Layout page of the menu.");
+        ImGui.Spacing();
+        ImGui.Spacing();
+
+        ResizeControls.Draw(plugin, "setup");
     }
 
     // One option as a translucent rounded card: the title, the explanation under it, and a round mark at the right (filled when chosen).

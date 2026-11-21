@@ -172,7 +172,7 @@ internal sealed partial class JobGaugeModule
             return;
 
         var scale = UiScale.Overlay;
-        var gap = GapPixels(settings.GapPx, scale);
+        var gap = GapPixels(settings.Part(def.Id).GapPx ?? settings.GapPx, scale);
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
 

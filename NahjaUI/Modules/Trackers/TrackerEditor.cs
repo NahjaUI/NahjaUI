@@ -279,6 +279,13 @@ internal sealed class TrackerEditor
 
         if (ImGui.BeginPopup("##tracker_presets"))
         {
+            if (ImGui.Selectable("Import all presets again"))
+                presetReport = TrackerPresets.ApplyAll(engine);
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Brings back the trackers of every job that were deleted. The ones you have are not changed.");
+
+            ImGui.Separator();
             ImGui.TextColored(Theme.TextMuted, "Add the trackers of a job");
 
             // The preset of the job you are playing (or of the job of your class: Black Mage for Thaumaturge) first, then the others in the order of the game's job list.
@@ -569,6 +576,7 @@ internal sealed class TrackerEditor
 
         if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
+            Widgets.TakeClick();
             if (Inside(chevronBox.Min, chevronBox.Max, mouse))
             {
                 definition.Expanded = !definition.Expanded;
@@ -671,6 +679,7 @@ internal sealed class TrackerEditor
 
         if (hovered && dragKey is null && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
+            Widgets.TakeClick();
             if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
             {
                 // Double click on the tracker turns it on or off.
@@ -1557,6 +1566,7 @@ internal sealed class TrackerEditor
             if (count > 1 && ruleDragIndex < 0 && ImGui.IsWindowHovered() && !ImGui.IsAnyItemHovered()
                 && ImGui.IsMouseClicked(ImGuiMouseButton.Left) && mouse.Y >= startY && mouse.Y <= endY)
             {
+                Widgets.TakeClick();
                 ruleDragIndex = index;
                 ruleDragging = false;
                 ruleDragStart = mouse;
@@ -1910,11 +1920,13 @@ internal sealed class TrackerEditor
 
         if (ImGui.Button("Add text"))
         {
-            // A new text starts at the bottom right corner (no offset), so it does not hide behind Text 1 in the centre.
+            // A new text starts as the standard text of stacks: 9 px at the bottom right, 3 px up (saved as -3, the editor shows it as +3), so it does not hide behind Text 1 in the centre.
             rule.Texts.Add(new TrackerTextDefinition
             {
                 Sources = { new TrackerTextSource { Source = TextSource.OwnStacks } },
                 Anchor = AnchorPoint.BottomRight,
+                OffsetX = 0,
+                OffsetY = -3,
                 Size = 9
             });
 

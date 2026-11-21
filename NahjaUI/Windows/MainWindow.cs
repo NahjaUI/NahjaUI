@@ -144,29 +144,41 @@ public class MainWindow : Window, IDisposable
         lastSize = ImGui.GetWindowSize();
         TopRight = new Vector2(windowPos.X + lastSize.X, windowPos.Y);
 
-        // The animated background of the whole window, under everything (the title bar and the cards are drawn over it).
+        // The animated background and the title bar are one panel with a margin of the plain window (dark) at the left, at the right and at the
+        // bottom, but none at the top: the title bar is stuck to the top edge. The margin at the bottom is where the corner that resizes the window
+        // is; the game draws that corner before this code runs, so a background over it would hide it. The rounding is the one of Appearance.
+        var margin = MathF.Round(12f * scale);
+        var rounding = MathF.Round(Math.Max(1, GlobalColors.Current.Rounding) * scale);
+        var innerPos = windowPos + new Vector2(margin, 0f);
+        var innerWidth = lastSize.X - 2f * margin;
+
+        // The animated background starts right under the title bar (which rounds its top corners) and has square corners.
+        var titleBarHeight = TitleBarHeight(scale);
         AnimatedBackground.Draw(
             ImGui.GetWindowDrawList(),
-            windowPos,
-            windowPos + lastSize,
-            MathF.Round(Theme.WindowRounding * scale),
-            ImDrawFlags.RoundCornersAll,
+            innerPos + new Vector2(0f, titleBarHeight),
+            windowPos + lastSize - new Vector2(margin, margin),
+            0f,
+            ImDrawFlags.None,
             plugin.Configuration.AnimatedBackground,
             0.75f);
 
         // The title bar: icon and name at the left, arrow (minimize) and cross (close) at the right. It is also the handle to move the window.
-        var titleHeight = DrawTitleBar(scale, windowPos);
+        var titleHeight = DrawTitleBar(scale, innerPos, innerWidth, rounding);
         if (titleHeight < 0f)
             return;
 
-        // The content starts under the title bar, with the same margin as at the left and at the bottom.
-        ImGui.SetCursorPos(new Vector2(ImGui.GetStyle().WindowPadding.X, titleHeight + ImGui.GetStyle().WindowPadding.Y));
+        // The content starts under the title bar, inside the panel, with the same margin as at the left and at the bottom.
+        ImGui.SetCursorPos(new Vector2(margin + ImGui.GetStyle().WindowPadding.X, titleHeight + ImGui.GetStyle().WindowPadding.Y));
 
         // Padding of buttons and fields goes here, not in PreDraw, so the title bar buttons do not overlap.
         using var contentStyle = new ContentStyleScope();
 
+        // The sidebar and the content end above the bottom margin, with the same space the window has everywhere else.
+        var bottomRoom = -margin;
+
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Theme.WithAlpha(Theme.Sidebar, 0.62f)))
-        using (var sidebar = ImRaii.Child("##nui_sidebar", new Vector2(200f * scale, 0f), false))
+        using (var sidebar = ImRaii.Child("##nui_sidebar", new Vector2(200f * scale, bottomRoom), false))
         {
             if (sidebar.Success)
                 DrawSidebar(scale);
@@ -180,20 +192,61 @@ public class MainWindow : Window, IDisposable
 
         // See-through: the animated background shows between the cards.
         using (ImRaii.PushColor(ImGuiCol.ChildBg, Vector4.Zero))
-        using (var content = ImRaii.Child("##nui_content", Vector2.Zero, false, contentFlags))
+        using (var content = ImRaii.Child("##nui_content", new Vector2(-margin, bottomRoom), false, contentFlags))
         {
             if (content.Success)
                 DrawContent(scale);
         }
+
+        DragFromBackground(scale);
     }
 
+    private bool draggingFromBackground;
+
+    // The window also moves when it is dragged from any place that does nothing: not a button, a field, a slider, a checkbox, a scroll bar or
+    // the corner that resizes it (everything the mouse can act on counts as "an item" for ImGui). The drag starts with the click and goes on
+    // until the button is let go.
+    private void DragFromBackground(float scale)
+    {
+        if (draggingFromBackground)
+        {
+            if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            {
+                draggingFromBackground = false;
+                return;
+            }
+
+            var delta = ImGui.GetIO().MouseDelta;
+            if (delta != Vector2.Zero)
+            {
+                // Never lose the window: at least a part of it always stays on the screen (the same as when it is moved by the title bar).
+                var viewport = ImGui.GetMainViewport();
+                var size = ImGui.GetWindowSize();
+                var wanted = ImGui.GetWindowPos() + delta;
+                var x = Math.Clamp(wanted.X, viewport.Pos.X - size.X + 80f * scale, viewport.Pos.X + viewport.Size.X - 80f * scale);
+                var y = Math.Clamp(wanted.Y, viewport.Pos.Y, viewport.Pos.Y + viewport.Size.Y - TitleBarHeight(scale));
+                ImGui.SetWindowPos(new Vector2(MathF.Round(x), MathF.Round(y)));
+            }
+
+            return;
+        }
+
+        if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)
+            && ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
+            && !ImGui.IsAnyItemHovered()
+            && !ImGui.IsAnyItemActive()
+            && !Widgets.ClickTaken)
+            draggingFromBackground = true;
+    }
+
+    private static float TitleBarHeight(float scale)
+        => MathF.Round(MathF.Max(34f * scale, ImGui.GetTextLineHeight() + 14f * scale));
+
     // Draws the title bar and handles it. Returns its height, or -1 when the window was minimized (nothing else must be drawn).
-    private float DrawTitleBar(float scale, Vector2 windowPos)
+    private float DrawTitleBar(float scale, Vector2 windowPos, float width, float rounding)
     {
         var drawList = ImGui.GetWindowDrawList();
-        var width = ImGui.GetWindowSize().X;
-        var height = MathF.Round(MathF.Max(34f * scale, ImGui.GetTextLineHeight() + 14f * scale));
-        var rounding = MathF.Min(MathF.Round(Theme.WindowRounding * scale), height / 2f + 12f * scale);
+        var height = TitleBarHeight(scale);
 
         drawList.AddRectFilled(windowPos, windowPos + new Vector2(width, height), ImGui.GetColorU32(Theme.Sidebar), rounding, ImDrawFlags.RoundCornersTop);
 
@@ -244,7 +297,7 @@ public class MainWindow : Window, IDisposable
                 // Never lose the bar: at least a part of it always stays on the screen.
                 var viewport = ImGui.GetMainViewport();
                 var size = ImGui.GetWindowSize();
-                var wanted = windowPos + delta;
+                var wanted = ImGui.GetWindowPos() + delta;
                 var x = Math.Clamp(wanted.X, viewport.Pos.X - size.X + 80f * scale, viewport.Pos.X + viewport.Size.X - 80f * scale);
                 var y = Math.Clamp(wanted.Y, viewport.Pos.Y, viewport.Pos.Y + viewport.Size.Y - height);
                 ImGui.SetWindowPos(new Vector2(MathF.Round(x), MathF.Round(y)));
@@ -423,14 +476,14 @@ public class MainWindow : Window, IDisposable
     private void DrawGeneral()
     {
         // ---- Welcome
-        Widgets.Card("##card_welcome", 7, () =>
+        Widgets.Card("##card_welcome", 8, () =>
         {
             ImGui.TextColored(Theme.Accent, "NahjaUI");
             ImGui.TextColored(Theme.TextMuted, $"Version {typeof(Plugin).Assembly.GetName().Version}  -  early development build");
             ImGui.Spacing();
             ImGui.TextWrapped("A modular, minimal interface for FINAL FANTASY XIV. It redraws the parts of the game's interface you choose, and a tracker engine shows only the enhancements, enfeeblements and cooldowns you care about.");
             ImGui.Spacing();
-            ImGui.TextColored(Theme.TextMuted, "Nothing here changes how the game plays: NahjaUI only reads the game and draws.");
+            ImGui.TextColored(Theme.TextMuted, "NahjaUI only reads the game and draws. The one thing that touches how the game plays is the Mouseover actions switch below, and it is off unless you turn it on.");
         });
 
         // ---- Getting started
@@ -470,6 +523,21 @@ public class MainWindow : Window, IDisposable
             ImGui.TextWrapped("Back up and share your setup on the Profiles page.");
         });
 
+        // ---- Mouseover actions
+        Widgets.Card("##card_mouseover", 6, () =>
+        {
+            Widgets.SectionLabel("Mouseover actions");
+
+            var mouseover = plugin.Configuration.MouseoverActions;
+            if (ImGui.Checkbox("Mouseover actions", ref mouseover))
+            {
+                plugin.Configuration.MouseoverActions = mouseover;
+                plugin.RequestSave();
+            }
+
+            ImGui.TextWrapped("With the mouse over one of the frames of NahjaUI (yours, the party, the alliance, the enemies), an action you use goes to that frame's unit, if the action can be used on it. Otherwise it goes where it would go anyway. Actions placed on the ground are dropped where that unit is.");
+        });
+
         // ---- What is inside
         Widgets.Card("##card_pages", Pages.Length + 1, () =>
         {
@@ -496,7 +564,7 @@ public class MainWindow : Window, IDisposable
         });
 
         // ---- Commands
-        Widgets.Card("##card_commands", 4, () =>
+        Widgets.Card("##card_commands", 5, () =>
         {
             Widgets.SectionLabel("Commands");
             ImGui.TextColored(Theme.Accent, "/nui");
@@ -505,6 +573,9 @@ public class MainWindow : Window, IDisposable
             ImGui.TextColored(Theme.Accent, "/nui unlock");
             ImGui.SameLine();
             ImGui.TextColored(Theme.TextMuted, "Start or stop unlock mode, to move elements.");
+            ImGui.TextColored(Theme.Accent, "/nui setup");
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.TextMuted, "Run the setup again.");
         });
 
     }
@@ -653,6 +724,8 @@ public class MainWindow : Window, IDisposable
 
         using (Widgets.TabBody("##layout_body"))
         {
+            DrawResizeCard();
+
             // Alphabetical, so an element is found by its name.
             var movable = layout.Positionable.OrderBy(element => element.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 
@@ -677,6 +750,20 @@ public class MainWindow : Window, IDisposable
 
             Widgets.Card("##card_editor", 20, () => DrawElementEditor(selected));
         }
+    }
+
+    // Makes everything bigger or smaller (the numbers saved are changed; nothing stays scaled afterwards). 100 % is always the original size.
+    private void DrawResizeCard()
+    {
+        Widgets.Card("##card_resize", 12, () =>
+        {
+            Widgets.SectionLabel("Resize everything");
+
+            ImGui.TextWrapped("Makes every element bigger or smaller in one go: the sizes, letters, spaces and positions change together, so the layout keeps its shape. Drag the slider and the interface follows it on the screen. The percentage always counts from the normal size (100 %), so you can go up and down and come back to it whenever you want. The normal size changes only when you resize an element by hand: that size becomes its new normal.");
+
+            ImGui.Spacing();
+            ResizeControls.Draw(plugin, "main");
+        });
     }
 
     private void DrawElementEditor(LayoutElement element)

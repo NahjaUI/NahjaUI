@@ -91,8 +91,9 @@ internal enum UnitKind
 /// <summary>
 /// The White Mage job gauge. Only present while the player is a White Mage.
 /// LilyTimerMs is the raw timer of the game, in milliseconds (it counts up towards the next lily).
+/// LiliesUnlocked / BloodLiliesUnlocked: the player has learned Afflatus Solace (level 52) / Afflatus Misery (level 74); until then that row is not shown.
 /// </summary>
-internal sealed record WhiteMageGaugeSnapshot(byte Lily, byte BloodLily, float LilyTimerMs);
+internal sealed record WhiteMageGaugeSnapshot(byte Lily, byte BloodLily, float LilyTimerMs, bool LiliesUnlocked = true, bool BloodLiliesUnlocked = true);
 
 /// <summary>The Warrior job gauge (Beast Gauge, 0 to 100). Only present while the player is a Warrior.</summary>
 internal sealed record WarriorGaugeSnapshot(byte BeastGauge);

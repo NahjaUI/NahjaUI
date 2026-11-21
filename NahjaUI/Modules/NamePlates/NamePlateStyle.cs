@@ -205,8 +205,8 @@ public class NamePlateStyle
         row.PriorityByFilter = true;
         row.FilterIds = new System.Collections.Generic.List<string>
         {
-            FiltersSettings.CrowdControlId, DefensiveFilters.MitigationId, DefensiveFilters.RotationId
+            FiltersSettings.CrowdControlId, DefaultFilters.MitigationId, DefaultFilters.RotationId
         };
-        row.OnlyMineFilterIds = new System.Collections.Generic.List<string> { DefensiveFilters.RotationId };
+        row.OnlyMineFilterIds = new System.Collections.Generic.List<string> { DefaultFilters.RotationId };
     }
 }

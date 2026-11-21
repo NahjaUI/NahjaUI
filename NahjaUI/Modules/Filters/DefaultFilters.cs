@@ -6,10 +6,11 @@ using Lumina.Excel.Sheets;
 namespace NahjaUI.Modules.Filters;
 
 /// <summary>
-/// The four defensive filters (invulnerabilities, mitigation, shields and barriers, sustained healing). The statuses are written by their
-/// English name and looked up in the game's own table, so the ids are always the real ones. The names that the game does not know are reported.
+/// The filters the interface starts with: the defensive ones (invulnerabilities, mitigation, shields and barriers, sustained healing, raise,
+/// movement, dance partner) and "Rotation upkeep" (the damage over time of each job). The statuses are written by their English name and
+/// looked up in the game's own table, so the ids are always the real ones. The names that the game does not know are reported.
 /// </summary>
-internal static class DefensiveFilters
+internal static class DefaultFilters
 {
     internal sealed record Definition(string Id, string Name, string[] Statuses);
 
@@ -134,6 +135,34 @@ internal static class DefensiveFilters
         var enfeeblements = party.Enfeeblements;
         enfeeblements.Filter = NahjaUI.Modules.PartyListBar.StatusRowFilter.All;
         enfeeblements.OnlyMine = false;
+    }
+
+    /// <summary>
+    /// Once, for the configurations saved before the Thunders were all in the filter: adds every Thunder of the Black Mage (Thunder, II, III,
+    /// IV, High Thunder and High Thunder II) to the saved "Rotation upkeep" filter. Only those are added: whatever else the user took out of
+    /// the filter stays out. If the user deleted the filter, it is not created again.
+    /// </summary>
+    public static bool AddMissingThunders(FiltersSettings filters)
+    {
+        if (filters.RotationThundersAdded)
+            return false;
+
+        filters.RotationThundersAdded = true;
+
+        var filter = filters.Find(RotationId);
+        if (filter is null)
+            return true;
+
+        foreach (var name in new[] { "High Thunder", "High Thunder II", "Thunder III", "Thunder IV", "Thunder II", "Thunder" })
+        {
+            foreach (var id in IdsNamed(name))
+            {
+                if (!filter.StatusIds.Contains(id))
+                    filter.StatusIds.Add(id);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Recreates the default filters that are missing (same ids, so what uses them finds them again). The ones that exist are not touched.</summary>

@@ -24,7 +24,21 @@ internal static class TrackerPresets
     /// <summary>Creates the groups and trackers of a preset. Returns a short report to show to the user.</summary>
     public static string Apply(TrackerEngine engine, string name)
     {
-        return JobSetups.Names.Contains(name) ? JobSetups.Apply(engine.Plugin, engine, name) : "Unknown preset.";
+        // From the button: what is already there is kept as it is; what was deleted comes back.
+        return JobSetups.Names.Contains(name) ? JobSetups.Apply(engine.Plugin, engine, name, restore: true) : "Unknown preset.";
+    }
+
+    /// <summary>Imports the presets of every job again (the trackers that were deleted come back, the ones that exist are not touched).</summary>
+    public static string ApplyAll(TrackerEngine engine)
+    {
+        var done = 0;
+        foreach (var name in Names)
+        {
+            JobSetups.Apply(engine.Plugin, engine, name, restore: true);
+            done++;
+        }
+
+        return $"Presets of {done} jobs imported again. The trackers you had are untouched; only the ones that were missing came back.";
     }
 
     // ---------------------------------------------------------------- builder
@@ -94,6 +108,16 @@ internal static class TrackerPresets
             group.Element.Layout.Width = 32;
             group.Element.Layout.Height = 24;
             groups.Add(group);
+            return group;
+        }
+
+        /// <summary>A row that every job shares (Rotation, CDs, Defensive CDs, Role Actions): it is made once; the trackers added to it keep the job(s) of this builder.</summary>
+        public TrackerGroupRuntime SharedRow(string id)
+        {
+            var group = engine.EnsureSharedGroup(id);
+            if (!groups.Contains(group))
+                groups.Add(group);
+
             return group;
         }
 
@@ -435,8 +459,8 @@ internal static class TrackerPresets
                 StatusId = id,
                 Glow = glow,
 
-                // Test: the Black Mage triggers of "the effect is active" pulse.
-                Pulse = jobIds.Contains(25u),
+                // Every trigger of "the effect is active" (a status on the player) pulses.
+                Pulse = true,
             };
         }
 
@@ -482,13 +506,13 @@ internal static class TrackerPresets
             Sources = { new TrackerTextSource { Source = TextSource.OwnTime } }
         };
 
-        // 9 px, bottom right, no offset: the stacks of the status or the charges of the ability.
+        // 9 px, bottom right, 3 px up (the saved offset counts downwards, so it is -3): the stacks of the status or the charges of the ability.
         private static TrackerTextDefinition StacksText() => new()
         {
             Size = 9,
             Anchor = AnchorPoint.BottomRight,
             OffsetX = 0,
-            OffsetY = 0,
+            OffsetY = -3,
             Sources = { new TrackerTextSource { Source = TextSource.OwnStacks } }
         };
     }

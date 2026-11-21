@@ -539,6 +539,49 @@ internal sealed class LayoutManager
             offsetY += shiftY > 0f ? MathF.Ceiling(shiftY / scale) : MathF.Floor(shiftY / scale);
     }
 
+    /// <summary>Called when the manager changed a position by itself (so it is saved).</summary>
+    public Action? Changed { get; set; }
+
+    private int keepFrame;
+
+    /// <summary>
+    /// Every few frames: an element whose box (a tracker group: the whole area of its icons) is partly outside the screen is moved back the least needed.
+    /// Nothing can stay out of the screen, whatever way it got there (a position saved with another resolution, a group that was renamed or merged,
+    /// something attached to an element that is gone): the edge of the screen is the limit.
+    /// </summary>
+    public void KeepAllOnScreen()
+    {
+        if (++keepFrame < 10)
+            return;
+
+        keepFrame = 0;
+
+        var viewport = ImGui.GetMainViewport();
+        if (viewport.Size.X < 64f || viewport.Size.Y < 64f)
+            return;
+
+        var moved = false;
+        foreach (var element in elements)
+        {
+            if (element.IsManaged || element.IsHidden)
+                continue;
+
+            var x = element.Layout.OffsetX;
+            var y = element.Layout.OffsetY;
+            KeepOnScreen(element, ref x, ref y);
+
+            if (x == element.Layout.OffsetX && y == element.Layout.OffsetY)
+                continue;
+
+            element.Layout.OffsetX = x;
+            element.Layout.OffsetY = y;
+            moved = true;
+        }
+
+        if (moved)
+            Changed?.Invoke();
+    }
+
     public static (Vector2 Pos, Vector2 Size) GetRect(ElementLayout layout)
     {
         var scale = UiScale.Overlay;

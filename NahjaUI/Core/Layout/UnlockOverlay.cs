@@ -273,11 +273,14 @@ internal sealed class UnlockOverlay
         ImGui.SetNextWindowSizeConstraints(Vector2.Zero, new Vector2(float.MaxValue, maxHeight));
 
         var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize |
-                    ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoMove;
+                    ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoMove |
+                    ImGuiWindowFlags.NoBackground;
 
         var open = true;
+        PushWindowStyle();
         if (ImGui.Begin("##nui_unlock_inspector", ref open, flags))
         {
+            DrawWindowBackground();
             ImGui.TextColored(Theme.Accent, selected.Name);
             ImGui.TextColored(Theme.TextMuted, "Offset in pixels from the anchor point");
             ImGui.Spacing();
@@ -370,6 +373,36 @@ internal sealed class UnlockOverlay
         }
 
         ImGui.End();
+        ImGui.PopStyleVar(3);
+    }
+
+    // The animated background of the menu (a little fainter), under the contents of the window being drawn. The windows of unlock mode
+    // size themselves to their contents, so the size is the one they have this frame.
+    private void DrawWindowBackground()
+    {
+        var pos = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        AnimatedBackground.Draw(
+            ImGui.GetWindowDrawList(),
+            pos,
+            pos + size,
+            WindowRounding(),
+            ImDrawFlags.RoundCornersAll,
+            config.AnimatedBackground,
+            0.75f);
+    }
+
+    // The corner rounding chosen in Appearance, never less than the one of the menu, and a bit bigger because these windows are big.
+    private static float WindowRounding()
+        => MathF.Round(Math.Max(GlobalColors.Current.Rounding, Theme.WindowRounding) * 2f * ImGuiHelpers.GlobalScale);
+
+    // Margin inside the windows of unlock mode, as in the menu, and the rounding of their corners.
+    private static void PushWindowStyle()
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(36f, 28f) * scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, WindowRounding());
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
     }
 
     // True while the mouse is on the panel of the last frame (with a little margin).
@@ -401,11 +434,21 @@ internal sealed class UnlockOverlay
         }
 
         var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize |
-                    ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse;
+                    ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoBackground;
 
         var open = true;
+        PushWindowStyle();
         if (ImGui.Begin("##nui_unlock_bar", ref open, flags))
         {
+            DrawWindowBackground();
+
+            // The icon of the plugin next to the title, as in the menu.
+            var markSize = MathF.Round(22f * scale);
+            var markPos = ImGui.GetCursorScreenPos();
+            NahjaMark.Draw(ImGui.GetWindowDrawList(), markPos, markSize);
+            ImGui.Dummy(new Vector2(markSize, markSize));
+            ImGui.SameLine();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + MathF.Round((markSize - ImGui.GetTextLineHeight()) * 0.5f));
             ImGui.TextColored(Theme.Accent, "Unlock mode");
             ImGui.TextColored(Theme.TextMuted, "Point at a box to see its name and position. Click it to keep its panel open, drag it to move it, or type exact values. Right click lets go.");
             ImGui.Spacing();
@@ -415,5 +458,6 @@ internal sealed class UnlockOverlay
         }
 
         ImGui.End();
+        ImGui.PopStyleVar(3);
     }
 }

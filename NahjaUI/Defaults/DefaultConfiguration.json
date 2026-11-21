@@ -1,6 +1,7 @@
 {
   "$type": "NahjaUI.Configuration, NahjaUI",
   "Version": 3,
+  "AllPresetsImported": false,
   "LastPluginVersion": "0.6.4.0",
   "ServerBarIcon": "Mentor",
   "ServerBarIconChosen": false,
@@ -2207,20 +2208,6 @@
       "ShowWithWeapon": 0,
       "HasNoCondition": true
     },
-    "tracker.578f2de71240431c9e70bbdc738351b9": {
-      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
-      "AttachTo": null,
-      "ScreenAnchor": 4,
-      "SelfAnchor": 4,
-      "OffsetX": 0.0,
-      "OffsetY": 0.0,
-      "Width": 32,
-      "Height": 24,
-      "Locked": false,
-      "ShowInCombat": 0,
-      "ShowWithWeapon": 0,
-      "HasNoCondition": true
-    },
     "tracker-group.7009c62029ae4e9c97be8e0782653985": {
       "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
       "AttachTo": null,
@@ -2613,20 +2600,6 @@
       "ShowWithWeapon": 0,
       "HasNoCondition": true
     },
-    "tracker.6b5b0f22cddd4f3cbf54f59dca1e1c7f": {
-      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
-      "AttachTo": null,
-      "ScreenAnchor": 4,
-      "SelfAnchor": 4,
-      "OffsetX": 0.0,
-      "OffsetY": 0.0,
-      "Width": 32,
-      "Height": 24,
-      "Locked": false,
-      "ShowInCombat": 0,
-      "ShowWithWeapon": 0,
-      "HasNoCondition": true
-    },
     "tracker-group.fd950601c0eb423c9bd19f41d3bd2b41": {
       "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
       "AttachTo": null,
@@ -2922,20 +2895,6 @@
       "HasNoCondition": true
     },
     "tracker.99aba10911de4d6799ad7a5f28e70c35": {
-      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
-      "AttachTo": null,
-      "ScreenAnchor": 4,
-      "SelfAnchor": 4,
-      "OffsetX": 0.0,
-      "OffsetY": 0.0,
-      "Width": 32,
-      "Height": 24,
-      "Locked": false,
-      "ShowInCombat": 0,
-      "ShowWithWeapon": 0,
-      "HasNoCondition": true
-    },
-    "tracker.dcd03662ce9e46c9895de2fa863eeaf0": {
       "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
       "AttachTo": null,
       "ScreenAnchor": 4,
@@ -4727,34 +4686,6 @@
       "ShowWithWeapon": 0,
       "HasNoCondition": true
     },
-    "tracker.6f6e132a86a645b3ab3c141fcbaff152": {
-      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
-      "AttachTo": null,
-      "ScreenAnchor": 4,
-      "SelfAnchor": 4,
-      "OffsetX": 0.0,
-      "OffsetY": 0.0,
-      "Width": 32,
-      "Height": 24,
-      "Locked": false,
-      "ShowInCombat": 0,
-      "ShowWithWeapon": 0,
-      "HasNoCondition": true
-    },
-    "tracker.410db9c58b1543ce9b3d1131807be69f": {
-      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
-      "AttachTo": null,
-      "ScreenAnchor": 4,
-      "SelfAnchor": 4,
-      "OffsetX": 0.0,
-      "OffsetY": 0.0,
-      "Width": 32,
-      "Height": 24,
-      "Locked": false,
-      "ShowInCombat": 0,
-      "ShowWithWeapon": 0,
-      "HasNoCondition": true
-    },
     "tracker-group.ad69de997d1242a8a4caa704b8d1c1ff": {
       "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
       "AttachTo": null,
@@ -5078,20 +5009,6 @@
       "HasNoCondition": true
     },
     "tracker.e04d9402e8c84557a576b9b646588d2c": {
-      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
-      "AttachTo": null,
-      "ScreenAnchor": 4,
-      "SelfAnchor": 4,
-      "OffsetX": 0.0,
-      "OffsetY": 0.0,
-      "Width": 32,
-      "Height": 24,
-      "Locked": false,
-      "ShowInCombat": 0,
-      "ShowWithWeapon": 0,
-      "HasNoCondition": true
-    },
-    "tracker.0cea1c25c4394984a2e369bb21c4ad64": {
       "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
       "AttachTo": null,
       "ScreenAnchor": 4,
@@ -8178,7 +8095,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -8249,7 +8166,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -8303,7 +8220,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -8337,62 +8254,6 @@
           "Pulse": false,
           "Red": true,
           "Dim": true,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          19
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "6f6e132a86a645b3ab3c141fcbaff152",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Pulse": false,
-          "Red": false,
-          "Dim": false,
           "Sweep": false
         }
       ],
@@ -8520,7 +8381,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -8582,7 +8443,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -8693,7 +8554,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -8755,7 +8616,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -8858,174 +8719,6 @@
     },
     {
       "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "6b5b0f22cddd4f3cbf54f59dca1e1c7f",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Pulse": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          28
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "dcd03662ce9e46c9895de2fa863eeaf0",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Pulse": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          33
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "410db9c58b1543ce9b3d1131807be69f",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Pulse": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          40
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
       "Id": "56718e9084d8449b96e0d1bac612a98c",
       "Name": "Icarus",
       "Enabled": true,
@@ -9093,62 +8786,6 @@
         "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
         "JobIds": [
           40
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "0cea1c25c4394984a2e369bb21c4ad64",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Pulse": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          39
         ],
         "Where": 0
       }
@@ -9301,62 +8938,6 @@
     },
     {
       "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
-      "Id": "578f2de71240431c9e70bbdc738351b9",
-      "Name": "Peloton",
-      "Enabled": true,
-      "GroupId": "299ac2bd66354e289bb9c1022511d986",
-      "Rules": [
-        {
-          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
-          "Kind": 0,
-          "Unit": 0,
-          "StatusId": 1199,
-          "ActionId": 0,
-          "OnlyMine": false,
-          "Texts": [
-            {
-              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
-              "Sources": [
-                {
-                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
-                  "Source": 0,
-                  "StatusId": 0,
-                  "ActionId": 0
-                }
-              ],
-              "Size": 12,
-              "Anchor": 4,
-              "OffsetX": 0,
-              "OffsetY": 0,
-              "Color": {
-                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-                "X": 1.0,
-                "Y": 1.0,
-                "Z": 1.0,
-                "W": 1.0
-              }
-            }
-          ],
-          "Icon": 0,
-          "IconStatusId": 0,
-          "IconActionId": 0,
-          "Glow": false,
-          "Pulse": false,
-          "Red": false,
-          "Dim": false,
-          "Sweep": false
-        }
-      ],
-      "Load": {
-        "$type": "NahjaUI.Modules.Trackers.TrackerLoadConditions, NahjaUI",
-        "JobIds": [
-          41
-        ],
-        "Where": 0
-      }
-    },
-    {
-      "$type": "NahjaUI.Modules.Trackers.TrackerDefinition, NahjaUI",
       "Id": "75283cd6c4254642af0f1e26dc9fbbd3",
       "Name": "Slither",
       "Enabled": true,
@@ -9405,7 +8986,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -9467,7 +9048,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -9529,7 +9110,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -9640,7 +9221,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -9702,7 +9283,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -9853,7 +9434,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -9867,7 +9448,7 @@
           "IconStatusId": 0,
           "IconActionId": 37009,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -9923,7 +9504,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -9979,7 +9560,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -10188,7 +9769,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -10309,7 +9890,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -10323,7 +9904,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -10371,7 +9952,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -10433,7 +10014,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -10584,7 +10165,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -10598,7 +10179,7 @@
           "IconStatusId": 0,
           "IconActionId": 25862,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -10711,7 +10292,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -10824,7 +10405,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -10937,7 +10518,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -11123,7 +10704,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -11244,7 +10825,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -11306,7 +10887,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -11384,7 +10965,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -11398,7 +10979,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -11446,7 +11027,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -11508,7 +11089,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -11578,7 +11159,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -11770,7 +11351,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -11886,7 +11467,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -12157,7 +11738,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -12320,7 +11901,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -12334,7 +11915,7 @@
           "IconStatusId": 0,
           "IconActionId": 7383,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -12447,7 +12028,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -12714,7 +12295,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -12776,7 +12357,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -12846,7 +12427,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -12959,7 +12540,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13179,7 +12760,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13219,7 +12800,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13349,7 +12930,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13462,7 +13043,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13575,7 +13156,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13615,7 +13196,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13728,7 +13309,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -13917,7 +13498,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -14109,7 +13690,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -14453,7 +14034,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -14509,7 +14090,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -14565,7 +14146,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -14720,7 +14301,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -14801,7 +14382,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": -6,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -14863,7 +14444,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": -6,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -14941,7 +14522,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": -6,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -14955,7 +14536,7 @@
           "IconStatusId": 0,
           "IconActionId": 38,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15003,7 +14584,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": -6,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -15017,7 +14598,7 @@
           "IconStatusId": 0,
           "IconActionId": 7389,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15211,7 +14792,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": -6,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -15273,7 +14854,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": -6,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -15343,7 +14924,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15456,7 +15037,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15569,7 +15150,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15682,7 +15263,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15722,7 +15303,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15835,7 +15416,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -15948,7 +15529,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16061,7 +15642,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16101,7 +15682,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16214,7 +15795,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16287,7 +15868,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16360,7 +15941,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16416,7 +15997,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16604,7 +16185,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -16660,7 +16241,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -17058,7 +16639,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -17120,7 +16701,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -17182,7 +16763,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -17252,7 +16833,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -17300,7 +16881,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -17362,7 +16943,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -17424,7 +17005,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -17499,7 +17080,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -17962,7 +17543,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -18437,7 +18018,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -18501,7 +18082,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -18563,7 +18144,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -18625,7 +18206,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -18695,7 +18276,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -19007,7 +18588,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -19455,7 +19036,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -19631,7 +19212,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -19767,7 +19348,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -19999,7 +19580,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -20311,7 +19892,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -20487,7 +20068,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -20799,7 +20380,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -20975,7 +20556,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -21304,7 +20885,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -21360,7 +20941,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -21808,7 +21389,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -21984,7 +21565,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -22032,7 +21613,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -22094,7 +21675,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -22156,7 +21737,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -22226,7 +21807,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -22402,7 +21983,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -22578,7 +22159,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -22890,7 +22471,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -22930,7 +22511,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -23106,7 +22687,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -23146,7 +22727,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -23322,7 +22903,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -23498,7 +23079,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -23682,7 +23263,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -23744,7 +23325,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -23806,7 +23387,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -23884,7 +23465,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -23946,7 +23527,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -24008,7 +23589,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -24078,7 +23659,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -24134,7 +23715,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -24402,7 +23983,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -24523,7 +24104,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -24537,7 +24118,7 @@
           "IconStatusId": 0,
           "IconActionId": 7390,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -24585,7 +24166,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -24599,7 +24180,7 @@
           "IconStatusId": 0,
           "IconActionId": 3625,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -24793,7 +24374,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -24855,7 +24436,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -24925,7 +24506,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -24965,7 +24546,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25078,7 +24659,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25199,7 +24780,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -25213,7 +24794,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25261,7 +24842,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -25323,7 +24904,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -25393,7 +24974,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25433,7 +25014,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25546,7 +25127,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25659,7 +25240,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25772,7 +25353,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25828,7 +25409,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25884,7 +25465,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25940,7 +25521,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -25996,7 +25577,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -26052,7 +25633,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -26108,7 +25689,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -26384,7 +25965,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -26446,7 +26027,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -26508,7 +26089,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -26651,7 +26232,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -26910,7 +26491,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27023,7 +26604,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27144,7 +26725,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -27158,7 +26739,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27206,7 +26787,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -27268,7 +26849,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -27338,7 +26919,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27378,7 +26959,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27491,7 +27072,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27531,7 +27112,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27644,7 +27225,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27757,7 +27338,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27830,7 +27411,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27886,7 +27467,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27942,7 +27523,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -27998,7 +27579,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28054,7 +27635,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28110,7 +27691,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28166,7 +27747,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28222,7 +27803,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28278,7 +27859,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28334,7 +27915,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28390,7 +27971,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28559,7 +28140,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -28712,7 +28293,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -29091,7 +28672,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -29244,7 +28825,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -30570,8 +30151,8 @@
               ],
               "Size": 9,
               "Anchor": 8,
-              "OffsetX": 3,
-              "OffsetY": 0,
+              "OffsetX": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -30784,7 +30365,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -30846,7 +30427,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -30908,7 +30489,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -30970,7 +30551,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -31843,7 +31424,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -32150,7 +31731,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32212,7 +31793,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32274,7 +31855,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32336,7 +31917,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32398,7 +31979,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32460,7 +32041,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32522,7 +32103,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32584,7 +32165,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -32646,7 +32227,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -33055,7 +32636,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -33281,7 +32862,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -33467,7 +33048,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -33620,7 +33201,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -33773,7 +33354,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -33926,7 +33507,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34087,7 +33668,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -34101,7 +33682,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34254,7 +33835,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34407,7 +33988,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34754,7 +34335,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -34768,7 +34349,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34832,7 +34413,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -34846,7 +34427,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34902,7 +34483,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -34966,7 +34547,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -34980,7 +34561,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -35036,7 +34617,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -35092,7 +34673,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": true,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -35222,7 +34803,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -35284,7 +34865,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -35346,7 +34927,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -35497,7 +35078,7 @@
               "Size": 9,
               "Anchor": 8,
               "OffsetX": 0,
-              "OffsetY": 0,
+              "OffsetY": -3,
               "Color": {
                 "$type": "System.Numerics.Vector4, System.Private.CoreLib",
                 "X": 1.0,
@@ -35511,7 +35092,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -35624,7 +35205,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -35890,7 +35471,7 @@
           "IconStatusId": 0,
           "IconActionId": 0,
           "Glow": false,
-          "Pulse": false,
+          "Pulse": true,
           "Red": false,
           "Dim": false,
           "Sweep": false
@@ -38887,8 +38468,8 @@
       },
       "ReadyFrameColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.3,
-        "Y": 0.85,
+        "X": 1.0,
+        "Y": 1.0,
         "Z": 1.0,
         "W": 1.0
       },
@@ -38946,8 +38527,8 @@
       },
       "ReadyFrameColor": {
         "$type": "System.Numerics.Vector4, System.Private.CoreLib",
-        "X": 0.3,
-        "Y": 0.85,
+        "X": 1.0,
+        "Y": 1.0,
         "Z": 1.0,
         "W": 1.0
       },
@@ -61605,7 +61186,9 @@
           161,
           1324,
           246,
-          1309
+          1309,
+          162,
+          1210
         ]
       }
     ],

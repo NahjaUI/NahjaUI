@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -37,10 +38,12 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
+    [PluginService] internal static IUnlockState UnlockState { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
     [PluginService] internal static IJobGauges JobGauges { get; private set; } = null!;
     [PluginService] internal static Dalamud.Plugin.Services.IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
+    [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static INamePlateGui NamePlateGui { get; private set; } = null!;
     [PluginService] internal static IGameConfig GameConfig { get; private set; } = null!;
     [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
@@ -70,6 +73,10 @@ public sealed class Plugin : IDalamudPlugin
     internal JobGaugeModule JobGaugeSystem { get; init; }
     internal JobGaugeEditor JobGaugeEditorPage { get; init; }
     internal HudBarModule HudBarSystem { get; init; }
+    internal MouseoverActions MouseoverSystem { get; init; }
+
+    /// <summary>Makes the whole interface bigger or smaller once, on request (Layout page and the setup).</summary>
+    internal NahjaUI.Core.Profiles.ConfigRescaler Rescaler { get; init; }
     internal HudBarEditor HudBarEditorPage { get; init; }
     internal StatusEffectsModule StatusEffectsSystem { get; init; }
     internal StatusEffectsEditor StatusEffectsEditorPage { get; init; }
@@ -126,6 +133,7 @@ public sealed class Plugin : IDalamudPlugin
         NahjaUI.Core.Ui.GlobalColors.Source = () => Configuration.Colors ??= new NahjaUI.Core.Ui.GlobalColors();
 
         Layout = new LayoutManager(Configuration);
+        Layout.Changed = RequestSave;
         Layout.ContextSource = () => GameData.Current.Context;
         Fonts = new OverlayFonts();
         TrackerSystem = new TrackerEngine(this);
@@ -140,7 +148,10 @@ public sealed class Plugin : IDalamudPlugin
 
         try
         {
-            NahjaUI.Modules.Filters.DefensiveFilters.EnsureCreated(Configuration);
+            NahjaUI.Modules.Filters.DefaultFilters.EnsureCreated(Configuration);
+            NahjaUI.Modules.Filters.DefaultFilters.AddMissingThunders(Configuration.Filters);
+            WhitenOldLimitBreakFrame(Configuration.JobGauges.LimitBreak);
+            WhitenOldLimitBreakFrame(Configuration.JobGauges.LimitBreakPvp);
             Configuration.NamePlates.SeedEnemyRows();
             RequestSave();
         }
@@ -156,6 +167,8 @@ public sealed class Plugin : IDalamudPlugin
         JobGaugeSystem = new JobGaugeModule(this);
         JobGaugeEditorPage = new JobGaugeEditor(this);
         HudBarSystem = new HudBarModule(this);
+        MouseoverSystem = new MouseoverActions(this);
+        Rescaler = new NahjaUI.Core.Profiles.ConfigRescaler(this);
         HudBarEditorPage = new HudBarEditor(this);
         StatusEffectsSystem = new StatusEffectsModule(this);
         StatusEffectsEditorPage = new StatusEffectsEditor(this);
@@ -208,6 +221,7 @@ public sealed class Plugin : IDalamudPlugin
         Safely(() => MiniBar.Dispose());
         Safely(() => ProgressBarSystem.Dispose());
         Safely(() => JobGaugeSystem.Dispose());
+        Safely(() => MouseoverSystem.Dispose());
         Safely(() => HudBarSystem.Dispose());
         Safely(() => StatusEffectsSystem.Dispose());
         Safely(() => PartyListSystem.Dispose());
@@ -226,6 +240,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         Guard("unlock mode", FollowUnlockMode);
         Guard("setup", AutoOpenSetup);
+        Guard("presets", ImportDefaultPresets);
 
         BarGradient.Strength = System.Math.Clamp(Configuration.BarGradientPercent, 0, 200) / 100f;
 
@@ -236,12 +251,32 @@ public sealed class Plugin : IDalamudPlugin
             Layout.SyncJob(currentSnapshot.IsLoggedIn ? GameNames.ProfileJobId(currentSnapshot.Player?.JobId ?? 0u) : 0u, currentSnapshot.Context.InPvP);
         });
 
+        // Nothing stays out of the screen: an element that is partly out is moved back inside.
+        Guard("keep on screen", Layout.KeepAllOnScreen);
+
         // Which game windows cover the screen right now (the frames are not drawn over them).
         Guard("window cover", () => GameCover.Update(Configuration));
         StreamerMode.Enabled = Configuration.StreamerMode;
         StreamerMode.Seed = Configuration.StreamerSeed;
 
         Guard("windows", WindowSystem.Draw);
+
+        // While the game hides its own interface, nothing of ours is drawn either (except while the elements are unlocked, so they can still be moved).
+        var hidesInterface = GameHidesItsInterface();
+        if (hidesInterface != wasHidingInterface)
+        {
+            wasHidingInterface = hidesInterface;
+            if (hidesInterface)
+                LogWhyHidden();
+        }
+
+        if (hidesInterface && !Layout.UnlockMode)
+        {
+            Guard("cursor", HudBarSystem.UpdateCursor);
+            FlushSave();
+            return;
+        }
+
         Guard("cover areas", GameCover.DrawAreas);
 
         // Drawn first, so the nameplates stay under every frame (the player's, the target's, the enemies', the party's).
@@ -259,6 +294,101 @@ public sealed class Plugin : IDalamudPlugin
         Guard("cursor", HudBarSystem.UpdateCursor);
 
         FlushSave();
+    }
+
+    // The border of a full Limit Break bar used to be light blue by default; it is white now. Only the old default is changed (a color the user chose stays).
+    private static void WhitenOldLimitBreakFrame(NahjaUI.Modules.JobGauges.LimitBreakGaugeSettings settings)
+    {
+        var color = settings.ReadyFrameColor;
+        if (System.MathF.Abs(color.X - 0.30f) < 0.01f && System.MathF.Abs(color.Y - 0.85f) < 0.01f && System.MathF.Abs(color.Z - 1f) < 0.01f)
+            settings.ReadyFrameColor = new System.Numerics.Vector4(1f, 1f, 1f, 1f);
+    }
+
+    private static bool wasHidingInterface;
+
+    // Each time the interface is hidden, the log says which conditions of the game were active, so a hiding that should not happen can be traced (/xllog).
+    private static void LogWhyHidden()
+    {
+        try
+        {
+            var active = new System.Collections.Generic.List<string>();
+            foreach (var flag in System.Enum.GetValues<ConditionFlag>())
+            {
+                if (Condition[flag])
+                    active.Add(flag.ToString());
+            }
+
+            Log.Information($"NahjaUI: the interface is hidden. Active conditions: {string.Join(", ", active)}. Casting: {ObjectTable.LocalPlayer?.IsCasting}. Game event status: {HasGameEventStatus()}.");
+        }
+        catch
+        {
+            // Only a log line: it never gets in the way.
+        }
+    }
+
+    // True while the game itself puts its interface away: cutscenes, loading screens and map changes (teleports, entering or leaving
+    // an instance), every "occupied" state (talks with characters, shops, quests, the summoning bell) and the scenes that interrupt a fight. Dalamud hides plugins in some of these but not in all of them.
+    private static bool GameHidesItsInterface()
+    {
+        try
+        {
+            if (Condition[ConditionFlag.OccupiedInCutSceneEvent]
+                || Condition[ConditionFlag.WatchingCutscene]
+                || Condition[ConditionFlag.WatchingCutscene78]
+                || Condition[ConditionFlag.BetweenAreas]
+                || Condition[ConditionFlag.BetweenAreas51]
+                || HasGameEventStatus())
+                return true;
+
+            // "Occupied in a quest event" alone does not hide the interface: the game sets it when a quest item is used, a quest object is picked up
+            // or a gate of a dungeon is opened, and its interface stays in all of them (the log of a gate: OccupiedInQuestEvent with no cast).
+            // The scenes that really put the interface away carry the cutscene flags above, which always hide.
+            // While the player is casting, the other "occupied" flags (talks, shops, the bell) do not hide it either.
+            if (Condition[ConditionFlag.Casting] || ObjectTable.LocalPlayer?.IsCasting == true)
+                return false;
+
+            return Condition[ConditionFlag.OccupiedInEvent]
+                || Condition[ConditionFlag.OccupiedSummoningBell]
+                || Condition[ConditionFlag.Occupied]
+                || Condition[ConditionFlag.Occupied30]
+                || Condition[ConditionFlag.Occupied33]
+                || Condition[ConditionFlag.Occupied38]
+                || Condition[ConditionFlag.Occupied39];
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // The ids of the status "Participating in a Game Event", the one the player carries during the scenes that interrupt a fight
+    // (a trial that stops to tell part of the story). Found once by its English name, so it does not depend on the language of the game.
+    private static System.Collections.Generic.HashSet<uint>? gameEventStatusIds;
+
+    private static bool HasGameEventStatus()
+    {
+        if (gameEventStatusIds is null)
+        {
+            var ids = new System.Collections.Generic.HashSet<uint>();
+            foreach (var row in DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>(Dalamud.Game.ClientLanguage.English))
+            {
+                if (string.Equals(row.Name.ToString(), "Participating in a Game Event", System.StringComparison.OrdinalIgnoreCase))
+                    ids.Add(row.RowId);
+            }
+
+            gameEventStatusIds = ids;
+        }
+
+        if (gameEventStatusIds.Count == 0 || ObjectTable.LocalPlayer is not { } player)
+            return false;
+
+        foreach (var status in player.StatusList)
+        {
+            if (gameEventStatusIds.Contains(status.StatusId))
+                return true;
+        }
+
+        return false;
     }
 
     // ---- Safety: a failure in one part never takes the others (or the game) down. ----
@@ -344,6 +474,35 @@ public sealed class Plugin : IDalamudPlugin
             reopenWindowAfterUnlock = false;
             reopenMiniBarAfterUnlock = false;
             reopenSetupAfterUnlock = false;
+        }
+    }
+
+    private int presetImportIndex;
+
+    // A new install comes with the trackers of every job: one job per frame (so the game does not hitch), once the player is in the game.
+    // The jobs that already have trackers are left alone. They can be imported again from the Presets button of the tracker list.
+    private void ImportDefaultPresets()
+    {
+        if (Configuration.AllPresetsImported || !GameData.Current.IsLoggedIn)
+            return;
+
+        var names = NahjaUI.Modules.Trackers.JobSetups.Names;
+        if (presetImportIndex >= names.Length)
+        {
+            Configuration.AllPresetsImported = true;
+            RequestSave();
+            return;
+        }
+
+        var name = names[presetImportIndex++];
+        try
+        {
+            if (!NahjaUI.Modules.Trackers.JobSetups.IsSetUp(TrackerSystem, name))
+                NahjaUI.Modules.Trackers.JobSetups.Apply(this, TrackerSystem, name);
+        }
+        catch (System.Exception ex)
+        {
+            Log.Error(ex, $"NahjaUI: could not import the preset of {name}.");
         }
     }
 

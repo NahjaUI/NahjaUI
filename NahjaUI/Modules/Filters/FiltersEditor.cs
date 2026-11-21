@@ -71,7 +71,7 @@ internal sealed class FiltersEditor
             ImGui.SameLine();
             if (ImGui.Button("Restore the default filters"))
             {
-                DefensiveFilters.RestoreMissing(settings);
+                DefaultFilters.RestoreMissing(settings);
                 plugin.RequestSave();
             }
 
@@ -116,8 +116,8 @@ internal sealed class FiltersEditor
     // The four defensive filters can be filled again with their default statuses; the names the game did not know are listed.
     private void DrawDefaults(StatusFilter filter)
     {
-        var isDefensive = Array.Exists(DefensiveFilters.All, definition => definition.Id == filter.Id);
-        var missing = DefensiveFilters.LastMissing;
+        var isDefensive = Array.Exists(DefaultFilters.All, definition => definition.Id == filter.Id);
+        var missing = DefaultFilters.LastMissing;
         if (!isDefensive && missing.Count == 0)
             return;
 
@@ -127,7 +127,7 @@ internal sealed class FiltersEditor
 
             if (isDefensive && ImGui.Button("Add the default statuses again"))
             {
-                DefensiveFilters.Restore(plugin.Configuration.Filters, filter.Id);
+                DefaultFilters.Restore(plugin.Configuration.Filters, filter.Id);
                 plugin.RequestSave();
             }
 

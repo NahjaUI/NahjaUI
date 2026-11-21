@@ -61,6 +61,9 @@ public class Configuration : IPluginConfiguration
     // Size of the text in the NahjaUI windows, in logical pixels (see OverlayFonts.MenuTextSizes).
     public int MenuTextSize { get; set; } = 15;
 
+    // General page: an action used with the mouse over one of our frames goes to that frame's unit (see MouseoverActions). Off by default.
+    public bool MouseoverActions { get; set; }
+
     // Appearance page: the slow animated background of the setup window and the menu (a plain one when off).
     public bool AnimatedBackground { get; set; } = true;
 
@@ -111,8 +114,21 @@ public class Configuration : IPluginConfiguration
     // True on a new install until the setup window is finished or skipped: it opens by itself while this is true.
     public bool SetupPending { get; set; }
 
-    // Test: the Black Mage "effect is active" triggers got the white pulse (applied once, then it is the user's choice).
+    /// <summary>How big the interface is compared with its original size (100 = the original). Changed only by "Resize everything".</summary>
+    public int ResizePercent { get; set; } = 100;
+
+    // Old test flag (the Black Mage pulse); kept so saved files still read. The standard below replaces it.
     public bool BlackMagePulseTestApplied { get; set; }
+
+    // The groups of every job (WHM Rotation, PLD CDs, Tank Role...) were merged once into the four shared ones (Rotation, CDs, Defensive CDs, Role Actions).
+    public bool TrackerGroupsMerged { get; set; }
+
+    // The trackers of every job are imported once on a new install. True here, so a settings file that already exists never gets them;
+    // the settings a new install starts from (DefaultConfiguration.json) say false, and the plugin imports the jobs that are missing and sets it to true.
+    public bool AllPresetsImported { get; set; } = true;
+
+    // The standard look of the trackers was applied once to the saved ones (pulse on "effect is active", standard texts); after that it is the user's choice.
+    public bool TrackerStandardApplied { get; set; }
 
     // The top level of the Trackers explorer, in the order the user chose: groups and loose trackers mixed.
     // Entries look like "group:<id>" or "tracker:<id>". Trackers inside a group are not listed here.

@@ -71,6 +71,9 @@ public class FiltersSettings
     /// <summary>The starting filters were created (once; if the user deletes one, it does not come back by itself).</summary>
     public bool DefensivesCreated { get; set; }
 
+    /// <summary>Thunder II, Thunder IV and the other Thunders were added once to the saved "Rotation upkeep" filter (see DefaultFilters.AddMissingThunders).</summary>
+    public bool RotationThundersAdded { get; set; }
+
     /// <summary>The first time: the filters the interface starts with. Crowd control has the one stun of the game; the others wait for the user to fill them.</summary>
     public void EnsureStarters()
     {

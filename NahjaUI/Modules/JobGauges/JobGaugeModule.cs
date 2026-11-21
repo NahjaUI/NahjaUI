@@ -167,6 +167,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         RegisterWarriorElements();
         RegisterThunderheadElement();
+        RegisterSacredSightElement();
 
         PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
         {
@@ -545,6 +546,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             ThunderheadElement.IsHidden = true;
             FirestarterElement.IsHidden = true;
             ParadoxElement.IsHidden = true;
+            SacredSightElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -584,6 +586,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         ThunderheadElement.IsHidden = !isBlackMage || !blackMageAura.ShowThunderheadAura;
         FirestarterElement.IsHidden = !isBlackMage || !blackMageAura.ShowFirestarterAura;
         ParadoxElement.IsHidden = !isBlackMage || !blackMageAura.ShowParadoxAura;
+        SacredSightElement.IsHidden = !isWhiteMage || !plugin.Configuration.JobGauges.WhiteMageAura.ShowSacredSightAura;
 
         var isPaladin = player is null || player.JobId == PaladinJobId;
         PaladinElement.IsHidden = !isPaladin;
@@ -639,6 +642,9 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         // The auras of the Black Mage procs (Thunderhead and Firestarter) and of its Paradox marker.
         DrawBlackMageAuras(blackMageAura, player, previewJob, unlock, isBlackMage, ParadoxActive(snapshot));
+
+        // The aura of Sacred Sight of the White Mage.
+        DrawSacredSightAura(plugin.Configuration.JobGauges.WhiteMageAura, player, previewJob, unlock, isWhiteMage);
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)
@@ -875,15 +881,15 @@ internal sealed partial class JobGaugeModule : IDisposable
         var black = Math.Clamp((int)gauge.BlackMana, 0, 100);
         var frame = settings.FrameWhenReady && white >= 50 && black >= 50;
 
-        DrawMana(drawList, settings, RedWhiteElement, white, settings.WhiteColor, frame);
-        DrawMana(drawList, settings, RedBlackElement, black, settings.BlackColor, frame);
+        DrawMana(drawList, settings, RedWhiteElement, white, settings.WhiteColor, frame, settings.Text);
+        DrawMana(drawList, settings, RedBlackElement, black, settings.BlackColor, frame, settings.SeparateBlackText ? settings.BlackText : settings.Text);
 
         if (settings.ShowStacks)
             DrawStacks(drawList, settings, Math.Min((int)gauge.ManaStacks, 3));
     }
 
     // One mana bar: rounded, filled from the left, optional mark at 50, optional number.
-    private void DrawMana(ImDrawListPtr drawList, RedMageGaugeSettings settings, LayoutElement element, int value, Vector4 color, bool frame)
+    private void DrawMana(ImDrawListPtr drawList, RedMageGaugeSettings settings, LayoutElement element, int value, Vector4 color, bool frame, FrameTextSettings text)
     {
         if (!LayoutManager.IsShownNow(element))
             return;
@@ -918,7 +924,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         if (settings.ShowNumbers)
         {
-            DrawCenteredText(drawList, settings.Text, pos, size, value.ToString());
+            DrawCenteredText(drawList, text, pos, size, value.ToString());
         }
     }
 
@@ -1021,22 +1027,23 @@ internal sealed partial class JobGaugeModule : IDisposable
         var progress = lilies >= 3 ? 0f : Math.Clamp(gauge.LilyTimerMs / LilyIntervalMs, 0f, 1f);
 
         var (lilyPos, lilySize) = LayoutManager.GetRect(LilyElement.Layout);
-        var lilyShown = LayoutManager.IsShownNow(LilyElement);
+        var lilyShown = gauge.LiliesUnlocked && LayoutManager.IsShownNow(LilyElement);
+        var lilyGap = settings.LilyGapPx ?? settings.GapPx;
         if (lilyShown)
-            DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, lilyPos, lilySize, lilies, progress, settings.LilyColor, false);
+            DrawPips(drawList, lilyGap, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, lilyPos, lilySize, lilies, progress, settings.LilyColor, false);
 
         if (lilyShown && settings.ShowTimer && lilies < 3 && progress > 0f)
         {
             var secondsLeft = (int)MathF.Ceiling((1f - progress) * LilyIntervalMs / 1000f);
-            DrawPipText(drawList, settings.Text, settings.GapPx, lilyPos, lilySize, lilies, secondsLeft.ToString());
+            DrawPipText(drawList, settings.Text, lilyGap, lilyPos, lilySize, lilies, secondsLeft.ToString());
         }
 
-        if (!settings.ShowBloodLilies || !LayoutManager.IsShownNow(BloodLilyElement))
+        if (!gauge.BloodLiliesUnlocked || !settings.ShowBloodLilies || !LayoutManager.IsShownNow(BloodLilyElement))
             return;
 
         var blood = Math.Min((int)gauge.BloodLily, 3);
         var (bloodPos, bloodSize) = LayoutManager.GetRect(BloodLilyElement.Layout);
-        DrawPips(drawList, settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, bloodPos, bloodSize, blood, 0f, settings.BloodLilyColor, settings.GlowWhenFull && blood >= 3);
+        DrawPips(drawList, settings.BloodLilyGapPx ?? settings.GapPx, GlobalColors.Current.Rounding, settings.BackgroundColor, settings.BorderColor, settings.GlowColor, bloodPos, bloodSize, blood, 0f, settings.BloodLilyColor, settings.GlowWhenFull && blood >= 3);
     }
 
     // Three rounded pips side by side, inside the box of the layout element. The first <filled> are full and the next one

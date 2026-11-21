@@ -42,6 +42,12 @@ public class TrackerGroupDefinition
     /// </summary>
     public string? PositionGroup { get; set; }
 
+    /// <summary>
+    /// True for the groups that every job shares (Rotation, CDs, Defensive CDs, Role Actions). Their trackers keep their own job filter and
+    /// their own PvE/PvP setting: the group only gives them where and how they are lined up.
+    /// </summary>
+    public bool SharedByJobs { get; set; }
+
     /// <summary>Space between two icons, in pixels.</summary>
     public int Spacing { get; set; } = 4;
 

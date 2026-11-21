@@ -148,7 +148,8 @@ internal sealed class StatusRowRenderer
 
     /// <summary>
     /// The enhancements row and the enfeeblements row of a frame. Each one is attached to the bar or to the other row; when one is attached
-    /// to the other, the other one is placed first. If both choose each other, the enhancements row stays on the bar.
+    /// to the other, the other one is placed first. If both choose each other, the enhancements row stays on the bar. A row that follows
+    /// an EMPTY row goes to the bar instead, so the gap of the missing row does not stay.
     /// </summary>
     public void DrawRows(ImDrawListPtr drawList, StatusRowSettings enhancements, StatusRowSettings enfeeblements, IReadOnlyList<StatusSnapshot> enhancementStatuses,
         IReadOnlyList<StatusSnapshot> enfeeblementStatuses, bool isSample, uint playerId, Vector2 barPos, Vector2 barSize, string place = "", bool friendly = true)
@@ -162,14 +163,19 @@ internal sealed class StatusRowRenderer
         if (enhancementsFollow)
         {
             var other = Place(enfeeblements, enfeeblementList.Count, barPos, barSize);
-            var mine = Place(enhancements, enhancementList.Count, other.Rect.Min, other.Rect.Size);
+
+            // With nothing in the row to follow, this one goes to the bar itself (an empty row is a point that already carries the
+            // offset of its row, and following it would add the two offsets).
+            var mine = enfeeblementList.Count > 0
+                ? Place(enhancements, enhancementList.Count, other.Rect.Min, other.Rect.Size)
+                : Place(enhancements, enhancementList.Count, barPos, barSize);
             Paint(drawList, enfeeblements, enfeeblementList, false, other, place, friendly);
             Paint(drawList, enhancements, enhancementList, true, mine, place, friendly);
         }
         else
         {
             var mine = Place(enhancements, enhancementList.Count, barPos, barSize);
-            var other = enfeeblementsFollow
+            var other = enfeeblementsFollow && enhancementList.Count > 0
                 ? Place(enfeeblements, enfeeblementList.Count, mine.Rect.Min, mine.Rect.Size)
                 : Place(enfeeblements, enfeeblementList.Count, barPos, barSize);
             Paint(drawList, enhancements, enhancementList, true, mine, place, friendly);

@@ -206,6 +206,35 @@ internal static class GameNames
 
     private static readonly Dictionary<(uint Job, uint Action), bool> ClassActions = new();
 
+    // The unlock link (a quest or a game unlock) of each action that has one; 0 when it has none. The link is read from the table once.
+    private static readonly Dictionary<uint, uint> ActionUnlockLinks = new();
+
+    /// <summary>
+    /// Has the character unlocked this action? Many actions need more than the level: Ley Lines, for instance, is learned by doing a quest.
+    /// The game keeps the list of what the character has unlocked, so it is asked directly. Actions with no unlock requirement are always unlocked.
+    /// </summary>
+    public static bool ActionUnlocked(uint actionId)
+    {
+        if (!ActionUnlockLinks.TryGetValue(actionId, out var link))
+        {
+            link = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) ? row.UnlockLink.RowId : 0u;
+            ActionUnlockLinks[actionId] = link;
+        }
+
+        if (link == 0)
+            return true;
+
+        try
+        {
+            return Plugin.UnlockState.IsUnlockLinkUnlocked(link);
+        }
+        catch
+        {
+            // If the game cannot tell, the action is not hidden because of it.
+            return true;
+        }
+    }
+
     /// <summary>
     /// Can the player use this action while on the given class or job? A base class (Thaumaturge) learns only the actions that belong to it;
     /// the actions of its job (Black Mage) are not available until the job is unlocked, even at the same level. A job can use every action
@@ -213,6 +242,14 @@ internal static class GameNames
     /// </summary>
     public static bool ActionUsableBy(uint jobId, uint actionId)
     {
+        // An action that has to be unlocked (usually by a quest) is not usable until the character has done it, whatever its level.
+        if (!ActionUnlocked(actionId))
+            return false;
+
+        // A role action (Lucid Dreaming, Swiftcast...) is shared by every class of the role: the class that learns it at its level has it.
+        if (IsRoleAction(actionId))
+            return true;
+
         if (ClassActions.TryGetValue((jobId, actionId), out var cached))
             return cached;
 
@@ -300,6 +337,61 @@ internal static class GameNames
         var isRole = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) && (row.IsRoleAction || (row.ClassJob.RowId == 0 && row.ClassJobLevel > 0 && row.IsPlayerAction));
         RoleActions[actionId] = isRole;
         return isRole;
+    }
+
+    // The classes and jobs that share the role actions of a role. Once a role action is learned with any of them, the others can use it.
+    private static readonly uint[][] RoleGroups =
+    {
+        new uint[] { 1, 19, 3, 21, 32, 37 },                      // tanks
+        new uint[] { 6, 24, 28, 33, 40 },                         // healers
+        new uint[] { 2, 20, 4, 22, 29, 30, 34, 39, 41 },          // melee DPS
+        new uint[] { 5, 23, 31, 38 },                             // physical ranged DPS
+        new uint[] { 7, 25, 26, 27, 35, 42 },                     // magical ranged DPS
+    };
+
+    private static readonly Dictionary<(uint Job, uint Action), (long At, bool Learned)> RoleLearned = new();
+
+    /// <summary>
+    /// Has the character learned this role action? It is learned the first time any class or job of the role reaches its level, and from then on
+    /// every class or job of the role can use it at any level (also synced down). The real level of each class is read from the game, so this
+    /// does not depend on the level the player has right now. If it cannot be known, the action counts as learned.
+    /// </summary>
+    public static unsafe bool RoleActionLearned(uint jobId, uint actionId)
+    {
+        var now = Environment.TickCount64;
+        if (RoleLearned.TryGetValue((jobId, actionId), out var cached) && now - cached.At < 1000)
+            return cached.Learned;
+
+        var learned = true;
+        try
+        {
+            var group = RoleGroups.FirstOrDefault(g => g.Contains(jobId));
+            var state = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance();
+            if (group is not null && state != null)
+            {
+                var needed = ActionLevel(actionId);
+                var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
+                learned = false;
+                foreach (var id in group)
+                {
+                    if (!sheet.TryGetRow(id, out var row) || row.ExpArrayIndex < 0)
+                        continue;
+
+                    if (state->ClassJobLevels[row.ExpArrayIndex] >= needed)
+                    {
+                        learned = true;
+                        break;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            learned = true;
+        }
+
+        RoleLearned[(jobId, actionId)] = (now, learned);
+        return learned;
     }
 
     /// <summary>The action that must be used right before this one for the combo to continue, or 0 if it is not a combo step.</summary>

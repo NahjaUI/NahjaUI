@@ -31,6 +31,9 @@ public class JobGaugesSettings
     /// <summary>The Thunderhead aura of the Black Mage (the rest of its gauge is the generic one, see Extra).</summary>
     public BlackMageAuraSettings BlackMage { get; set; } = new();
 
+    /// <summary>The Sacred Sight aura of the White Mage.</summary>
+    public WhiteMageAuraSettings WhiteMageAura { get; set; } = new();
+
     /// <summary>The jobs that use the generic gauge (melee, physical ranged and casters), by abbreviation.</summary>
     public ExtraGaugesSettings Extra { get; set; } = new();
 
@@ -59,10 +62,14 @@ public class WhiteMageGaugeSettings
     /// <summary>Light up the blood lilies when all three are full (Afflatus Misery is ready).</summary>
     public bool GlowWhenFull { get; set; } = true;
 
-    /// <summary>Space between two pips, in pixels.</summary>
+    /// <summary>Space between pips for the rows that have no value of their own (configs saved before each row had its own). Not shown in the editor.</summary>
     public int GapPx { get; set; } = 3;
 
+    /// <summary>Space between the lilies, in pixels. Null until the user chooses one (then the old shared value is used).</summary>
+    public int? LilyGapPx { get; set; }
 
+    /// <summary>Space between the blood lilies, in pixels. Null until the user chooses one (then the old shared value is used).</summary>
+    public int? BloodLilyGapPx { get; set; }
 
     /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text).</summary>
     public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
@@ -203,6 +210,15 @@ public class WarriorGaugeSettings : BarGaugeSettings
     public int ComboRefreshSeconds { get; set; }
 
     public Vector4 ComboRefreshColor { get; set; } = new(0.92f, 0.22f, 0.16f, 1f);
+}
+
+/// <summary>The aura of the White Mage: two flame arcs at both sides of the character while Sacred Sight is on (Glare IV x3 after Presence of Mind). Its sigils are the stacks left. No timer.</summary>
+[Serializable]
+public class WhiteMageAuraSettings
+{
+    public bool ShowSacredSightAura { get; set; } = true;
+
+    public float SacredSightAuraOpacity { get; set; } = 1f;
 }
 
 /// <summary>The aura of the Black Mage: an arch above the character while Thunderhead is on (the next Thunder is instant). It has no timer: it is there or it is not.</summary>
@@ -458,6 +474,12 @@ public class RedMageGaugeSettings
     /// <summary>The number or timer on the gauge: place on the bar, offsets, size, font and color (same controls as every other text).</summary>
     public FrameTextSettings Text { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
 
+    /// <summary>Off: the Black Mana bar writes its number like the White Mana one (the text above). On: it has its own text (place, size, color).</summary>
+    public bool SeparateBlackText { get; set; }
+
+    /// <summary>The number of the Black Mana bar, used only while <see cref="SeparateBlackText"/> is on.</summary>
+    public FrameTextSettings BlackText { get; set; } = new() { Anchor = AnchorPoint.Center, TextSize = 8 };
+
     public Vector4 WhiteColor { get; set; } = new(0.93f, 0.86f, 0.80f, 1f);
 
     public Vector4 BlackColor { get; set; } = new(0.36f, 0.30f, 0.80f, 1f);
@@ -514,8 +536,8 @@ public class LimitBreakGaugeSettings
     /// <summary>A full bar (a level you can use).</summary>
     public Vector4 FullColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
 
-    /// <summary>The border of a full bar: it shows at a glance that the level can be used (it contrasts with the gold and the orange of the fill).</summary>
-    public Vector4 ReadyFrameColor { get; set; } = new(0.30f, 0.85f, 1f, 1f);
+    /// <summary>The border of a full bar: it shows at a glance that the level can be used. White, like the border of a selected frame.</summary>
+    public Vector4 ReadyFrameColor { get; set; } = new(1f, 1f, 1f, 1f);
 
     private Vector4 backgroundColorValue = NahjaUI.Core.Ui.Theme.BarBackground;
     public bool CustomBackground { get; set; }
@@ -576,6 +598,9 @@ public class ExtraPartSettings
 {
     public bool Show { get; set; } = true;
 
+    /// <summary>Space between the pips or slots of this row, in pixels. Null while the user has not chosen one (the job's old value is used, 3 by default).</summary>
+    public int? GapPx { get; set; }
+
     /// <summary>The colours the user changed, by index of the row's list of colours.</summary>
     public System.Collections.Generic.Dictionary<int, Vector4> Colors { get; set; } = new();
 }
@@ -586,9 +611,8 @@ public class ExtraGaugeJobSettings
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Space between two pips or slots, in pixels.</summary>
+    /// <summary>Space between pips or slots for the rows that have no value of their own (configs saved before each row had its own). Not shown in the editor any more.</summary>
     public int GapPx { get; set; } = 3;
-
 
 
     /// <summary>The numbers and seconds written on the rows: place, offsets, size, font and colour (same controls as every other text).</summary>

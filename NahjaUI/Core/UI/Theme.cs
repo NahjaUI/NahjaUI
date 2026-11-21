@@ -21,6 +21,10 @@ internal static class Theme
     public static readonly Vector4 Sidebar = Rgb(21, 24, 40);
     public static readonly Vector4 Card = Rgb(28, 32, 52);
     public static readonly Vector4 Field = Rgb(40, 45, 72);
+    // Sliders, text boxes, drop-downs and checkboxes: darker than the cards under them, so they stand out from the background.
+    public static readonly Vector4 Input = Rgb(11, 13, 25);
+    // Buttons, a little lighter than the fields so they do not melt with them.
+    public static readonly Vector4 Control = Rgb(20, 23, 42);
     public static readonly Vector4 Border = Rgb(58, 64, 100);
 
     // Colors shared by every bar of the interface (HUD bars, gauges, progress bars, plates, enmity list), so they all look alike.
@@ -84,17 +88,19 @@ internal sealed class ThemeScope : IDisposable
         PushColor(ImGuiCol.TitleBgCollapsed, Theme.Sidebar);
 
         // Inputs
-        PushColor(ImGuiCol.FrameBg, Theme.Field);
-        PushColor(ImGuiCol.FrameBgHovered, Theme.Mix(Theme.Field, accent, 0.15f));
-        PushColor(ImGuiCol.FrameBgActive, Theme.Mix(Theme.Field, accent, 0.25f));
+        PushColor(ImGuiCol.FrameBg, Theme.Input);
+        // Clearly lighter than the violet background of the cards, so the one under the mouse is easy to see.
+        PushColor(ImGuiCol.FrameBgHovered, Theme.Mix(Theme.Input, accent, 0.55f));
+        PushColor(ImGuiCol.FrameBgActive, Theme.Mix(Theme.Input, accent, 0.65f));
         PushColor(ImGuiCol.CheckMark, accent);
         PushColor(ImGuiCol.SliderGrab, accent);
         PushColor(ImGuiCol.SliderGrabActive, accentHover);
 
         // Buttons (secondary look; the primary button is in Widgets)
-        PushColor(ImGuiCol.Button, Theme.Field);
-        PushColor(ImGuiCol.ButtonHovered, Theme.Mix(Theme.Field, accent, 0.30f));
-        PushColor(ImGuiCol.ButtonActive, Theme.Mix(Theme.Field, accent, 0.50f));
+        // Also the "-" / "+" of the number fields and the arrow of the drop-downs: dark, like the fields next to them.
+        PushColor(ImGuiCol.Button, Theme.Control);
+        PushColor(ImGuiCol.ButtonHovered, Theme.Mix(Theme.Control, accent, 0.50f));
+        PushColor(ImGuiCol.ButtonActive, Theme.Mix(Theme.Control, accent, 0.65f));
 
         // Headers and selectables
         PushColor(ImGuiCol.Header, Theme.WithAlpha(accent, 0.25f));

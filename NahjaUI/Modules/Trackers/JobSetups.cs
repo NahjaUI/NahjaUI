@@ -36,7 +36,7 @@ internal static class JobSetups
     private const int BarGap = 1;
 
     // A movement ability without damage: it goes next to Sprint in the group "General". Charges are read from the game too.
-    private sealed record Move(string Name, bool Charges = false, string? Effect = null);
+    private sealed record Move(string Name, bool Charges = false, string? Effect = null, bool ShowWhenReady = true);
 
     private sealed record Job(
         uint Id,
@@ -67,9 +67,9 @@ internal static class JobSetups
         ["Samurai"] = new Job(34, "SAM", p => p.JobGaugeSystem.ElementsOf("SAM"), SamuraiRotation, SamuraiCooldowns, SamuraiDefensives),
         ["Reaper"] = new Job(39, "RPR", p => p.JobGaugeSystem.ElementsOf("RPR"), ReaperRotation, ReaperCooldowns, ReaperDefensives, Moves: new[] { new Move("Hell's Ingress"), new Move("Hell's Egress") }),
         ["Viper"] = new Job(41, "VPR", p => p.JobGaugeSystem.ElementsOf("VPR"), ViperRotation, ViperCooldowns, NoAbilities, Moves: new[] { new Move("Slither", true) }),
-        ["Bard"] = new Job(23, "BRD", p => p.JobGaugeSystem.ElementsOf("BRD"), BardRotation, BardCooldowns, BardDefensives, Moves: new[] { new Move("Peloton", Effect: "Peloton"), new Move("Repelling Shot") }),
-        ["Machinist"] = new Job(31, "MCH", p => p.JobGaugeSystem.ElementsOf("MCH"), MachinistRotation, MachinistCooldowns, MachinistDefensives, Moves: new[] { new Move("Peloton", Effect: "Peloton") }),
-        ["Dancer"] = new Job(38, "DNC", p => p.JobGaugeSystem.ElementsOf("DNC"), DancerRotation, DancerCooldowns, DancerDefensives, Moves: new[] { new Move("Peloton", Effect: "Peloton"), new Move("En Avant", true) }, Stance: "Closed Position"),
+        ["Bard"] = new Job(23, "BRD", p => p.JobGaugeSystem.ElementsOf("BRD"), BardRotation, BardCooldowns, BardDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("Repelling Shot") }),
+        ["Machinist"] = new Job(31, "MCH", p => p.JobGaugeSystem.ElementsOf("MCH"), MachinistRotation, MachinistCooldowns, MachinistDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false) }),
+        ["Dancer"] = new Job(38, "DNC", p => p.JobGaugeSystem.ElementsOf("DNC"), DancerRotation, DancerCooldowns, DancerDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("En Avant", true) }, Stance: "Closed Position"),
         ["Black Mage"] = new Job(25, "BLM", p => p.JobGaugeSystem.ElementsOf("BLM"), BlackMageRotation, BlackMageCooldowns, BlackMageDefensives, Moves: new[] { new Move("Aetherial Manipulation") }),
         ["Summoner"] = new Job(27, "SMN", p => p.JobGaugeSystem.ElementsOf("SMN"), SummonerRotation, SummonerCooldowns, SummonerDefensives),
         ["Red Mage"] = new Job(35, "RDM", p => new[] { p.JobGaugeSystem.RedWhiteElement, p.JobGaugeSystem.RedBlackElement, p.JobGaugeSystem.RedStackElement }, RedMageRotation, RedMageCooldowns, RedMageDefensives),
@@ -90,17 +90,31 @@ internal static class JobSetups
     // One place of the column: an element, the size to give it (0 = keep) and whether it is a gauge of this job (the other jobs have none there).
     private sealed record Slot(LayoutElement Element, int Width = 0, int Height = 0, bool IsGauge = false);
 
-    public static string Apply(Plugin plugin, TrackerEngine engine, string jobName)
+    /// <summary>True when the job already has trackers in the shared rows (Rotation, CDs, Defensive CDs).</summary>
+    public static bool IsSetUp(TrackerEngine engine, string jobName)
+    {
+        if (!Jobs.TryGetValue(jobName, out var job))
+            return false;
+
+        var rows = new[] { TrackerEngine.SharedRotationId, TrackerEngine.SharedCdsId, TrackerEngine.SharedDefensiveId };
+        return engine.Trackers.Any(t => t.Definition.GroupId is { } groupId && Array.IndexOf(rows, groupId) >= 0
+                                        && t.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid)));
+    }
+
+    /// <param name="restore">The job is set up again even if it already has trackers: the ones that are missing come back, the ones that exist are kept.</param>
+    public static string Apply(Plugin plugin, TrackerEngine engine, string jobName, bool restore = false)
     {
         if (!Jobs.TryGetValue(jobName, out var job))
             return "Unknown job.";
 
-        var rotationName = $"{job.Abbreviation} Rotation";
-        var cooldownsName = $"{job.Abbreviation} CDs";
-        var defensivesName = $"{job.Abbreviation} Defensive CDs";
+        // What exists before: a tracker made again that is already there (same name, same row, same job) is dropped at the end.
+        var existing = restore ? engine.Trackers.Select(t => t.Definition).ToHashSet() : null;
+        var wasSetUp = restore && IsSetUp(engine, jobName);
 
-        // Groups that already exist are only put in their place in the column (their trackers are not touched).
-        var relayout = engine.Groups.Any(g => g.Definition.Name == rotationName || g.Definition.Name == cooldownsName || g.Definition.Name == defensivesName);
+        // The rows are shared by every job (Rotation, CDs, Defensive CDs, Role Actions): the trackers of the job are in them with the job as their filter.
+        // If the job already has trackers there, they are only put in their place in the column (the trackers are not touched).
+        var sharedRows = new[] { TrackerEngine.SharedRotationId, TrackerEngine.SharedCdsId, TrackerEngine.SharedDefensiveId };
+        var relayout = !restore && engine.Trackers.Any(t => t.Definition.GroupId is { } groupId && Array.IndexOf(sharedRows, groupId) >= 0 && t.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid)));
 
         var builder = new TrackerPresets.Builder(engine, job.Id);
         var added = new List<string>();
@@ -137,44 +151,64 @@ internal static class JobSetups
             }
         }
 
-        // The Peloton enhancement (another player's, or your own) is shown in "General" for every job that has no Peloton of its own: the ranged
-        // physical jobs track the ability itself (with its effect) next to Sprint.
-        if (job.Moves is null || !job.Moves.Any(move => move.Name == "Peloton"))
+        // Peloton: ONE tracker for every job (an empty job list) that is shown while the enhancement is on you, whoever gave it (another player's or
+        // your own). The jobs with the ability themselves (Bard, Machinist, Dancer) also get a dimmed cooldown of it (see Moves), only while it recharges.
         {
             var general = Find("General") ?? CreateGeneral(plugin, engine, builder);
-            var exists = engine.MembersOf(general).Any(a => a.Definition.Name == "Peloton" && a.Definition.Load.JobIds.Contains(job.Id));
-            if (!exists)
+
+            // The ones made for one job alone (older presets made one for each job) are the same thing as the general one: they go.
+            var universal = engine.MembersOf(general).FirstOrDefault(a => a.Definition.Name == "Peloton" && a.Definition.Load.JobIds.Count == 0
+                && a.Definition.Rules.All(rule => rule.Kind == ConditionKind.StatusPresent));
+
+            if (universal is null)
             {
                 builder.StatusTracker(general, "Peloton", glow: false); // Peloton never glows
-                PutInJobOrder(engine, general, job.Id);
+                universal = engine.Trackers.LastOrDefault(a => a.Definition.GroupId == general.Definition.Id && a.Definition.Name == "Peloton");
+                if (universal is not null)
+                {
+                    universal.Definition.Load.JobIds.Clear();
+                    var anchor = engine.MembersOf(general).FirstOrDefault(a => a.Definition.Name == "Jog")
+                                 ?? engine.MembersOf(general).FirstOrDefault(a => a.Definition.Name == "Sprint");
+                    if (anchor is not null && anchor != universal)
+                        engine.MoveTrackerIntoGroup(universal, general, anchor, true);
+                }
+            }
+
+            if (universal is not null)
+            {
+                foreach (var extra in engine.MembersOf(general).Where(a => a != universal && a.Definition.Name == "Peloton" && a.Definition.Load.JobIds.Count > 0
+                                                                           && a.Definition.Rules.All(rule => rule.Kind == ConditionKind.StatusPresent)).ToList())
+                    engine.Remove(extra);
             }
         }
 
         TrackerGroupRuntime? rotation, cooldowns, defensives;
         if (relayout)
         {
-            rotation = Find(rotationName);
-            cooldowns = Find(cooldownsName);
-            defensives = Find(defensivesName);
+            rotation = engine.EnsureSharedGroup(TrackerEngine.SharedRotationId);
+            cooldowns = engine.EnsureSharedGroup(TrackerEngine.SharedCdsId);
+            defensives = engine.EnsureSharedGroup(TrackerEngine.SharedDefensiveId);
+
+            // A job without defensive abilities has none in the shared row.
+            var defensivesId = defensives.Definition.Id;
+            if (!engine.Trackers.Any(t => t.Definition.GroupId == defensivesId && t.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid))))
+                defensives = null;
         }
         else
         {
-            rotation = builder.Row(rotationName, 6);
+            rotation = builder.SharedRow(TrackerEngine.SharedRotationId);
             job.Rotation(builder, rotation);
 
-            cooldowns = builder.Row(cooldownsName, 3);
+            cooldowns = builder.SharedRow(TrackerEngine.SharedCdsId);
             job.Cooldowns(builder, cooldowns);
 
-            defensives = builder.Row(defensivesName, 3);
+            defensives = builder.SharedRow(TrackerEngine.SharedDefensiveId);
             job.Defensives(builder, defensives);
 
-            // A job without defensive abilities (Dragoon, Viper) has no such row.
-            if (!engine.MembersOf(defensives).Any())
-            {
-                engine.RemoveGroup(defensives);
-                builder.Forget(defensives);
+            // A job without defensive abilities (Dragoon, Viper) has nothing in the shared row, and no slot in its column.
+            var defensivesId = defensives.Definition.Id;
+            if (!engine.Trackers.Any(t => t.Definition.GroupId == defensivesId && t.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid))))
                 defensives = null;
-            }
 
             // The movement abilities without damage (Shadowstride, Aetherial Shift) go next to Sprint in the group "General"
             // (the ones that hit stay in the CDs). They are tracked here, before the safety net below, so they are not added twice.
@@ -197,7 +231,7 @@ internal static class JobSetups
                     }
 
                     var stores = known.Any(info => info.Name == move.Name && (info.MaxCharges > 1 || ActionManager.GetMaxCharges(info.Id, 100) > 1));
-                    builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: false);
+                    builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: false, showWhenReady: move.ShowWhenReady);
                     PutInJobOrder(engine, general, job.Id);
                 }
             }
@@ -227,13 +261,16 @@ internal static class JobSetups
         var role = Roles.FirstOrDefault(r => r.Jobs.Contains(job.Id));
         if (role is not null)
         {
-            roleRow = Find(role.Name);
-            if (roleRow is null)
+            // The role actions are made once for all the jobs of the role (the trackers load on all of them), inside the shared row "Role Actions".
+            var sharedRole = engine.EnsureSharedGroup(TrackerEngine.SharedRoleId);
+            roleRow = sharedRole;
+            var roleGroupId = sharedRole.Definition.Id;
+            if (restore || !engine.Trackers.Any(t => t.Definition.GroupId == roleGroupId && t.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid))))
             {
                 roleIsNew = true;
                 var shared = new TrackerPresets.Builder(engine, role.Jobs);
-                roleRow = shared.Row(role.Name, 3);
-                role.Fill(shared, roleRow);
+                var sharedRow = shared.SharedRow(TrackerEngine.SharedRoleId);
+                role.Fill(shared, sharedRow);
                 shared.Finish();
                 builder.Add(shared.Count, shared.Missing);
             }
@@ -252,6 +289,37 @@ internal static class JobSetups
                 PlaceInOrder(engine, roleRow);
 
             PlaceInOrder(engine, Find("General"));
+        }
+
+        // The trackers made again that were already there (same name, same row, same job) are dropped; the rest came back. Returns how many came back.
+        int DropRestoredDuplicates()
+        {
+            if (existing is null)
+                return 0;
+
+            var back = 0;
+            foreach (var fresh in engine.Trackers.Where(x => !existing.Contains(x.Definition)).ToList())
+            {
+                var duplicate = engine.Trackers.Any(old => existing.Contains(old.Definition)
+                                                           && old.Definition.GroupId == fresh.Definition.GroupId
+                                                           && old.Definition.Name == fresh.Definition.Name
+                                                           && old.Definition.Load.JobIds.Any(jid => GameNames.JobMatches(job.Id, jid)));
+                if (duplicate)
+                    engine.Remove(fresh);
+                else
+                    back++;
+            }
+
+            return back;
+        }
+
+        // A job that was already set up keeps its positions: only the trackers that were missing come back.
+        if (wasSetUp)
+        {
+            var came = DropRestoredDuplicates();
+            builder.Finish();
+            plugin.RequestSave();
+            return $"{jobName}: {came} trackers came back.";
         }
 
         // The rows of every job share one position each ("Rotation", "CDs", "Defensive CDs"): set once, every job shows it.
@@ -393,10 +461,14 @@ internal static class JobSetups
             pvpTop += pvpHeight + BarGap;
         }
 
+        var restored = DropRestoredDuplicates();
+
         builder.Finish();
         plugin.RequestSave();
 
-        var report = relayout
+        var report = restore
+            ? $"{jobName}: {restored} trackers came back."
+            : relayout
             ? $"{jobName} setup applied. The progress bar{(showsMp ? " and the MP bar were" : " was")} moved too."
             : $"{jobName} setup added: {builder.Count} trackers. The progress bar{(showsMp ? " and the MP bar were" : " was")} moved too.";
 

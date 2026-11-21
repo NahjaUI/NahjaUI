@@ -13,6 +13,17 @@ namespace NahjaUI.Core.Ui;
 /// </summary>
 internal static class Widgets
 {
+    private static int clickTakenFrame = -1;
+
+    // The card whose title is being pressed (it acts when the button is let go).
+    private static string? pressedCard;
+
+    /// <summary>A control that is not an ImGui item (a card title, a row of a list) says it used the click of this frame, so the window does not start to move with it.</summary>
+    public static void TakeClick() => clickTakenFrame = ImGui.GetFrameCount();
+
+    /// <summary>True when a control of this frame already used the click.</summary>
+    public static bool ClickTaken => clickTakenFrame == ImGui.GetFrameCount();
+
     private const float RightMargin = 16f;
 
     // Height each box needed the last time it was drawn (logical pixels times the UI scale, so physical), by id.
@@ -273,12 +284,25 @@ internal static class Widgets
         else
             drawList.AddTriangleFilled(new Vector2(center.X - size, center.Y - size / 2f), new Vector2(center.X + size, center.Y - size / 2f), new Vector2(center.X, center.Y + size / 2f + size / 2f), color);
 
+        // The card opens or folds when the button is let go, over the same title where it was pressed (like a button): pressing and then moving
+        // away cancels it.
         if (hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
-            if (!Collapsed.Remove(currentCard))
-                Collapsed.Add(currentCard);
+            TakeClick();
+            pressedCard = currentCard;
+        }
 
-            CollapsedChanged?.Invoke();
+        if (pressedCard is not null && ImGui.IsMouseReleased(ImGuiMouseButton.Left))
+        {
+            if (hovered && pressedCard == currentCard)
+            {
+                if (!Collapsed.Remove(currentCard))
+                    Collapsed.Add(currentCard);
+
+                CollapsedChanged?.Invoke();
+            }
+
+            pressedCard = null;
         }
 
         // Folded: from here on everything is clipped away with an empty rectangle, so no part of the first control peeks out

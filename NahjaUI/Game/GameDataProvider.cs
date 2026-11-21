@@ -422,7 +422,10 @@ internal sealed class GameDataProvider : IDisposable
             return null;
 
         var gauge = Plugin.JobGauges.Get<WHMGauge>();
-        return new WhiteMageGaugeSnapshot(gauge.Lily, gauge.BloodLily, Math.Max((short)0, gauge.LilyTimer));
+
+        // The lilies come with Afflatus Solace (level 52) and the blood lilies with Afflatus Misery (level 74): each row appears once its action is learned.
+        return new WhiteMageGaugeSnapshot(gauge.Lily, gauge.BloodLily, Math.Max((short)0, gauge.LilyTimer),
+            GaugeLearned(player, WhiteMageJobId, "Afflatus Solace"), GaugeLearned(player, WhiteMageJobId, "Afflatus Misery"));
     }
 
     // The Warrior gauge. Warrior is class job 21 (Marauder, its first class, is 3 and has no Beast Gauge).
@@ -623,6 +626,10 @@ internal sealed class GameDataProvider : IDisposable
             _ => null
         };
 
+        // Only the rows the player has unlocked (the Black Mage does this itself).
+        if (parts is not null && player.JobId is not (25 or 7))
+            parts = parts.Where(part => !RowUnlockActions.TryGetValue((player.JobId, part.Id), out var action) || GaugeLearned(player, player.JobId, action)).ToArray();
+
         // The Thaumaturge (7) uses the gauge of the Black Mage (25).
         return parts is null ? null : new ExtraGaugeSnapshot(player.JobId == 7 ? 25u : player.JobId, parts);
     }
@@ -820,6 +827,44 @@ internal sealed class GameDataProvider : IDisposable
         parts.Add(Pips("paradox", gauge.IsParadoxActive ? 1 : 0, 1));
 
         return parts.ToArray();
+    }
+
+    // The action that gives each row of a generic gauge. The row appears once the player has learned it: the level (the one the game uses, with the sync)
+    // reaches the action and, if it needs a quest, the quest is done. Rows that are not here (or whose action is not found by name) are always shown.
+    private static readonly Dictionary<(uint Job, string Row), string> RowUnlockActions = new()
+    {
+        [(20, "chakra")] = "Steel Peak",
+        [(20, "blitz")] = "Perfect Balance",
+        [(20, "nadi")] = "Masterful Blitz",
+        [(22, "lotd")] = "Geirskogul",
+        [(22, "focus")] = "Wyrmwind Thrust",
+        [(30, "ninki")] = "Mug",
+        [(30, "kazematoi")] = "Armor Crush",
+        [(34, "sen")] = "Iaijutsu",
+        [(34, "meditation")] = "Meditate",
+        [(23, "song")] = "Mage's Ballad",
+        [(23, "repertoire")] = "Mage's Ballad",
+        [(23, "soulvoice")] = "Apex Arrow",
+        [(31, "heat")] = "Hypercharge",
+        [(31, "battery")] = "Rook Autoturret",
+        [(38, "feathers")] = "Fan Dance",
+        [(38, "esprit")] = "Saber Dance",
+        [(27, "aetherflow")] = "Energy Drain",
+    };
+
+    private static readonly Dictionary<string, uint> GaugeActionIds = new();
+
+    // The action is learned: its level is reached and its quest (if any) is done. An action that cannot be found by name counts as learned, so a wrong name never hides a row.
+    private static bool GaugeLearned(UnitSnapshot player, uint jobId, string actionName)
+    {
+        var key = $"{jobId}:{actionName}";
+        if (!GaugeActionIds.TryGetValue(key, out var id))
+        {
+            id = NahjaUI.Modules.Trackers.TrackerPresets.FindAction(actionName, jobId);
+            GaugeActionIds[key] = id;
+        }
+
+        return id == 0 || (GameNames.ActionLevel(id) <= player.Level && GameNames.ActionUsableBy(player.JobId, id));
     }
 
     // The Black Mage actions that unlock the rows of the gauge, found by name once.
@@ -1266,12 +1311,23 @@ internal sealed class GameDataProvider : IDisposable
 
         // A cross-world party outside of a duty: the game keeps its members in its cross-world list, not in the normal party list.
         if (partyList.Length == 0)
-            return BuildCrossRealmParty();
+        {
+            var crossRealm = BuildCrossRealmParty();
+            if (crossRealm.Count > 0)
+                return crossRealm;
+
+            // No real party: you may still have NPC party members (Trust, Duty Support).
+            var alone = new List<UnitSnapshot>();
+            AddNpcPartyMembers(alone);
+            return alone.Count > 0 ? alone.OrderBy(unit => ReadGameListOrder() is { } order && order.TryGetValue(unit.EntityId, out var position) ? position : int.MaxValue).ToList() : alone;
+        }
 
         var result = new List<UnitSnapshot>(partyList.Length);
 
         foreach (var member in partyList)
             result.Add(ToUnit(member));
+
+        AddNpcPartyMembers(result);
 
         // The game's own party list has its own order (the "sort" option of the game: you first, by role...). The party list of
         // Dalamud does not follow it, so the position of each member in the game's list is read and used here.
@@ -1348,6 +1404,43 @@ internal sealed class GameDataProvider : IDisposable
             return result.OrderBy(unit => order.TryGetValue(unit.EntityId, out var position) ? position : int.MaxValue).ToList();
 
         return result;
+    }
+
+    // The NPC members of the party (Trust, Duty Support): they are in the game's party list but not in the party list of Dalamud, which only has players.
+    // The game's HUD agent knows every member of its list; the ones that are missing here are found in the object table by their entity id.
+    // If the list is empty because you have no real party, you are added too (the game lists you first).
+    private unsafe void AddNpcPartyMembers(List<UnitSnapshot> result)
+    {
+        var agent = AgentHUD.Instance();
+        if (agent == null)
+            return;
+
+        var members = agent->PartyMembers;
+        var count = Math.Min((int)agent->PartyMemberCount, members.Length);
+        var localId = Plugin.ObjectTable.LocalPlayer?.EntityId ?? 0u;
+        var known = new HashSet<uint>(result.Select(unit => unit.EntityId));
+
+        for (var i = 0; i < count; i++)
+        {
+            var entityId = members[i].EntityId;
+            if (entityId == 0 || !known.Add(entityId))
+                continue;
+
+            if (Plugin.ObjectTable.SearchByEntityId(entityId) is not IBattleChara chara)
+                continue;
+
+            // Only a player (you) or a battle NPC is added; a real player that is missing from the party list is left to it.
+            if (chara.EntityId != localId && chara.ObjectKind != ObjectKind.BattleNpc)
+                continue;
+
+            // A pet or a chocobo has an owner: it is not a member of the party (the chocobo has its own frame), so it is left out. Trust NPCs have no owner.
+            if (chara.EntityId != localId && chara.OwnerId is not (0u or 0xE0000000u))
+                continue;
+
+            var unit = ToUnit(chara);
+            if (unit is not null)
+                result.Add(unit);
+        }
     }
 
     // The position of each party member in the game's party list (entity id -> position, 0 is the top one), or null when it

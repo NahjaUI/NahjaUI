@@ -6,6 +6,7 @@ using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
 using NahjaUI.Modules.HudBars;
 using NahjaUI.Core.Ui;
+using NahjaUI.Game;
 
 namespace NahjaUI.Modules.JobGauges;
 
@@ -85,7 +86,10 @@ internal sealed class JobGaugeEditor
                 if (ExtraGauges.ByJob.TryGetValue(Entries[shown].JobId, out var extra))
                     DrawExtra(extra);
                 else
+                {
                     DrawWhiteMage(plugin.Configuration.JobGauges.WhiteMage);
+                    DrawWhiteMageAura(plugin.Configuration.JobGauges.WhiteMageAura);
+                }
 
                 break;
         }
@@ -163,14 +167,19 @@ internal sealed class JobGaugeEditor
 
             // The size of each row belongs to the layout system, like its position.
             SizeControls("Lilies", plugin.JobGaugeSystem.LilyElement.Layout);
-            SizeControls("Blood lilies", plugin.JobGaugeSystem.BloodLilyElement.Layout);
+            var lilyGap = settings.LilyGapPx ?? settings.GapPx;
+            if (ImGui.SliderInt("Space between lilies (px)", ref lilyGap, -1, 30))
+            {
+                settings.LilyGapPx = lilyGap;
+                plugin.RequestSave();
+            }
 
             ImGui.Spacing();
-
-            var gap = settings.GapPx;
-            if (ImGui.SliderInt("Space between pips (px)", ref gap, -1, 30))
+            SizeControls("Blood lilies", plugin.JobGaugeSystem.BloodLilyElement.Layout);
+            var bloodGap = settings.BloodLilyGapPx ?? settings.GapPx;
+            if (ImGui.SliderInt("Space between blood lilies (px)", ref bloodGap, -1, 30))
             {
-                settings.GapPx = gap;
+                settings.BloodLilyGapPx = bloodGap;
                 plugin.RequestSave();
             }
 
@@ -395,6 +404,10 @@ internal sealed class JobGaugeEditor
                 Check($"Show##{id}{part.Id}", partSettings.Show, v => partSettings.Show = v);
                 SizeControls(part.Label, elements[i].Layout);
 
+                // Only the rows of pips or slots have space between their parts (the bars do not).
+                if (def.Sample.FirstOrDefault(p => p.Id == part.Id)?.Kind != GaugePartKind.Bar)
+                    Slider($"Space between pips (px)##{id}{part.Id}gap", partSettings.GapPx ?? settings.GapPx, 20, v => partSettings.GapPx = v);
+
                 for (var c = 0; c < part.Colors.Length; c++)
                 {
                     var index = c;
@@ -402,8 +415,6 @@ internal sealed class JobGaugeEditor
                 }
             }
 
-            ImGui.Spacing();
-            Slider($"Space between pips (px)##{id}", settings.GapPx, 20, v => settings.GapPx = v);
             ImGui.Spacing();
             ImGui.PushID($"{id}Text");
             if (HudBarEditor.TextControls(settings.Text))
@@ -629,8 +640,34 @@ internal sealed class JobGaugeEditor
 
             ImGui.Spacing();
 
-            ImGui.PushID("gaugeText");
+            // Each mana bar has its own number (place, size, color). The first time, the Black Mana one is a copy of the White Mana one, so
+            // nothing moves.
+            if (!settings.SeparateBlackText)
+            {
+                var from = settings.Text;
+                var to = settings.BlackText;
+                to.Enabled = from.Enabled;
+                to.Anchor = from.Anchor;
+                to.OffsetX = from.OffsetX;
+                to.OffsetY = from.OffsetY;
+                to.TextSize = from.TextSize;
+                to.CustomColor = from.CustomColor;
+                to.Color = from.Color;
+                settings.SeparateBlackText = true;
+                plugin.RequestSave();
+            }
+
+            Widgets.SectionLabel("White Mana number");
+            ImGui.PushID("gaugeTextWhite");
             if (HudBarEditor.TextControls(settings.Text))
+                plugin.RequestSave();
+            ImGui.PopID();
+
+            ImGui.Spacing();
+
+            Widgets.SectionLabel("Black Mana number");
+            ImGui.PushID("gaugeTextBlack");
+            if (HudBarEditor.TextControls(settings.BlackText))
                 plugin.RequestSave();
             ImGui.PopID();
 
@@ -742,6 +779,32 @@ internal sealed class JobGaugeEditor
             ImGui.Spacing();
             Pick("Pip color", settings.ComboColor, v => settings.ComboColor = v, original.ComboColor);
             Pick("Last pip color when Surging Tempest is low", settings.ComboRefreshColor, v => settings.ComboRefreshColor = v, original.ComboRefreshColor);
+        });
+    }
+
+    // The Sacred Sight aura of the White Mage: on or off, with a size and an opacity. The sigils show the stacks left (3, 2 or 1).
+    private void DrawWhiteMageAura(WhiteMageAuraSettings settings)
+    {
+        Widgets.Card("##card_gauge_whm_sacredsight", 6, () =>
+        {
+            Widgets.SectionLabel("White Mage (Sacred Sight)");
+
+            var show = settings.ShowSacredSightAura;
+            if (ImGui.Checkbox("Show the Sacred Sight auras##whms", ref show))
+            {
+                settings.ShowSacredSightAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Sacred Sight auras (the box holds both arcs)", plugin.JobGaugeSystem.SacredSightElement.Layout);
+
+            var opacity = settings.SacredSightAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##whms", ref opacity, 0.1f, 1f))
+            {
+                settings.SacredSightAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
         });
     }
 

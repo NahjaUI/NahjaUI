@@ -185,12 +185,20 @@ internal sealed class HudBarModule : IDisposable
         return pressIsOurs;
     }
 
+    // How much lighter a frame gets while the mouse is over it (white, 0 to 1).
+    private const float HoverLightenAlpha = 0.09f;
+
     // The unit under the mouse this frame (one of our frames), to publish as the game's mouseover target.
     private uint mouseOverEntityId;
     private bool mouseOverPublished;
 
+    /// <summary>The entity id of the unit whose frame of ours has the mouse over it right now (0 = none). Used by the mouseover actions.</summary>
+    internal uint HoveredFrameEntityId { get; private set; }
+
     private void ClearMouseOver()
     {
+        HoveredFrameEntityId = 0;
+
         if (!mouseOverPublished)
             return;
 
@@ -219,6 +227,7 @@ internal sealed class HudBarModule : IDisposable
 
         Plugin.TargetManager.MouseOverTarget = target;
         mouseOverPublished = true;
+        HoveredFrameEntityId = entityId;
     }
 
     internal void UpdateCursor()
@@ -410,6 +419,13 @@ internal sealed class HudBarModule : IDisposable
         // Dalamud swaps the game's cursor for the Windows one while it captures the mouse; this asks it to keep the game's.
         cursorWanted = true;
         mouseOverEntityId = unit.EntityId;
+
+        // A light veil over the frame tells where the mouse is (and which unit a mouseover action will use).
+        ImGui.GetBackgroundDrawList().AddRectFilled(
+            pos,
+            pos + size,
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, HoverLightenAlpha)),
+            MathF.Round(GlobalColors.Current.Rounding * UiScale.Overlay));
 
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {

@@ -142,27 +142,38 @@ internal sealed class TrackerEngine
 
     private void LoadFromConfiguration()
     {
-        // Test, once: the "effect is active" triggers (a status on the player) of the Black Mage trackers pulse. After that it is the user's choice.
-        if (!plugin.Configuration.BlackMagePulseTestApplied)
+        // Once: the standard look of the trackers. The "effect is active" triggers (a status on the player) pulse; the first text of every trigger
+        // (the time) is 12 px in the centre with no offset, and the second one (the stacks) is 9 px at the bottom right, 3 px up (saved as -3, the editor shows it as +3). After that it is the user's choice.
+        if (!plugin.Configuration.TrackerStandardApplied)
         {
             foreach (var tracker in plugin.Configuration.Trackers)
             {
-                if (!tracker.Load.JobIds.Contains(25u))
-                    continue;
-
                 foreach (var rule in tracker.Rules)
                 {
                     if (rule.Kind == ConditionKind.StatusPresent && rule.Unit == TrackerUnit.Player)
                         rule.Pulse = true;
+
+                    for (var i = 0; i < rule.Texts.Count && i < 2; i++)
+                    {
+                        var text = rule.Texts[i];
+                        text.Size = i == 0 ? 12 : 9;
+                        text.Anchor = i == 0 ? AnchorPoint.Center : AnchorPoint.BottomRight;
+                        text.OffsetX = 0;
+                        text.OffsetY = i == 0 ? 0 : -3;
+                    }
                 }
             }
 
-            plugin.Configuration.BlackMagePulseTestApplied = true;
+            plugin.Configuration.TrackerStandardApplied = true;
             plugin.RequestSave();
         }
 
+        MergeJobGroups();
+
         foreach (var definition in plugin.Configuration.TrackerGroups)
             RegisterGroup(definition);
+
+        RepairLegacyAttachments();
 
         foreach (var definition in plugin.Configuration.Trackers)
         {
@@ -211,7 +222,8 @@ internal sealed class TrackerEngine
     /// <summary>A new trigger: it tracks nothing yet and has one text, the time.</summary>
     public static TrackerRule NewRule() => new()
     {
-        Texts = { new TrackerTextDefinition { Sources = { new TrackerTextSource() } } }
+        // The standard text of the time: 12 px in the centre, no offset.
+        Texts = { new TrackerTextDefinition { Size = 12, Anchor = AnchorPoint.Center, OffsetX = 0, OffsetY = 0, Sources = { new TrackerTextSource() } } }
     };
 
     /// <summary>Makes a copy of a tracker and puts it right below the original (inside the same group, or at the top level).</summary>
@@ -253,6 +265,271 @@ internal sealed class TrackerEngine
         runtimes.Remove(runtime);
         plugin.Layout.Unregister(runtime.Element.Id);
         plugin.RequestSave();
+    }
+
+    // The four groups every job shares, with their fixed ids (the position shared by the jobs has the name of the second column).
+    public const string SharedRotationId = "shared-rotation";
+    public const string SharedCdsId = "shared-cds";
+    public const string SharedDefensiveId = "shared-defensive";
+    public const string SharedRoleId = "shared-role";
+
+    private static readonly string[] SharedIds = { SharedRotationId, SharedCdsId, SharedDefensiveId, SharedRoleId };
+
+    private static TrackerGroupDefinition NewSharedDefinition(string id, int iconWidth, int iconHeight)
+    {
+        var (name, position) = id switch
+        {
+            SharedRotationId => ("Rotation", "Rotation"),
+            SharedCdsId => ("CDs", "CDs"),
+            SharedDefensiveId => ("Defensive CDs", "Defensive CDs"),
+            _ => ("Role Actions", "Role Actions")
+        };
+
+        return new TrackerGroupDefinition
+        {
+            Id = id,
+            Name = name,
+            Growth = GroupGrowth.FromCenterHorizontal,
+            Spacing = 3,
+            PositionGroup = position,
+            SharedByJobs = true,
+            IconWidth = iconWidth,
+            IconHeight = iconHeight,
+            Template = new TrackerDefinition()
+        };
+    }
+
+    /// <summary>One of the four groups every job shares: found, or made the first time it is needed.</summary>
+    public TrackerGroupRuntime EnsureSharedGroup(string id)
+    {
+        var existing = FindGroup(id);
+        if (existing is not null)
+            return existing;
+
+        var definition = NewSharedDefinition(id, 32, 24);
+        plugin.Configuration.TrackerGroups.Add(definition);
+        plugin.Configuration.RootOrder.Add(GroupKey(definition));
+
+        var runtime = RegisterGroup(definition);
+        plugin.RequestSave();
+        return runtime;
+    }
+
+    private static readonly string[] RoleGroupNames = { "Tank Role", "Healer Role", "Melee Role", "Physical Ranged Role", "Magical Ranged Role" };
+
+    // The shared group a group of a job (WHM Rotation, PLD CDs, Tank Role...) goes into, or null for any other group.
+    private static string? SharedTargetOf(string name)
+    {
+        if (Array.IndexOf(RoleGroupNames, name) >= 0)
+            return SharedRoleId;
+
+        var match = System.Text.RegularExpressions.Regex.Match(name, @"^[A-Z]{3} (Rotation|CDs|Defensive CDs)$");
+        if (!match.Success)
+            return null;
+
+        return match.Groups[1].Value switch
+        {
+            "Rotation" => SharedRotationId,
+            "CDs" => SharedCdsId,
+            _ => SharedDefensiveId
+        };
+    }
+
+    // Once: the groups of every job are merged into the four shared ones. The trackers keep their job filter, so on a job only its own appear.
+    // The settings of the shared groups are the same for all (grow from the centre, 3 px between icons); the icon size and the position come from the
+    // White Mage (or Healer Role) group, and the position another job had for its group becomes the position of that job in the shared one.
+    // A tracker of a group that was switched off stays switched off.
+    private void MergeJobGroups()
+    {
+        var config = plugin.Configuration;
+        if (config.TrackerGroupsMerged)
+            return;
+
+        config.TrackerGroupsMerged = true;
+        plugin.RequestSave();
+
+        var old = config.TrackerGroups.Where(g => !g.SharedByJobs && SharedTargetOf(g.Name) is not null).ToList();
+        if (old.Count == 0)
+            return;
+
+        var rootOrder = config.RootOrder;
+        var insertAt = old.Select(g => rootOrder.IndexOf(GroupKey(g))).Where(index => index >= 0).DefaultIfEmpty(rootOrder.Count).Min();
+        var created = new List<string>();
+
+        // The element of each group that goes away -> the element of the shared group that takes its place, to follow what was attached to it.
+        var moved = new Dictionary<string, string>();
+
+        void SetJobPosition(string element, uint key, ElementLayout layout)
+        {
+            if (!config.JobLayouts.TryGetValue(element, out var own))
+            {
+                own = new Dictionary<uint, ElementLayout>();
+                config.JobLayouts[element] = own;
+            }
+
+            own.TryAdd(key, layout);
+        }
+
+        foreach (var targetId in SharedIds)
+        {
+            var kind = old.Where(g => SharedTargetOf(g.Name) == targetId).ToList();
+            if (kind.Count == 0)
+                continue;
+
+            var main = kind.FirstOrDefault(g => g.Name is "WHM Rotation" or "WHM CDs" or "WHM Defensive CDs" or "Healer Role") ?? kind[0];
+            var definition = config.TrackerGroups.FirstOrDefault(g => g.Id == targetId);
+            if (definition is null)
+            {
+                definition = NewSharedDefinition(targetId, main.IconWidth > 0 ? main.IconWidth : 32, main.IconHeight > 0 ? main.IconHeight : 24);
+                config.TrackerGroups.Add(definition);
+            }
+
+            created.Add(GroupKey(definition));
+
+            var newElement = $"tracker-group.{targetId}";
+            var commonKey = definition.PositionGroup ?? newElement;
+
+            // The position every job shows: the one of the main group.
+            var mainElement = $"tracker-group.{main.Id}";
+            if (main.PositionGroup is null && config.CommonLayouts.TryGetValue(mainElement, out var mainCommon))
+                config.CommonLayouts[commonKey] = mainCommon;
+
+            foreach (var group in kind)
+            {
+                var element = $"tracker-group.{group.Id}";
+                moved[element] = newElement;
+                var jobs = new HashSet<uint>();
+
+                foreach (var tracker in config.Trackers.Where(t => t.GroupId == group.Id))
+                {
+                    tracker.GroupId = targetId;
+                    if (!group.Enabled)
+                        tracker.Enabled = false;
+
+                    foreach (var job in tracker.Load.JobIds)
+                        jobs.Add(job);
+                }
+
+                // The position of another job's group is now the position of that job in the shared group.
+                if (!ReferenceEquals(group, main) && group.PositionGroup is null && config.CommonLayouts.TryGetValue(element, out var common))
+                {
+                    foreach (var (key, layout) in common)
+                    {
+                        foreach (var job in jobs)
+                            SetJobPosition(newElement, key + job, layout.Clone());
+                    }
+                }
+
+                if (config.JobLayouts.TryGetValue(element, out var own))
+                {
+                    foreach (var (key, layout) in own)
+                        SetJobPosition(newElement, key, layout);
+                }
+
+                config.Layouts.Remove(element);
+                config.JobLayouts.Remove(element);
+                if (group.PositionGroup is null)
+                    config.CommonLayouts.Remove(element);
+
+                config.TrackerGroups.Remove(group);
+                rootOrder.Remove(GroupKey(group));
+            }
+        }
+
+        rootOrder.RemoveAll(key => created.Contains(key));
+        rootOrder.InsertRange(Math.Min(insertAt, rootOrder.Count), created);
+
+        // What was attached to the group of a job (a gauge, a bar...) is now attached to the shared group: it does not lose its place.
+        RemapAttachments(id => moved.TryGetValue(id, out var to) ? to : null);
+    }
+
+    // The ids of the groups of every job that the default settings came with -> the shared group that replaced them. A settings file that was already
+    // merged (before the elements attached to them were followed) has the attachments pointing at groups that no longer exist.
+    private static readonly Dictionary<string, string> LegacyGroupTargets = new()
+    {
+        ["49b691c300ca4fb2a553cfd9592cfd14"] = "shared-rotation",
+        ["da3633873ec641388713745b8ad4c6de"] = "shared-cds",
+        ["29185e3353954fb7a44e57bf3a437673"] = "shared-defensive",
+        ["d76a74fb83aa4bb392098aa429a3bfc5"] = "shared-role",
+        ["3045ad7ed00942e1bea171b34ce0d50f"] = "shared-rotation",
+        ["d7409e5931e34591b3a764be6cb195d4"] = "shared-cds",
+        ["b666396d33e348de819bbe86f499279f"] = "shared-defensive",
+        ["e8fd04ace67b4c3b9f713ecff51ef7a6"] = "shared-role",
+        ["951815f1d74e4b448e594f32481edb1c"] = "shared-rotation",
+        ["e422e1276c4e4f52a00d2f62fbff8b59"] = "shared-cds",
+        ["2d08894aad3d4ce1920d3b7a160c1a5c"] = "shared-defensive",
+        ["7009c62029ae4e9c97be8e0782653985"] = "shared-rotation",
+        ["5aa6704936724cd0b47c47a314a50362"] = "shared-cds",
+        ["854079940ffa4089940907d1b341e3e8"] = "shared-role",
+        ["fd950601c0eb423c9bd19f41d3bd2b41"] = "shared-rotation",
+        ["8c9046698c84422fada413eb31471548"] = "shared-cds",
+        ["0c1bd265873e4579bfb8ad4dd163b0b0"] = "shared-defensive",
+        ["ccf1f7a1cd5c4c599ab48f517f605616"] = "shared-rotation",
+        ["d4ebc0785e544c709c1977e92991e6ed"] = "shared-cds",
+        ["c2099c2c6c0149f59c2c7b0f038d5828"] = "shared-defensive",
+        ["e92a35b9cebf441f93a9a1e23dd396b4"] = "shared-rotation",
+        ["2a5cc8ab2bc04b4eb536e06e75a37a17"] = "shared-cds",
+        ["71510ec67d154a27b770b970a0b6f77b"] = "shared-defensive",
+        ["6d508645b257465cbb0510a226acf563"] = "shared-rotation",
+        ["54d0fab2122b4009bd2cbbed9b41a16a"] = "shared-cds",
+        ["d7af318e215040b4b57967c65d68c7c8"] = "shared-defensive",
+        ["64d1397c2c1f4748840ffe0eef23c1bb"] = "shared-rotation",
+        ["e7b271d12b754c16a834377206a9d523"] = "shared-cds",
+        ["e6d4c03718c34eeebb2edb31eff3dd41"] = "shared-defensive",
+        ["641a4d7633164eb48e68bcf3135d4016"] = "shared-role",
+        ["fcba72d6022c47b98272a9ec7b2c1cf0"] = "shared-rotation",
+        ["97508473f3c349dd9c2339c3a96dd8ea"] = "shared-cds",
+        ["0e5fbc355fb8489a9caeb297cf24123d"] = "shared-defensive",
+        ["dd49430971bb44b7875d7573cf94863c"] = "shared-role",
+        ["ad69de997d1242a8a4caa704b8d1c1ff"] = "shared-rotation",
+        ["d08b2a2626e145d0b8570fea8af11b35"] = "shared-cds",
+        ["60a331bb48cc44269f8b5e78914ed54a"] = "shared-defensive",
+        ["a66eba30d1134d119b7a7816967d68da"] = "shared-rotation",
+        ["49161eb3639f4c7096310f967246533f"] = "shared-cds",
+        ["1b0652e9427d46359075fe1b20e3987f"] = "shared-defensive",
+    };
+
+    // Changes the element every layout is attached to: map gives the new id of an element, or null to leave it as it is.
+    private void RemapAttachments(Func<string, string?> map)
+    {
+        var config = plugin.Configuration;
+        var layouts = config.Layouts.Values
+            .Concat(config.CommonLayouts.Values.SelectMany(d => d.Values))
+            .Concat(config.JobLayouts.Values.SelectMany(d => d.Values));
+
+        var changed = false;
+        foreach (var layout in layouts)
+        {
+            if (string.IsNullOrEmpty(layout.AttachTo))
+                continue;
+
+            var to = map(layout.AttachTo);
+            if (to is null || to == layout.AttachTo)
+                continue;
+
+            layout.AttachTo = to;
+            changed = true;
+        }
+
+        if (changed)
+            plugin.RequestSave();
+    }
+
+    // Something attached to a group of a job that is gone goes to the shared group that took its place (idempotent: runs on every load).
+    private void RepairLegacyAttachments()
+    {
+        const string prefix = "tracker-group.";
+        RemapAttachments(id =>
+        {
+            if (!id.StartsWith(prefix, StringComparison.Ordinal))
+                return null;
+
+            var groupId = id.Substring(prefix.Length);
+            if (FindGroup(groupId) is not null)
+                return null;
+
+            return LegacyGroupTargets.TryGetValue(groupId, out var target) && FindGroup(target) is not null ? prefix + target : null;
+        });
     }
 
     public TrackerGroupRuntime AddGroup()
@@ -444,7 +721,8 @@ internal sealed class TrackerEngine
 
     private static void ApplyGroupStyleTo(TrackerGroupRuntime group, TrackerRuntime tracker)
     {
-        if (group.Definition.Template is { } template)
+        // A group shared by every job never rewrites the job filter or the PvE/PvP setting of its trackers: each one has its own.
+        if (group.Definition.Template is { } template && !group.Definition.SharedByJobs)
             tracker.Definition.CopyStyleFrom(template);
 
         tracker.Element.Layout.Width = Math.Max(1, group.Definition.IconWidth);
@@ -818,9 +1096,19 @@ internal sealed class TrackerEngine
         {
             // An ability not learned yet (level too low, or the level is synced down in a dungeon or FATE) never matches.
             // The player's level is the one the game uses, so it already includes the sync.
-            // The role actions are the exception: once learned, the game keeps them when the level is synced down.
-            if (rule.IsAbility && rule.ActionId != 0 && GameNames.ActionLevel(rule.ActionId) > player.Level && !GameNames.IsRoleAction(rule.ActionId))
-                continue;
+            // The role actions are the exception: once learned with any class or job of the role, they can be used at any level.
+            if (rule.IsAbility && rule.ActionId != 0)
+            {
+                if (GameNames.IsRoleAction(rule.ActionId))
+                {
+                    if (!GameNames.RoleActionLearned(player.JobId, rule.ActionId))
+                        continue;
+                }
+                else if (GameNames.ActionLevel(rule.ActionId) > player.Level)
+                {
+                    continue;
+                }
+            }
 
             // An action of the job that the class does not have (Thaumaturge: the Black Mage ones) is not available until the job is unlocked.
             if (rule.IsAbility && rule.ActionId != 0 && !GameNames.ActionUsableBy(player.JobId, rule.ActionId))
