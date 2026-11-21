@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.6.6.1</Version>
+    <Version>0.6.6.2</Version>
     <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
     <Author>Nahja Stark</Author>
     <Name>NahjaUI</Name>
@@ -61,6 +61,8 @@ Join the testers on Discord: https://nahjaui.github.io/discord</Description>
     <EmbeddedResource Include="Assets\Auras\sacred_sight_2_stacks_right_gray.png" LogicalName="Aura.sacred_sight_2_stacks_right_gray.png" />
     <EmbeddedResource Include="Assets\Auras\sacred_sight_3_stacks_left_gray.png" LogicalName="Aura.sacred_sight_3_stacks_left_gray.png" />
     <EmbeddedResource Include="Assets\Auras\sacred_sight_3_stacks_right_gray.png" LogicalName="Aura.sacred_sight_3_stacks_right_gray.png" />
+    <EmbeddedResource Include="Assets\Auras\free_cure.png" LogicalName="Aura.free_cure.png" />
+    <EmbeddedResource Include="Assets\Auras\free_cure_gray.png" LogicalName="Aura.free_cure_gray.png" />
   </ItemGroup>
 
   <!-- The licence of the embedded font (SIL OFL) travels with the plugin. -->

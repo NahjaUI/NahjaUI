@@ -219,6 +219,11 @@ public class WhiteMageAuraSettings
     public bool ShowSacredSightAura { get; set; } = true;
 
     public float SacredSightAuraOpacity { get; set; } = 1f;
+
+    /// <summary>The arch of mist above the character while Freecure is on (the next Cure II costs no MP). No timer.</summary>
+    public bool ShowFreeCureAura { get; set; } = true;
+
+    public float FreeCureAuraOpacity { get; set; } = 1f;
 }
 
 /// <summary>The aura of the Black Mage: an arch above the character while Thunderhead is on (the next Thunder is instant). It has no timer: it is there or it is not.</summary>

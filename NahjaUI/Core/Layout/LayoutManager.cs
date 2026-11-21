@@ -559,13 +559,14 @@ internal sealed class LayoutManager
     /// Moves the offsets an element is going to get the least needed so the whole box of the element stays inside the screen
     /// (a box bigger than the screen keeps its top-left corner in). Nobody can lose an element out of the screen.
     /// </summary>
-    public static void KeepOnScreen(LayoutElement element, ref float offsetX, ref float offsetY)
+    public static void KeepOnScreen(LayoutElement element, ref float offsetX, ref float offsetY, bool layoutBox = false)
     {
         var scale = UiScale.Overlay;
         var viewport = ImGui.GetMainViewport();
         var data = element.Layout;
 
-        var (pos, size) = GetDisplayRect(element);
+        // layoutBox: the box of the layout itself, worked out now. The display rect of a group is the one of the last frame (and empty when it shows nothing).
+        var (pos, size) = layoutBox ? GetRect(data) : GetDisplayRect(element);
         pos += new Vector2(offsetX - data.OffsetX, offsetY - data.OffsetY) * scale;
 
         var min = viewport.Pos;
@@ -614,9 +615,17 @@ internal sealed class LayoutManager
             if (element.IsManaged || element.IsHidden)
                 continue;
 
+            // An element hung from another one is placed by that one: its offsets are only the distance to it. The limit works on what hangs from the
+            // screen; correcting the others (whose parent can be a group that shows nothing, or one that moved in the last frame) shifted whole columns sideways.
+            if (!string.IsNullOrEmpty(element.Layout.AttachTo) && elements.Exists(e => e.Id == element.Layout.AttachTo))
+            {
+                keepCorrected.Remove(element.Id);
+                continue;
+            }
+
             var x = element.Layout.OffsetX;
             var y = element.Layout.OffsetY;
-            KeepOnScreen(element, ref x, ref y);
+            KeepOnScreen(element, ref x, ref y, true);
 
             if (x == element.Layout.OffsetX && y == element.Layout.OffsetY)
             {
@@ -626,7 +635,7 @@ internal sealed class LayoutManager
 
             // The box an element draws can be the one of the last frame (a tracker group): if it has not changed since the last correction,
             // the correction did not arrive yet (or the box is not redrawn), and correcting again would add the same shift again and again.
-            var shown = GetDisplayRect(element).Pos;
+            var shown = GetRect(element.Layout).Pos;
             if (keepCorrected.TryGetValue(element.Id, out var last) && last == shown)
                 continue;
 

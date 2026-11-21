@@ -168,6 +168,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         RegisterWarriorElements();
         RegisterThunderheadElement();
         RegisterSacredSightElement();
+        RegisterFreeCureElement();
 
         PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
         {
@@ -547,6 +548,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             FirestarterElement.IsHidden = true;
             ParadoxElement.IsHidden = true;
             SacredSightElement.IsHidden = true;
+            FreeCureElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -587,6 +589,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         FirestarterElement.IsHidden = !isBlackMage || !blackMageAura.ShowFirestarterAura;
         ParadoxElement.IsHidden = !isBlackMage || !blackMageAura.ShowParadoxAura;
         SacredSightElement.IsHidden = !isWhiteMage || !plugin.Configuration.JobGauges.WhiteMageAura.ShowSacredSightAura;
+        FreeCureElement.IsHidden = !IsWhiteMageOrConjurer(player) || !plugin.Configuration.JobGauges.WhiteMageAura.ShowFreeCureAura;
 
         var isPaladin = player is null || player.JobId == PaladinJobId;
         PaladinElement.IsHidden = !isPaladin;
@@ -645,6 +648,9 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         // The aura of Sacred Sight of the White Mage.
         DrawSacredSightAura(plugin.Configuration.JobGauges.WhiteMageAura, player, previewJob, unlock, isWhiteMage);
+
+        // The aura of Freecure (the next Cure II costs no MP) of the White Mage.
+        DrawFreeCureAura(plugin.Configuration.JobGauges.WhiteMageAura, player, previewJob, unlock);
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)

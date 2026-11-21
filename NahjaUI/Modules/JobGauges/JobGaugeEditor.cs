@@ -805,6 +805,27 @@ internal sealed class JobGaugeEditor
                 settings.SacredSightAuraOpacity = opacity;
                 plugin.RequestSave();
             }
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+
+            var showFreeCure = settings.ShowFreeCureAura;
+            if (ImGui.Checkbox("Show the Freecure aura (the next Cure II costs no MP)##whmf", ref showFreeCure))
+            {
+                settings.ShowFreeCureAura = showFreeCure;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Freecure aura", plugin.JobGaugeSystem.FreeCureElement.Layout);
+
+            var freeCureOpacity = settings.FreeCureAuraOpacity;
+            if (ImGui.SliderFloat("Freecure opacity##whmf", ref freeCureOpacity, 0.1f, 1f))
+            {
+                settings.FreeCureAuraOpacity = freeCureOpacity;
+                plugin.RequestSave();
+            }
         });
     }
 
