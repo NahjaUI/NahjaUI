@@ -125,7 +125,7 @@ internal static class ExtraGauges
         new(25, "BLM", "Black Mage", new GaugePartDef[]
         {
             new("element", "Astral Fire / Umbral Ice", 6, new[] { C(0.95f, 0.40f, 0.25f), C(0.45f, 0.70f, 1f) }, new[] { "Astral Fire", "Umbral Ice" }),
-            new("hearts", "Umbral Hearts", 6, new[] { C(0.50f, 0.80f, 1f) }, new[] { "Umbral Hearts" }),
+            new("hearts", "Umbral Hearts", 6, new[] { C(0.95f, 0.95f, 0.90f) }, new[] { "Umbral Hearts" }),
             new("polyglot", "Polyglot", 6, new[] { C(0.85f, 0.55f, 1f) }, new[] { "Polyglot" }),
             new("soul", "Astral Soul", 6, new[] { C(1f, 0.55f, 0.20f) }, new[] { "Astral Soul" })
         }, new[] { "JobHudBLM0", "JobHudBLM1" }, new GaugePartSnapshot[]

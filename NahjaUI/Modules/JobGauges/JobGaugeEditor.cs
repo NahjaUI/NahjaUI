@@ -897,7 +897,32 @@ internal sealed class JobGaugeEditor
                 plugin.RequestSave();
             }
         });
+
+        Widgets.Card("##card_gauge_blm_mp", 9, () =>
+        {
+            Widgets.SectionLabel("Black Mage (MP bar)");
+
+            // The MP bar shows the three states one after the other while this page is open (out of combat).
+            BlackMageMp.PreviewAt = Environment.TickCount64;
+
+            var color = settings.ColorMpBar;
+            if (ImGui.Checkbox("Change the color of the MP bar in Astral Fire##blmmp", ref color))
+            {
+                settings.ColorMpBar = color;
+                plugin.RequestSave();
+            }
+
+            PushMutedText();
+            ImGui.TextWrapped("The first color shows when the MP no longer reaches for Fire. The second one shows when it no longer reaches for Flare either. The costs are the ones the game gives.");
+            ImGui.PopStyleColor();
+
+            ImGui.Spacing();
+            Color("Not enough for Fire##blmmpw", settings.MpWarningColor, false, c => settings.MpWarningColor = c, new Vector4(0.98f, 0.75f, 0.20f, 1f));
+            Color("Not enough for Flare##blmmpe", settings.MpEmptyColor, false, c => settings.MpEmptyColor = c, new Vector4(0.92f, 0.22f, 0.22f, 1f));
+        });
     }
+
+    private static void PushMutedText() => ImGui.PushStyleColor(ImGuiCol.Text, Theme.TextMuted);
 
     // What goes inside the card of the Beast Gauge: the flash while Nascent Chaos is on (it changes the Beast Gauge, so it lives there).
     private void DrawWarriorBeastExtras(WarriorGaugeSettings settings)

@@ -487,6 +487,24 @@ internal sealed class HudBarModule : IDisposable
             return;
         }
 
+        // The Black Mage in Astral Fire: the bar says when the MP no longer reaches for Fire and for Flare (see BlackMageMp). The preview of the Black Mage
+        // page shows the three states one after the other, also with its own fill, so each one can be seen.
+        Vector4? fillColor = null;
+        var blackMage = plugin.Configuration.JobGauges.BlackMage;
+        if (ReferenceEquals(element, MpElement) && blackMage.ColorMpBar)
+        {
+            var state = BlackMageMp.IsPreviewing ? BlackMageMp.PreviewState : BlackMageMp.Current(unit);
+            if (BlackMageMp.IsPreviewing)
+                fraction = BlackMageMp.PreviewFraction;
+
+            fillColor = state switch
+            {
+                BlackMageMpState.Warning => blackMage.MpWarningColor,
+                BlackMageMpState.Empty => blackMage.MpEmptyColor,
+                _ => null
+            };
+        }
+
         var scale = UiScale.Overlay;
         var (pos, size) = LayoutManager.GetRect(element.Layout);
         var drawList = ImGui.GetBackgroundDrawList();
@@ -494,7 +512,7 @@ internal sealed class HudBarModule : IDisposable
 
         plugin.GameCover.Draw(pos, size, 400f * scale, () =>
         {
-            DrawMpBar(drawList, settings, pos, pos + size, fraction, scale, thickness);
+            DrawMpBar(drawList, settings, pos, pos + size, fraction, scale, thickness, fillColor);
 
             // The number over the bar, with the same choices as the HP text.
             var mpText = settings.MpText;
@@ -639,7 +657,7 @@ internal sealed class HudBarModule : IDisposable
     }
 
     // A MP bar between two corners, filled to <fraction>.
-    private static void DrawMpBar(ImDrawListPtr drawList, HudBarSettings settings, Vector2 min, Vector2 max, float fraction, float scale, float thickness)
+    private static void DrawMpBar(ImDrawListPtr drawList, HudBarSettings settings, Vector2 min, Vector2 max, float fraction, float scale, float thickness, Vector4? fill = null)
     {
         var width = max.X - min.X;
         var rounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), (max.Y - min.Y) / 2f);
@@ -650,7 +668,7 @@ internal sealed class HudBarModule : IDisposable
         if (fillRight > min.X)
         {
             drawList.PushClipRect(min, new Vector2(fillRight, max.Y), true);
-            BarGradient.Fill(drawList, min, max, ImGui.GetColorU32(settings.MpColor), rounding, ImDrawFlags.None, min.X, fillRight);
+            BarGradient.Fill(drawList, min, max, ImGui.GetColorU32(fill ?? settings.MpColor), rounding, ImDrawFlags.None, min.X, fillRight);
             drawList.PopClipRect();
         }
 

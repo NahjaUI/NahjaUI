@@ -1439,22 +1439,33 @@ internal sealed class GameDataProvider : IDisposable
         {
             var entityId = members[i].EntityId;
             if (entityId == 0 || !known.Add(entityId))
+            {
                 continue;
+            }
 
             if (Plugin.ObjectTable.SearchByEntityId(entityId) is not IBattleChara chara)
                 continue;
 
             // Only a player (you) or a battle NPC is added; a real player that is missing from the party list is left to it.
             if (chara.EntityId != localId && chara.ObjectKind != ObjectKind.BattleNpc)
+            {
                 continue;
+            }
 
-            // A pet or a chocobo has an owner: it is not a member of the party (the chocobo has its own frame), so it is left out. Trust NPCs have no owner.
-            if (chara.EntityId != localId && chara.OwnerId is not (0u or 0xE0000000u))
+            // A pet or a chocobo is not a member of the party (the chocobo has its own frame), so it is left out. The Trust NPCs are owned by
+            // the player (seen in the log: their owner is the player's own id), so the owner cannot tell them apart: the kind of NPC does.
+            if (chara.EntityId != localId && chara is IBattleNpc npcMember &&
+                (npcMember.BattleNpcKind is BattleNpcSubKind.Buddy or BattleNpcSubKind.Pet ||
+                 (chara.OwnerId is not (0u or 0xE0000000u) && chara.OwnerId != localId)))
+            {
                 continue;
+            }
 
             var unit = ToUnit(chara);
             if (unit is not null)
+            {
                 result.Add(unit);
+            }
         }
     }
 

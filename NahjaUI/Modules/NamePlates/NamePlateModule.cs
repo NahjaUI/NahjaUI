@@ -240,24 +240,6 @@ internal sealed class NamePlateModule : IDisposable
         var drawList = ImGui.GetBackgroundDrawList();
         var scale = UiScale.Overlay;
 
-        var screenSize = ImGuiHelpers.MainViewport.Size;
-
-        Vector2 AnchorOf(NamePlateSnapshot plate) => new((plate.Ndc.X + 1f) * 0.5f * screenSize.X, (1f - plate.Ndc.Y) * 0.5f * screenSize.Y);
-        Vector2 SizeOf(NamePlateSnapshot plate)
-        {
-            var style = settings.StyleOf(plate.Relation);
-            return new Vector2(style.WidthPx * scale, style.HeightPx * scale);
-        }
-
-        // The area a plate takes: its bar plus the name above it (the name can be wider than the bar).
-        (Vector2 Min, Vector2 Max) AreaOf(NamePlateSnapshot plate)
-        {
-            var anchor = AnchorOf(plate);
-            var plateSize = SizeOf(plate);
-            var half = MathF.Max(plateSize.X, 150f * scale) / 2f;
-            return (new Vector2(anchor.X - half, anchor.Y - 30f * scale), new Vector2(anchor.X + half, anchor.Y + plateSize.Y));
-        }
-
         // Only the kinds of plate that are switched on.
         var plates = snapshot.NamePlates.Where(p => settings.StyleOf(p.Relation).Active).ToList();
 
@@ -270,24 +252,10 @@ internal sealed class NamePlateModule : IDisposable
 
         DrawPreview(drawList, scale, settings, snapshot);
 
-        // The target is drawn over the rest: a plate whose area touches the target's is not drawn, so two names never mix.
-        var target = plates.FirstOrDefault(p => p.IsTarget);
-        var targetArea = target is null ? default : AreaOf(target);
-
+        // The plates overlap like the game's own; the target is drawn last, so it is over the rest.
         foreach (var plate in plates.OrderBy(p => p.IsTarget))
         {
-            var hidden = false;
-            if (target is not null && !plate.IsTarget)
-            {
-                var area = AreaOf(plate);
-                hidden = area.Min.X < targetArea.Max.X && area.Max.X > targetArea.Min.X
-                         && area.Min.Y < targetArea.Max.Y && area.Max.Y > targetArea.Min.Y;
-            }
-
             // The plates are part of the world, like the game's own: windows of the game never cut them.
-            if (hidden)
-                continue;
-
             // A plate of an enemy, a party member or a friendly fighter that is out of reach (the game's own range and sight check) is as faded as in the
             // frames. Other players, NPCs and objects are left alone (a city full of players would mean a check for every one of them).
             var fadeMark = DrawListFade.Mark(drawList);

@@ -18,5 +18,5 @@
     "UI",
     "HUD"
   ],
-  "Changelog": "Fixed: the warnings for a missing buff or debuff (Closed Position, Surging Tempest, stances, damage over time...) no longer show before you have learned the ability that gives it, also when the level is synced down in a FATE or a dungeon. Changed: the Dance Partner filter shows only the Dance Partner of your partner; the Dancer's own Closed Position is no longer shown there. Changed: new, more realistic look for the Black Mage auras (Firestarter, Paradox and Thunderhead)."
+  "Changelog": "Fixed: the NPC party members of a Trust or Duty Support dungeon (Haurchefant, Alphinaud...) now show in the party list. Fixed: nameplates no longer disappear when they overlap the plate of your target; they overlap like the game's and the target is drawn on top. Changed: the Umbral Hearts of the Black Mage are now white, so they are not mistaken for the Umbral Ice pips. New: the MP bar of the Black Mage changes color in Astral Fire when the MP no longer reaches for Fire and for Flare (Job gauges > Black Mage)."
 }

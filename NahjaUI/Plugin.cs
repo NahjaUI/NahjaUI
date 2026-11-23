@@ -153,6 +153,7 @@ public sealed class Plugin : IDalamudPlugin
             NahjaUI.Modules.Filters.DefaultFilters.RemoveClosedPositionFromDancePartner(Configuration.Filters);
             WhitenOldLimitBreakFrame(Configuration.JobGauges.LimitBreak);
             WhitenOldLimitBreakFrame(Configuration.JobGauges.LimitBreakPvp);
+            WhitenUmbralHearts(Configuration.JobGauges.Extra);
             Configuration.NamePlates.SeedEnemyRows();
             RequestSave();
         }
@@ -306,6 +307,23 @@ public sealed class Plugin : IDalamudPlugin
         var color = settings.ReadyFrameColor;
         if (System.MathF.Abs(color.X - 0.30f) < 0.01f && System.MathF.Abs(color.Y - 0.85f) < 0.01f && System.MathF.Abs(color.Z - 1f) < 0.01f)
             settings.ReadyFrameColor = new System.Numerics.Vector4(1f, 1f, 1f, 1f);
+    }
+
+    // Once: the Umbral Hearts of the Black Mage used to be light blue, like the Umbral Ice. The game's own gauge shows them white, so a saved
+    // color that is still exactly the old default becomes the new one. A color the user chose is not touched, and it is not changed again.
+    private static void WhitenUmbralHearts(NahjaUI.Modules.JobGauges.ExtraGaugesSettings extra)
+    {
+        if (extra.UmbralHeartsWhitened)
+            return;
+
+        extra.UmbralHeartsWhitened = true;
+
+        if (!extra.Jobs.TryGetValue("BLM", out var job) || !job.Parts.TryGetValue("hearts", out var part))
+            return;
+
+        if (part.Colors.TryGetValue(0, out var color)
+            && System.MathF.Abs(color.X - 0.5f) < 0.01f && System.MathF.Abs(color.Y - 0.8f) < 0.01f && System.MathF.Abs(color.Z - 1f) < 0.01f)
+            part.Colors[0] = new System.Numerics.Vector4(0.95f, 0.95f, 0.90f, 1f);
     }
 
     private static bool wasHidingInterface;

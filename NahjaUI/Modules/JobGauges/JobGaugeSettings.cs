@@ -243,6 +243,16 @@ public class BlackMageAuraSettings
     public bool ShowParadoxAura { get; set; } = true;
 
     public float ParadoxAuraOpacity { get; set; } = 1f;
+
+    /// <summary>
+    /// The MP bar changes color while in Astral Fire: the warning when the MP no longer reaches for Fire (the finisher is next), the second color
+    /// when it no longer reaches for Flare either (ice is next). Read from the cost that the game gives.
+    /// </summary>
+    public bool ColorMpBar { get; set; } = true;
+
+    public Vector4 MpWarningColor { get; set; } = new(0.98f, 0.75f, 0.20f, 1f);
+
+    public Vector4 MpEmptyColor { get; set; } = new(0.92f, 0.22f, 0.22f, 1f);
 }
 
 /// <summary>The Paladin gauge: the Oath Gauge. Holy Sheltron and Intervention cost 50.</summary>
@@ -583,6 +593,9 @@ public class FrontlineGaugeSettings : BarGaugeSettings
 [Serializable]
 public class ExtraGaugesSettings
 {
+    /// <summary>The Umbral Hearts of the Black Mage were changed once from the old blue to the white of the game's own gauge (see Plugin.WhitenUmbralHearts).</summary>
+    public bool UmbralHeartsWhitened { get; set; }
+
     public System.Collections.Generic.Dictionary<string, ExtraGaugeJobSettings> Jobs { get; set; } = new();
 
     public ExtraGaugeJobSettings For(string abbreviation)
