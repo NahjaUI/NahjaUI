@@ -251,10 +251,15 @@ internal static class TrackerPresets
                 tracker.Rules.Add(present);
             }
 
-            var missing = Make(ConditionKind.StatusMissing, ids[0]);
-            missing.Red = true;
-            missing.Dim = true;
-            tracker.Rules.Add(missing);
+            // One warning for each name, newest first: the engine skips the ones whose ability is not available yet (Dia at level 72, Aero II at 46...),
+            // so below the newest level the warning is for the version of the DoT that the player has.
+            foreach (var id in ids)
+            {
+                var missing = Make(ConditionKind.StatusMissing, id);
+                missing.Red = true;
+                missing.Dim = true;
+                tracker.Rules.Add(missing);
+            }
         }
 
         // An ability: while its follow-up can be used, the follow-up; while its effect is on you, the time of the effect; otherwise its cooldown (dimmed while it cannot be used).

@@ -150,6 +150,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             NahjaUI.Modules.Filters.DefaultFilters.EnsureCreated(Configuration);
             NahjaUI.Modules.Filters.DefaultFilters.AddMissingThunders(Configuration.Filters);
+            NahjaUI.Modules.Filters.DefaultFilters.RemoveClosedPositionFromDancePartner(Configuration.Filters);
             WhitenOldLimitBreakFrame(Configuration.JobGauges.LimitBreak);
             WhitenOldLimitBreakFrame(Configuration.JobGauges.LimitBreakPvp);
             Configuration.NamePlates.SeedEnemyRows();

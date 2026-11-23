@@ -1082,6 +1082,57 @@ internal sealed class TrackerEngine
 
     // ---------------------------------------------------------------- evaluation
 
+    // The ability that gives a status, when its name is not the name of the status. Every other status is looked up by its own name
+    // (Dia, Biolysis, Closed Position, Iron Will...: the ability and the status are called the same).
+    private static readonly Dictionary<string, string> ActionByStatusName = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Surging Tempest"] = "Storm's Eye",
+        ["Standard Finish"] = "Standard Step",
+        ["Death's Design"] = "Shadow of Death",
+        ["Power Surge"] = "Disembowel",
+        ["Fugetsu"] = "Jinpu",
+        ["Fuka"] = "Shifu",
+        ["Hunter's Instinct"] = "Hunter's Sting",
+        ["Swiftscaled"] = "Swiftskin's Sting",
+    };
+
+    private static readonly Dictionary<(uint Status, uint Job), uint> StatusActionIds = new();
+
+    // The ability that gives this status for this job, or 0 when it cannot be found (then the tracker is not held back).
+    private static uint ActionThatGives(uint statusId, uint jobId)
+    {
+        if (StatusActionIds.TryGetValue((statusId, jobId), out var id))
+            return id;
+
+        id = 0;
+        if (statusId != 0 && Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>(Dalamud.Game.ClientLanguage.English).TryGetRow(statusId, out var status))
+        {
+            var name = status.Name.ToString();
+            if (name.Length > 0)
+                id = TrackerPresets.FindAction(ActionByStatusName.TryGetValue(name, out var action) ? action : name, jobId);
+        }
+
+        StatusActionIds[(statusId, jobId)] = id;
+        return id;
+    }
+
+    // Can the player use this ability now? Not before its level (the one the game uses, so it includes the sync), nor before it is unlocked;
+    // a role action is the exception: once learned with any class or job of the role, it can be used at any level.
+    private static bool ActionAvailable(uint actionId, UnitSnapshot player)
+    {
+        if (GameNames.IsRoleAction(actionId))
+        {
+            if (!GameNames.RoleActionLearned(player.JobId, actionId))
+                return false;
+        }
+        else if (GameNames.ActionLevel(actionId) > player.Level)
+        {
+            return false;
+        }
+
+        return GameNames.ActionUsableBy(player.JobId, actionId);
+    }
+
     private static TrackerState Evaluate(TrackerDefinition tracker, GameSnapshot snapshot)
     {
         var player = snapshot.Player;
@@ -1113,6 +1164,15 @@ internal sealed class TrackerEngine
             // An action of the job that the class does not have (Thaumaturge: the Black Mage ones) is not available until the job is unlocked.
             if (rule.IsAbility && rule.ActionId != 0 && !GameNames.ActionUsableBy(player.JobId, rule.ActionId))
                 continue;
+
+            // The warning for a missing status (a stance, a DoT, Surging Tempest) waits until the ability that gives the status is available:
+            // before its level, or when the sync lowers the level, there is nothing to renew.
+            if (rule.Kind == ConditionKind.StatusMissing)
+            {
+                var giver = ActionThatGives(rule.StatusId, player.JobId);
+                if (giver != 0 && !ActionAvailable(giver, player))
+                    continue;
+            }
 
             var state = Match(rule, snapshot, player);
             if (state.Visible)

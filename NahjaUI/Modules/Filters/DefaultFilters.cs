@@ -58,8 +58,9 @@ internal static class DefaultFilters
             "Helios Conjunction", "Lustrate"
         }),
         new(RaiseId, "Raise", new[] { "Raise" }),
-        // The "+" means every status with that name (the Dancer and the partner have a Closed Position each, with different ids).
-        new(DancePartnerId, "Dance Partner", new[] { "+Closed Position", "+Dance Partner" }),
+        // Only the "Dance Partner" that the partner carries (the "+" means every status with that name). The Dancer's own Closed Position is not
+        // here: the Dancer already knows that they have it, and the Closed Position tracker warns when it is missing.
+        new(DancePartnerId, "Dance Partner", new[] { "+Dance Partner" }),
         new(MovementId, "Movement", new[] { "Sprint", "Peloton", "Jog" }),
         // ONLY the damage over time that a job has to keep on the enemy all the time (100% uptime, renewed over and over, the ones the
         // trackers paint red when they are missing). A damage over time that is applied by pressing its cooldown (Sonic Break, Bow Shock)
@@ -106,7 +107,7 @@ internal static class DefaultFilters
             Fill(filter, definition, ids, missing);
         }
 
-        // The partner carries "Dance Partner", not "Closed Position" (that one is the Dancer's own).
+        // The partner carries "Dance Partner".
         var dancePartner = filters.Find(DancePartnerId);
         if (dancePartner is not null)
         {
@@ -161,6 +162,27 @@ internal static class DefaultFilters
                     filter.StatusIds.Add(id);
             }
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Once, for the configurations saved when the "Dance Partner" filter also had the Dancer's own Closed Position: takes the Closed Position
+    /// out of that filter, so only the partner's "Dance Partner" shows. If the user puts it back by hand later, it is not taken out again.
+    /// </summary>
+    public static bool RemoveClosedPositionFromDancePartner(FiltersSettings filters)
+    {
+        if (filters.DancePartnerClosedRemoved)
+            return false;
+
+        filters.DancePartnerClosedRemoved = true;
+
+        var filter = filters.Find(DancePartnerId);
+        if (filter is null)
+            return true;
+
+        foreach (var id in IdsNamed("Closed Position"))
+            filter.StatusIds.Remove(id);
 
         return true;
     }
