@@ -109,7 +109,8 @@ internal static class JobSetups
     }
 
     /// <param name="restore">The job is set up again even if it already has trackers: the ones that are missing come back, the ones that exist are kept.</param>
-    public static string Apply(Plugin plugin, TrackerEngine engine, string jobName, bool restore = false)
+    /// <param name="positions">The positions are put in the standard column too (see ArrangeColumn). False: only the trackers are made, no position is touched.</param>
+    public static string Apply(Plugin plugin, TrackerEngine engine, string jobName, bool restore = false, bool positions = true)
     {
         if (!Jobs.TryGetValue(jobName, out var job))
             return "Unknown job.";
@@ -325,12 +326,29 @@ internal static class JobSetups
         {
             var came = DropRestoredDuplicates();
             builder.Finish();
+
+            // Asked for the positions: the whole column of the job is put in its place again (the user said yes to losing the ones it had).
+            if (positions)
+                Arrange(plugin, engine, jobName);
+
             plugin.RequestSave();
-            return $"{jobName}: {came} trackers came back.";
+            return positions ? $"{jobName}: {came} trackers came back; its positions are in the standard column." : $"{jobName}: {came} trackers came back.";
         }
 
-        // The standard column of the job, all of it hung from the Rotation row (see ArrangeColumn).
-        var showsMp = ArrangeColumn(plugin, job, rotation, cooldowns, defensives, roleRow, false);
+        // Only the trackers were asked for: no position is touched.
+        if (!positions)
+        {
+            var onlyRestored = DropRestoredDuplicates();
+            builder.Finish();
+            plugin.RequestSave();
+            return restore
+                ? $"{jobName}: {onlyRestored} trackers came back. The positions were not changed."
+                : $"{jobName} setup added: {builder.Count} trackers. The positions were not changed.";
+        }
+
+        // The standard column of the job, all of it hung from the Rotation row (see ArrangeColumn). From the button (restore) the places are written
+        // even if they were there already: the user asked for them.
+        var showsMp = ArrangeColumn(plugin, job, rotation, cooldowns, defensives, roleRow, restore);
 
         // PvP has its own column, from the same top: the Rotation row, then 6 px below it the Frontline gauge, the MP bar of PvP, the global
         // cooldown bar and the progress bar, 1 px apart. There are no job gauges and no CDs rows in PvP, so nothing else is in between,
@@ -493,7 +511,9 @@ internal static class JobSetups
             layout.Height = 18;
         });
 
-        // The global cooldown bar is not a piece of the column: it is off by default, and whoever turns it on places it.
+        // The global cooldown bar is not a piece of the column: it is off by default, and whoever turns it on places it. The own place that older
+        // presets saved for the job (hung from the progress bar) goes, so the bar follows the common one (the middle of the screen, 0, 0).
+        layouts.ClearOwnPosition(plugin.ProgressBarSystem.GcdElement, job.Id);
 
         above = cast;
 

@@ -511,6 +511,7 @@ internal sealed class HudBarModule : IDisposable
 
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
         var thickness = MathF.Max(1f, MathF.Round(scale));
+        var fadeMark = DrawListFade.Mark(drawList);
 
         // Something without HP (an object, a shopkeeper) is a full bar in its colour.
         var hasHp = unit.MaxHp > 0;
@@ -538,7 +539,7 @@ internal sealed class HudBarModule : IDisposable
             DrawShield(drawList, settings, pos, size, fraction, rounding, unit.ShieldPercent);
 
         if (barShown)
-            drawList.AddRect(pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         // The texts are drawn last, over everything, and may stick out of the bar.
         // The name is shortened with "..." when it runs into the HP text (and when it starts inside the bar and would go out of it).
@@ -554,6 +555,13 @@ internal sealed class HudBarModule : IDisposable
 
         if (hpText is not null)
             DrawText(drawList, hpText, settings.Hp, pos, size);
+
+        // A target or focus that is out of reach (the game's own range and sight check, with the reference action of an enemy or of an ally) is faded like the party list.
+        if (!isPlayerFrame && unit.Kind == UnitKind.Character && plugin.Configuration.HudBars.FadeFrames &&
+            !ReferenceEquals(settings, plugin.Configuration.HudBars.TargetOfTarget) && ReachCheck.IsOutOfReach(unit.EntityId, ReachCheck.IsEnemy(unit.EntityId)))
+        {
+            DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
+        }
     }
 
     // The shield is as tall as the bar and follows its rounded corners.
@@ -646,7 +654,7 @@ internal sealed class HudBarModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(min, max, ImGui.GetColorU32(settings.MpBorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, min, max, ImGui.GetColorU32(settings.MpBorderColor), rounding, ImDrawFlags.None, thickness);
     }
 
     // Where the top left corner of a text goes: the same point of the text is placed on the anchor of the box, then the offset moves it.

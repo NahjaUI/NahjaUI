@@ -70,6 +70,13 @@ public class Configuration : IPluginConfiguration
     // Appearance page: how much gradient the filled part of bars and pips has, from 0 (flat color) to 200 (100 is the default, see BarGradient).
     public int BarGradientPercent { get; set; } = 100;
 
+    // Appearance page: the color the light end of the gradient goes toward (white by default, which is the look of before).
+    public Vector4 BarGradientColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    // Appearance page: the thickness of the borders in px, 0 to 5 (0 draws none, 1 is the border of always). One for bars and one for icons.
+    public int BarBorderPx { get; set; } = 1;
+    public int IconBorderPx { get; set; } = 1;
+
     // Saved position and size of every element, keyed by element id (for example "demo.a").
     public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
 

@@ -128,9 +128,12 @@ internal sealed class GameDataProvider : IDisposable
         var target = Plugin.TargetManager.Target;
 
         // The game's option to show the party list while alone (the name says "off": 0 means it is shown).
+        // It can live in the UI control options or in the UI config ones depending on the game version: both are asked.
         var soloRaw = -1;
         if (Plugin.GameConfig.UiControl.TryGet("PartyListSoloOff", out uint rawValue))
             soloRaw = (int)rawValue;
+        else if (Plugin.GameConfig.UiConfig.TryGet("PartyListSoloOff", out uint rawConfigValue))
+            soloRaw = (int)rawConfigValue;
 
         var soloShown = soloRaw == 0;
 
@@ -1024,6 +1027,17 @@ internal sealed class GameDataProvider : IDisposable
     // The icon the game draws for that online status (the same one its party list shows next to the member).
     public static readonly uint CutsceneIconId = FindOnlineStatusIcon("Viewing Cutscene");
 
+    // The icon the game gives to the online status "Party Leader" (the crown of the leader of a party). 0 when the game has no such status.
+    public static readonly uint PartyLeaderIconId = FindOnlineStatusIcon("Party Leader");
+
+    // The member that leads the party (the game's own party list says which one), or 0 when there is none (alone, or a cross-world party).
+    private static uint CurrentLeaderId()
+    {
+        var list = Plugin.PartyList;
+        var index = (int)list.PartyLeaderIndex;
+        return list.Length > 1 && index >= 0 && index < list.Length ? list[index]?.EntityId ?? 0u : 0u;
+    }
+
     private static uint FindOnlineStatusIcon(string name)
     {
         foreach (var row in Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.OnlineStatus>(Dalamud.Game.ClientLanguage.English))
@@ -1086,7 +1100,8 @@ internal sealed class GameDataProvider : IDisposable
             // list the status rows use). The party list is the fallback for members that are far away.
             statuses,
             ShieldPercent: chara?.ShieldPercentage ?? 0,
-            Presence: presence);
+            Presence: presence,
+            IsLeader: member.EntityId != 0 && member.EntityId == CurrentLeaderId());
     }
 
     // Weakness (43), Brink of Death (44), Transcendent (148) and Damage Down (2092): what a raised or recently dead player carries.

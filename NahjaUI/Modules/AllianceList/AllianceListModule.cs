@@ -307,7 +307,7 @@ internal sealed class AllianceListModule : IDisposable
         // The target ring, like the party list: the border painted in the ring color.
         var targetId = plugin.GameData.Current.Target?.EntityId;
         var isTargeted = member.EntityId != 0 && targetId is not null && member.EntityId == targetId;
-        drawList.AddRect(pos, max, ImGui.GetColorU32(isTargeted ? plugin.Configuration.TargetRingColor : GlobalColors.Current.Border), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, max, ImGui.GetColorU32(isTargeted ? plugin.Configuration.TargetRingColor : GlobalColors.Current.Border), rounding, ImDrawFlags.None, thickness, isTargeted);
 
         // With the Raise icon on him the text is left out: the cell is too small for both.
         if (dead && !raiseReady)

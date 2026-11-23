@@ -300,6 +300,24 @@ public class PartyListSettings
     public int CutsceneIconOffsetY { get; set; }
 
     /// <summary>
+    /// The game's own icon (the online status "Party Leader") next to the leader of the party. Nothing is shown when you are alone.
+    /// </summary>
+    public bool ShowLeaderIcon { get; set; } = true;
+
+    /// <summary>Size of the leader icon in pixels.</summary>
+    public int LeaderIconSizePx { get; set; } = 16;
+
+    // Where the leader icon goes, like the cutscene icon: a point of the icon goes on a point of the member's bar, then the offsets move it
+    // (the saved Y counts downwards). By default: on the top left corner of the bar.
+    public AnchorPoint LeaderIconBarAnchor { get; set; } = AnchorPoint.TopLeft;
+
+    public AnchorPoint LeaderIconSelfAnchor { get; set; } = AnchorPoint.Center;
+
+    public int LeaderIconOffsetX { get; set; }
+
+    public int LeaderIconOffsetY { get; set; }
+
+    /// <summary>
     /// While someone of the party is casting a raise on a dead member, his text changes from "Dead" to "Raising" and the game's icon of that action
     /// shows behind the text. It only knows casts of members of your party that the game has loaded near you.
     /// </summary>

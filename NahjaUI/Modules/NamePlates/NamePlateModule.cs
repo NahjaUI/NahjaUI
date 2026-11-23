@@ -285,8 +285,19 @@ internal sealed class NamePlateModule : IDisposable
             }
 
             // The plates are part of the world, like the game's own: windows of the game never cut them.
-            if (!hidden)
-                DrawPlate(drawList, scale, settings, settings.StyleOf(plate.Relation), plate, plate.IsTarget, snapshot.Player?.Level ?? 0);
+            if (hidden)
+                continue;
+
+            // A plate of an enemy, a party member or a friendly fighter that is out of reach (the game's own range and sight check) is as faded as in the
+            // frames. Other players, NPCs and objects are left alone (a city full of players would mean a check for every one of them).
+            var fadeMark = DrawListFade.Mark(drawList);
+            DrawPlate(drawList, scale, settings, settings.StyleOf(plate.Relation), plate, plate.IsTarget, snapshot.Player?.Level ?? 0);
+
+            if (plugin.Configuration.HudBars.FadeNameplates && plate.Relation is NamePlateRelation.Enemy or NamePlateRelation.EnemyPlayer or NamePlateRelation.Party or NamePlateRelation.Friendly &&
+                ReachCheck.IsOutOfReach(plate.EntityId, plate.Relation is NamePlateRelation.Enemy or NamePlateRelation.EnemyPlayer))
+            {
+                DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
+            }
         }
     }
 
@@ -437,7 +448,7 @@ internal sealed class NamePlateModule : IDisposable
                 drawList.PopClipRect();
             }
 
-            drawList.AddRect(min, max, ImGui.GetColorU32(style.BarBorderColor), rounding, ImDrawFlags.None, 1f);
+            BorderStyle.BarRect(drawList, min, max, ImGui.GetColorU32(style.BarBorderColor), rounding, ImDrawFlags.None, 1f);
 
             if (isTarget)
             {
@@ -687,7 +698,7 @@ internal sealed class NamePlateModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(min, max, ImGui.GetColorU32(settings.ProgressBarBorderColor), rounding, ImDrawFlags.None, 1f);
+        BorderStyle.BarRect(drawList, min, max, ImGui.GetColorU32(settings.ProgressBarBorderColor), rounding, ImDrawFlags.None, 1f);
 
         var boxSize = max - min;
         var timeText = settings.ProgressBarTimeMode == NahjaUI.Modules.ProgressBars.ProgressBarTimeMode.Remaining

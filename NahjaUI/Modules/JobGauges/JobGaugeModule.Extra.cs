@@ -158,7 +158,7 @@ internal sealed partial class JobGaugeModule
             }
         }
 
-        drawList.AddRect(pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (!string.IsNullOrEmpty(part.Text))
             QueueText(drawList, part.Text, settings.Text, pos, size);
@@ -203,7 +203,7 @@ internal sealed partial class JobGaugeModule
                     drawList.AddRectFilled(a, new Vector2(right, b.Y), ImGui.GetColorU32(Theme.WithAlpha(settings.ColorOf(def, partialVariant), 0.65f)), rounding);
             }
 
-            drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, a, b, border, rounding, ImDrawFlags.None, thickness);
         }
 
         if (!string.IsNullOrEmpty(text))

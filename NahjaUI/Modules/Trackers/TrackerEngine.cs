@@ -1361,7 +1361,7 @@ internal sealed class TrackerEngine
         // black, accent colour for a ghost.
         var thickness = MathF.Max(1f, MathF.Round(scale));
         var border = ghost ? Theme.Accent : new Vector4(0f, 0f, 0f, 1f);
-        drawList.AddRect(pos, pos + size, ImGui.GetColorU32(border), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.IconRect(drawList, pos, pos + size, ImGui.GetColorU32(border), rounding, ImDrawFlags.None, thickness);
 
         if (ghost)
             return;

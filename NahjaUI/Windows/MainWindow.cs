@@ -580,13 +580,63 @@ public class MainWindow : Window, IDisposable
 
     }
 
+    // The page has four tabs: the window itself, the colors, the shape of bars and icons, and how the interface behaves.
     private void DrawAppearance()
+    {
+        if (!ImGui.BeginTabBar("##appearance_tabs"))
+            return;
+
+        if (ImGui.BeginTabItem("Window"))
+        {
+            using (Widgets.TabBody("##appearance_body_window"))
+                DrawAppearanceWindow();
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Colors"))
+        {
+            using (Widgets.TabBody("##appearance_body_colors"))
+                DrawAppearanceColors();
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Shape"))
+        {
+            using (Widgets.TabBody("##appearance_body_shape"))
+                DrawAppearanceShape();
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Behavior"))
+        {
+            using (Widgets.TabBody("##appearance_body_behavior"))
+                DrawAppearanceBehavior();
+
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    // A muted explanation under a setting, wrapped to the width of the card so it is never cut.
+    private static void Hint(string text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, Theme.TextMuted);
+        ImGui.TextWrapped(text);
+        ImGui.PopStyleColor();
+    }
+
+    // The window itself and the privacy of names.
+    private void DrawAppearanceWindow()
     {
         var config = plugin.Configuration;
 
-        Widgets.Card("##card_theme", 12, () =>
+        Widgets.Card("##card_theme", 10, () =>
         {
-            Widgets.SectionLabel("Theme");
+            Widgets.SectionLabel("Window");
 
             if (ImGui.BeginCombo("Menu text size (px)", $"{config.MenuTextSize} px"))
             {
@@ -610,28 +660,7 @@ public class MainWindow : Window, IDisposable
                 plugin.RequestSave();
             }
 
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("The entry at the top right: click it to open the window, right click for unlock mode. /nui works either way.");
-
-            var streamer = config.StreamerMode;
-            if (ImGui.Checkbox("Streamer mode", ref streamer))
-            {
-                config.StreamerMode = streamer;
-                plugin.RequestSave();
-            }
-
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("The names of player characters are replaced by names of Final Fantasy characters in everything NahjaUI draws. The game's own windows (chat, its own lists) are not changed.");
-
-            ImGui.SameLine();
-            if (ImGui.Button("Change names"))
-            {
-                config.StreamerSeed = Random.Shared.Next(1, int.MaxValue);
-                plugin.RequestSave();
-            }
-
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Gives everyone a different invented name, yours included.");
+            Hint("The entry at the top right: click it to open the window, right click for unlock mode. /nui works either way.");
 
             var animated = config.AnimatedBackground;
             if (ImGui.Checkbox("Animated background", ref animated))
@@ -645,39 +674,87 @@ public class MainWindow : Window, IDisposable
                 centerRequested = true;
         });
 
-        // The colors that every part of the interface uses unless it has its own ("Custom color").
-        Widgets.Card("##card_shared_colors", 24, () =>
+        Widgets.Card("##card_streamer", 7, () =>
+        {
+            Widgets.SectionLabel("Streamer mode");
+
+            var streamer = config.StreamerMode;
+            if (ImGui.Checkbox("Streamer mode", ref streamer))
+            {
+                config.StreamerMode = streamer;
+                plugin.RequestSave();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Change names"))
+            {
+                config.StreamerSeed = Random.Shared.Next(1, int.MaxValue);
+                plugin.RequestSave();
+            }
+
+            Hint("The names of player characters are replaced by names of Final Fantasy characters in everything NahjaUI draws. \"Change names\" gives everyone a different invented name, yours included. The game's own windows (chat, its own lists) are not changed.");
+        });
+    }
+
+    // The colors that every part of the interface uses unless it has its own ("Custom color").
+    private void DrawAppearanceColors()
+    {
+        var config = plugin.Configuration;
+        var colors = config.Colors;
+
+        void Pick(string label, Vector4 current, Vector4 original, bool alpha, Action<Vector4> apply)
+        {
+            var value = current;
+            if (Widgets.ColorSetting(label, ref value, original, alpha))
+            {
+                apply(value);
+                plugin.RequestSave();
+            }
+        }
+
+        Widgets.Card("##card_shared_colors", 14, () =>
         {
             Widgets.SectionLabel("Shared style of the interface");
-            ImGui.TextColored(Theme.TextMuted, "Used everywhere. A bar, a text or a gauge can have its own with \"Custom color\". Click a color to change it: its window has a Reset button.");
-
-            var colors = config.Colors;
-
-            void Pick(string label, Vector4 current, Vector4 original, bool alpha, Action<Vector4> apply)
-            {
-                var value = current;
-                if (Widgets.ColorSetting(label, ref value, original, alpha))
-                {
-                    apply(value);
-                    plugin.RequestSave();
-                }
-            }
+            Hint("Used everywhere. A bar, a text or a gauge can have its own with \"Custom color\". Click a color to change it: its window has a Reset button.");
 
             Pick("Background color", colors.Background, Theme.BarBackground, true, c => colors.Background = c);
             Pick("Border color", colors.Border, Theme.BarBorder, false, c => colors.Border = c);
             Pick("Cleanse border color (Esuna)", colors.DispelBorder, GlobalColors.DefaultDispelBorder, false, c => colors.DispelBorder = c);
             Pick("Text color", colors.Text, GlobalColors.DefaultText, false, c => colors.Text = c);
-            Pick("Shield color", colors.Shield, GlobalColors.DefaultShield, false, c => colors.Shield = c);
-            Pick("MP color", colors.Mp, GlobalColors.DefaultMp, false, c => colors.Mp = c);
-            Pick("Friendly NPC HP color", colors.FriendlyNpc, GlobalColors.DefaultFriendlyNpc, false, c => colors.FriendlyNpc = c);
-            Pick("Enemy HP color", colors.EnemyHp, GlobalColors.DefaultEnemyHp, false, c => colors.EnemyHp = c);
-            Pick("Pet / minion HP color", colors.PetMinion, GlobalColors.DefaultPetMinion, false, c => colors.PetMinion = c);
-            Pick("Object color", colors.ObjectColor, GlobalColors.DefaultObject, false, c => colors.ObjectColor = c);
             Pick("Timer text color", colors.TimerText, GlobalColors.DefaultText, false, c => colors.TimerText = c);
             Pick("Stacks text color", colors.StacksText, GlobalColors.DefaultText, false, c => colors.StacksText = c);
+            Pick("Shield color", colors.Shield, GlobalColors.DefaultShield, false, c => colors.Shield = c);
+            Pick("MP color", colors.Mp, GlobalColors.DefaultMp, false, c => colors.Mp = c);
             Pick("Target ring color", config.TargetRingColor, new Vector4(1f, 1f, 1f, 1f), false, c => config.TargetRingColor = c);
+        });
 
-            ImGui.Spacing();
+        Widgets.Card("##card_unit_colors", 7, () =>
+        {
+            Widgets.SectionLabel("HP color by kind of unit");
+
+            Pick("Enemy HP color", colors.EnemyHp, GlobalColors.DefaultEnemyHp, false, c => colors.EnemyHp = c);
+            Pick("Friendly NPC HP color", colors.FriendlyNpc, GlobalColors.DefaultFriendlyNpc, false, c => colors.FriendlyNpc = c);
+            Pick("Pet / minion HP color", colors.PetMinion, GlobalColors.DefaultPetMinion, false, c => colors.PetMinion = c);
+            Pick("Object color", colors.ObjectColor, GlobalColors.DefaultObject, false, c => colors.ObjectColor = c);
+        });
+
+        Widgets.Card("##card_role_colors", 11, () =>
+        {
+            Widgets.SectionLabel("Role colors");
+            plugin.HudBarEditorPage.DrawRoleColors();
+        });
+    }
+
+    // How bars, pips and icons are drawn: corners, gradient and borders.
+    private void DrawAppearanceShape()
+    {
+        var config = plugin.Configuration;
+        var colors = config.Colors;
+
+        Widgets.Card("##card_shape", 18, () =>
+        {
+            Widgets.SectionLabel("Shape of bars and icons");
+
             var cornerRounding = colors.Rounding;
             if (ImGui.SliderInt("Corner rounding (px)", ref cornerRounding, 0, 12))
             {
@@ -685,7 +762,7 @@ public class MainWindow : Window, IDisposable
                 plugin.RequestSave();
             }
 
-            ImGui.TextColored(Theme.TextMuted, "0 gives square corners. It applies to every bar, gauge, frame and icon.");
+            Hint("0 gives square corners. It applies to every bar, gauge, frame and icon.");
 
             ImGui.Spacing();
             var gradientPercent = config.BarGradientPercent;
@@ -695,10 +772,43 @@ public class MainWindow : Window, IDisposable
                 plugin.RequestSave();
             }
 
-            ImGui.TextColored(Theme.TextMuted, "The filled part of every bar and pip goes from a slightly darker color to a slightly lighter one, with a small change of hue. 0 gives the flat color, 100 is the default and 200 is twice as strong.");
+            Hint("The filled part of every bar and pip goes from a slightly darker color to a slightly lighter one, with a small change of hue. 0 gives the flat color, 100 is the default and 200 is twice as strong.");
+
+            var gradientColor = config.BarGradientColor;
+            if (Widgets.ColorSetting("Gradient color##bar_gradient_color", ref gradientColor, new Vector4(1f, 1f, 1f, 1f)))
+            {
+                config.BarGradientColor = gradientColor;
+                plugin.RequestSave();
+            }
+
+            Hint("The color the light end of the gradient goes toward. White is the default.");
 
             ImGui.Spacing();
-            plugin.HudBarEditorPage.DrawRoleColors();
+            var barBorder = config.BarBorderPx;
+            if (ImGui.SliderInt("Bar border (px)", ref barBorder, 0, 3))
+            {
+                config.BarBorderPx = barBorder;
+                plugin.RequestSave();
+            }
+
+            var iconBorder = config.IconBorderPx;
+            if (ImGui.SliderInt("Icon border (px)", ref iconBorder, 0, 3))
+            {
+                config.IconBorderPx = iconBorder;
+                plugin.RequestSave();
+            }
+
+            Hint("The thickness of the border of frames, bars, gauges and nameplate bars, and the one of tracker and status icons. 1 is the default and 0 draws none. The border grows toward the inside. The text outline does not change.");
+        });
+    }
+
+    // How the interface reacts to what happens in the game.
+    private void DrawAppearanceBehavior()
+    {
+        Widgets.Card("##card_behavior", 8, () =>
+        {
+            Widgets.SectionLabel("Behavior");
+            plugin.HudBarEditorPage.DrawReachOption();
         });
     }
 

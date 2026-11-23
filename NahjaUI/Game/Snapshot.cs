@@ -66,7 +66,8 @@ internal sealed record UnitSnapshot(
     bool IsHostile = false,
     bool IsCompanion = false,
     UnitKind Kind = UnitKind.Character,
-    Presence Presence = Presence.Here);
+    Presence Presence = Presence.Here,
+    bool IsLeader = false);
 
 /// <summary>Where a party member is, seen from you: next to you (maybe watching a cutscene), too far away, in another area, or offline.</summary>
 internal enum Presence

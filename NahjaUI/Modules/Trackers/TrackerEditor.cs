@@ -51,6 +51,11 @@ internal sealed class TrackerEditor
     // What the last preset did (shown under the buttons of the explorer until it is dismissed).
     private string? presetReport;
 
+    // Importing a preset asks first whether the positions come too: every job (importAll) or one preset (importTarget).
+    private bool importAll;
+    private string? importTarget;
+    private bool openImportAsk;
+
     // Status search
     // The filter of the explorer: only the trackers that load on a job (the one you play, or the one you pick), or every tracker.
     private enum JobFilterMode
@@ -280,10 +285,14 @@ internal sealed class TrackerEditor
         if (ImGui.BeginPopup("##tracker_presets"))
         {
             if (ImGui.Selectable("Import all presets again"))
-                presetReport = TrackerPresets.ApplyAll(engine);
+            {
+                importAll = true;
+                importTarget = null;
+                openImportAsk = true;
+            }
 
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Brings back the trackers of every job that were deleted. The ones you have are not changed.");
+                ImGui.SetTooltip("Brings back the trackers of every job that were deleted. The ones you have are not changed. It asks whether the positions are put in the standard column too.");
 
             ImGui.Separator();
             ImGui.TextColored(Theme.TextMuted, "Add the trackers of a job");
@@ -295,7 +304,52 @@ internal sealed class TrackerEditor
             foreach (var presetName in ordered)
             {
                 if (ImGui.Selectable(presetName))
-                    presetReport = TrackerPresets.Apply(engine, presetName);
+                {
+                    importAll = false;
+                    importTarget = presetName;
+                    openImportAsk = true;
+                }
+            }
+
+            ImGui.EndPopup();
+        }
+
+        if (openImportAsk)
+        {
+            ImGui.OpenPopup("##import_presets_ask");
+            openImportAsk = false;
+        }
+
+        if (ImGui.BeginPopup("##import_presets_ask"))
+        {
+            ImGui.PushTextWrapPos(360f * scale);
+            ImGui.TextUnformatted(importAll
+                ? "Import the presets of every job. Do you want the positions too?"
+                : $"Add the trackers of {importTarget}. Do you want its positions too?");
+            ImGui.Spacing();
+            ImGui.TextColored(Theme.TextMuted, "Only the trackers: nothing is moved. Trackers and positions: the central column (Rotation, gauge, MP bar, progress bar, CDs, Defensive CDs, Role Actions) goes back to the standard place, and the positions you had for it are replaced.");
+            ImGui.PopTextWrapPos();
+            ImGui.Spacing();
+
+            var choice = -1;
+            if (ImGui.Button("Only the trackers"))
+                choice = 0;
+
+            ImGui.SameLine();
+            if (ImGui.Button("Trackers and positions"))
+                choice = 1;
+
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+
+            if (choice >= 0)
+            {
+                var withPositions = choice == 1;
+                presetReport = importAll || importTarget is null
+                    ? TrackerPresets.ApplyAll(engine, withPositions)
+                    : TrackerPresets.Apply(engine, importTarget, withPositions);
+                ImGui.CloseCurrentPopup();
             }
 
             ImGui.EndPopup();

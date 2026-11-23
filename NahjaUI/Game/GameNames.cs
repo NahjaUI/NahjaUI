@@ -275,8 +275,9 @@ internal static class GameNames
             return true;
 
         // A tracker of the job loads on its starting class (Black Mage tracker on Thaumaturge), and a tracker of the class loads on its jobs.
+        // A class with two jobs (Arcanist: Summoner and Scholar) only takes the trackers of the one it uses (see ProfileJobId: Summoner), not both.
         var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
-        return (sheet.TryGetRow(trackerJobId, out var trackerJob) && trackerJob.ClassJobParent.RowId == playerJobId)
+        return (sheet.TryGetRow(trackerJobId, out var trackerJob) && trackerJob.ClassJobParent.RowId == playerJobId && ProfileJobId(playerJobId) == trackerJobId)
             || (sheet.TryGetRow(playerJobId, out var playerJob) && playerJob.ClassJobParent.RowId == trackerJobId);
     }
 

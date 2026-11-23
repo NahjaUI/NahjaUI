@@ -117,6 +117,15 @@ public class MpTextSettings : IValueTextFormat
     public int AbbreviationDecimals { get; set; } = 0;
 }
 
+/// <summary>Where the units that are out of reach are faded.</summary>
+public enum OutOfReachFade
+{
+    None,
+    Frames,
+    Nameplates,
+    Both
+}
+
 /// <summary>The settings of every HUD bar.</summary>
 [Serializable]
 public class HudBarsSettings
@@ -131,6 +140,19 @@ public class HudBarsSettings
 
     /// <summary>The party list: one bar per member. Its look is a normal frame look, the rest is only about the party.</summary>
     public PartyListSettings Party { get; set; } = new();
+
+    /// <summary>
+    /// Units that are out of reach are faded like the ones that are far away: allies beyond the range of a heal (30 yalms) or out of sight, and
+    /// enemies beyond the range of an attack spell (25 yalms) or out of sight. Where it applies: the frames (party list, target, focus and enmity list),
+    /// the nameplates, both or none.
+    /// </summary>
+    public OutOfReachFade OutOfReachFade { get; set; } = OutOfReachFade.Both;
+
+    [Newtonsoft.Json.JsonIgnore]
+    public bool FadeFrames => OutOfReachFade is OutOfReachFade.Frames or OutOfReachFade.Both;
+
+    [Newtonsoft.Json.JsonIgnore]
+    public bool FadeNameplates => OutOfReachFade is OutOfReachFade.Nameplates or OutOfReachFade.Both;
 
     /// <summary>The alliance list: one grid with the members of the other parties of the alliance.</summary>
     public AllianceListSettings Alliance { get; set; } = new();

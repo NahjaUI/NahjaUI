@@ -20,8 +20,14 @@ internal static class BarGradient
     private const float RightHue = 10f;
     private const float RightValue = 0.12f;
 
-    // The light end also gets a little white (more brightness alone does not show on a color that is already bright).
+    // The light end also gets a little of the gradient color, white by default (more brightness alone does not show on a color that is already bright).
     private const float RightWhiteMix = 0.12f;
+
+    // With another color than white the same little would hardly show, so it takes more of it.
+    private const float RightColorMix = 0.30f;
+
+    /// <summary>The color the light end goes toward (RGB 0 to 1). White is the default. Set by the plugin every frame from the Appearance page.</summary>
+    public static Vector3 TargetColor { get; set; } = Vector3.One;
 
     // Blues need a bigger change of hue to show: the eye tells apart blue shades worse than others. 1 = same as the rest, around hue 225.
     private const float BlueHueBoost = 1.4f;
@@ -75,7 +81,9 @@ internal static class BarGradient
 
         var left = FromHsv(h + LeftHue * hueScale, s, v + LeftValue * k);
         var right = FromHsv(h + RightHue * hueScale, s, v + RightValue * k);
-        right = Vector3.Lerp(right, new Vector3(255f), Math.Clamp(RightWhiteMix * k, 0f, 0.5f));
+        var isWhite = TargetColor.X > 0.98f && TargetColor.Y > 0.98f && TargetColor.Z > 0.98f;
+        var mix = isWhite ? RightWhiteMix : RightColorMix;
+        right = Vector3.Lerp(right, TargetColor * 255f, Math.Clamp(mix * k, 0f, 0.6f));
         return (left, right);
     }
 

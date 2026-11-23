@@ -791,7 +791,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             }
 
             // A full bar (a level you can use) has its own border color.
-            drawList.AddRect(a, b, ImGui.GetColorU32(fill >= 1f ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, a, b, ImGui.GetColorU32(fill >= 1f ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness, fill >= 1f);
         }
 
         if (settings.ShowLevel && fullBars >= 1)
@@ -832,7 +832,7 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         // Dark Arts is the border painted in its color: it never leaves the bar.
         var darkArts = settings.ShowDarkArts && gauge.DarkArts;
-        drawList.AddRect(pos, end, ImGui.GetColorU32(darkArts ? settings.DarkArtsColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(darkArts ? settings.DarkArtsColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness, darkArts);
 
         if (settings.ShowDarksideSeconds && gauge.DarksideMs > 0)
         {
@@ -876,7 +876,7 @@ internal sealed partial class JobGaugeModule : IDisposable
                 BarGradient.Fill(drawList, a, b, fill, rounding, ImDrawFlags.None, left, left + total);
             else
                 drawList.AddRectFilled(a, b, background, rounding);
-            drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, a, b, border, rounding, ImDrawFlags.None, thickness);
         }
     }
 
@@ -926,7 +926,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         }
 
         // The ready frame is the border painted in its color.
-        drawList.AddRect(pos, end, ImGui.GetColorU32(frame ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(frame ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness, frame);
 
         if (settings.ShowNumbers)
         {
@@ -965,7 +965,7 @@ internal sealed partial class JobGaugeModule : IDisposable
                 BarGradient.Fill(drawList, a, b, fill, rounding, ImDrawFlags.None, left, left + total);
             else
                 drawList.AddRectFilled(a, b, background, rounding);
-            drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, a, b, border, rounding, ImDrawFlags.None, thickness);
         }
     }
 
@@ -1010,7 +1010,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             drawList.AddLine(new Vector2(x, pos.Y), new Vector2(x, end.Y), ImGui.GetColorU32(settings.ThresholdColor), thickness);
         }
 
-        drawList.AddRect(pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
         if (settings.ShowNumber)
         {
@@ -1150,7 +1150,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             }
 
             // When the gauge is full the pip's own border is painted in the frame color.
-            drawList.AddRect(a, b, glow ? glowColor : border, rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, a, b, glow ? glowColor : border, rounding, ImDrawFlags.None, thickness, glow);
         }
     }
 
@@ -1261,7 +1261,7 @@ internal sealed partial class JobGaugeModule : IDisposable
                 BarGradient.Fill(drawList, a, b, ImGui.GetColorU32(color), rounding, ImDrawFlags.None, left, left + total);
             else
                 drawList.AddRectFilled(a, b, background, rounding);
-            drawList.AddRect(a, b, border, rounding, ImDrawFlags.None, thickness);
+            BorderStyle.BarRect(drawList, a, b, border, rounding, ImDrawFlags.None, thickness);
         }
     }
 
@@ -1290,7 +1290,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(pos, end, ImGui.GetColorU32(borderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(borderColor), rounding, ImDrawFlags.None, thickness);
 
         if (text is not null)
             QueueText(drawList, text, textSettings, pos, size);

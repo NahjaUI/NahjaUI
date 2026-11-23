@@ -266,6 +266,19 @@ internal sealed class LayoutManager
     /// <summary>True when some job has its own position for this element.</summary>
     public bool HasAnyOwnPosition(string id) => config.JobLayouts.TryGetValue(id, out var own) && own.Count > 0;
 
+    /// <summary>Drops the own position (PvE) that a job has for an element, so that the job follows the common one.</summary>
+    public void ClearOwnPosition(LayoutElement element, uint jobId)
+    {
+        if (config.JobLayouts.TryGetValue(element.Id, out var own))
+        {
+            own.Remove(jobId);
+            if (own.Count == 0)
+                config.JobLayouts.Remove(element.Id);
+        }
+
+        loadedFrom.Remove(element.Id);
+    }
+
     /// <summary>
     /// Turns the own position of the job being played on or off. On: the job starts from what is shown now. Off: the job goes back to the common position.
     /// </summary>

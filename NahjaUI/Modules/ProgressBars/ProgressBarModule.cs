@@ -221,7 +221,7 @@ internal sealed class ProgressBarModule : IDisposable
             drawList.AddLine(new Vector2(lineX, pos.Y), new Vector2(lineX, max.Y), ImGui.GetColorU32(settings.WeaveColor), thickness);
         }
 
-        drawList.AddRect(pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.RoundCornersAll, thickness);
+        BorderStyle.BarRect(drawList, pos, max, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.RoundCornersAll, thickness);
     }
 
     private void DrawBar(ProgressBarSettings settings, LayoutElement element, CastSnapshot? cast, bool preview, bool isTarget, bool allowIcon)
@@ -305,7 +305,7 @@ internal sealed class ProgressBarModule : IDisposable
         // Border, and a line between the icon and the bar.
         var border = ImGui.GetColorU32(settings.BorderColor);
 
-        drawList.AddRect(pos, max, border, rounding, ImDrawFlags.RoundCornersAll, thickness);
+        BorderStyle.BarRect(drawList, pos, max, border, rounding, ImDrawFlags.RoundCornersAll, thickness);
 
         if (hasIcon)
             drawList.AddLine(new Vector2(barLeft, pos.Y), new Vector2(barLeft, max.Y), border, thickness);

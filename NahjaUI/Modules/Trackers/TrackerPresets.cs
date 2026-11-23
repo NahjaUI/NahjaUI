@@ -22,23 +22,25 @@ internal static class TrackerPresets
     public static readonly string[] Names = JobSetups.Names.ToArray();
 
     /// <summary>Creates the groups and trackers of a preset. Returns a short report to show to the user.</summary>
-    public static string Apply(TrackerEngine engine, string name)
+    public static string Apply(TrackerEngine engine, string name, bool positions)
     {
-        // From the button: what is already there is kept as it is; what was deleted comes back.
-        return JobSetups.Names.Contains(name) ? JobSetups.Apply(engine.Plugin, engine, name, restore: true) : "Unknown preset.";
+        // From the button: what is already there is kept as it is; what was deleted comes back. The positions only if the user asked for them.
+        return JobSetups.Names.Contains(name) ? JobSetups.Apply(engine.Plugin, engine, name, restore: true, positions: positions) : "Unknown preset.";
     }
 
     /// <summary>Imports the presets of every job again (the trackers that were deleted come back, the ones that exist are not touched).</summary>
-    public static string ApplyAll(TrackerEngine engine)
+    public static string ApplyAll(TrackerEngine engine, bool positions)
     {
         var done = 0;
         foreach (var name in Names)
         {
-            JobSetups.Apply(engine.Plugin, engine, name, restore: true);
+            JobSetups.Apply(engine.Plugin, engine, name, restore: true, positions: positions);
             done++;
         }
 
-        return $"Presets of {done} jobs imported again. The trackers you had are untouched; only the ones that were missing came back.";
+        return positions
+            ? $"Presets of {done} jobs imported again. The trackers you had are untouched; the ones that were missing came back, and every job is in the standard column."
+            : $"Presets of {done} jobs imported again. The trackers you had are untouched; only the ones that were missing came back. No position was changed.";
     }
 
     // ---------------------------------------------------------------- builder

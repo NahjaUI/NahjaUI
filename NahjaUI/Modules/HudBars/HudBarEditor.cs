@@ -436,6 +436,57 @@ internal sealed class HudBarEditor
                 }
             }
 
+            // The icon of the party leader: it works like the cutscene icon.
+            ImGui.Spacing();
+            var showLeader = party.ShowLeaderIcon;
+            if (ImGui.Checkbox("Show the leader icon", ref showLeader))
+            {
+                party.ShowLeaderIcon = showLeader;
+                plugin.RequestSave();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The game's own icon of the party leader (the \"Party Leader\" status). Nothing is shown when you are alone. The preview puts it on the first member.");
+
+            if (party.ShowLeaderIcon)
+            {
+                var leaderSize = party.LeaderIconSizePx;
+                if (ImGui.SliderInt("Leader icon size (px)", ref leaderSize, 8, 64))
+                {
+                    party.LeaderIconSizePx = leaderSize;
+                    plugin.RequestSave();
+                }
+
+                var leaderBarAnchor = party.LeaderIconBarAnchor;
+                if (EnumCombo("Leader icon: anchor on the bar", ref leaderBarAnchor, point => point.Label()))
+                {
+                    party.LeaderIconBarAnchor = leaderBarAnchor;
+                    plugin.RequestSave();
+                }
+
+                var leaderSelfAnchor = party.LeaderIconSelfAnchor;
+                if (EnumCombo("Leader icon: anchor of the icon", ref leaderSelfAnchor, point => point.Label()))
+                {
+                    party.LeaderIconSelfAnchor = leaderSelfAnchor;
+                    plugin.RequestSave();
+                }
+
+                var leaderOffsetX = party.LeaderIconOffsetX;
+                if (ImGui.InputInt("Leader icon: offset X (px)", ref leaderOffsetX, 1, 5))
+                {
+                    party.LeaderIconOffsetX = Math.Clamp(leaderOffsetX, -500, 500);
+                    plugin.RequestSave();
+                }
+
+                // Up is plus (the saved value counts downwards).
+                var leaderOffsetY = -party.LeaderIconOffsetY;
+                if (ImGui.InputInt("Leader icon: offset Y (px)", ref leaderOffsetY, 1, 5))
+                {
+                    party.LeaderIconOffsetY = -Math.Clamp(leaderOffsetY, -500, 500);
+                    plugin.RequestSave();
+                }
+            }
+
             // The icon of the raise that is being cast on a dead member: it is placed like the cutscene icon but sits behind the text.
             ImGui.Spacing();
             var showRaise = party.ShowRaiseIcon;
@@ -1049,6 +1100,29 @@ internal sealed class HudBarEditor
         _ => "Everyone"
     };
 
+    // Shown on the Appearance page, under the role colors: where the units that are out of reach are faded.
+    internal void DrawReachOption()
+    {
+        var frames = plugin.Configuration.HudBars;
+        var mode = frames.OutOfReachFade;
+        if (EnumCombo("Fade units that are out of reach", ref mode, value => value switch
+        {
+            OutOfReachFade.None => "Off",
+            OutOfReachFade.Frames => "Only in frames",
+            OutOfReachFade.Nameplates => "Only in nameplates",
+            _ => "In frames and nameplates"
+        }))
+        {
+            frames.OutOfReachFade = mode;
+            plugin.RequestSave();
+        }
+
+        // The explanation sits under the selector, wrapped to the width of the card.
+        ImGui.PushStyleColor(ImGuiCol.Text, Theme.TextMuted);
+        ImGui.TextWrapped("Fades a unit when the game says it is too far or out of sight: allies beyond 30 yalms (the range of a heal) and enemies beyond 25 yalms (the range of an attack spell). Frames are the party list, the target, the focus and the enmity list. Nameplates are the ones of enemies, party members and friendly fighters.");
+        ImGui.PopStyleColor();
+    }
+
     // One swatch per job. What is changed here is kept apart from the built-in colours, so it can always be reset.
     // Shown on the Appearance page: three colours, one per role, used by every frame (and the stripe of the party).
     internal void DrawRoleColors()
@@ -1057,8 +1131,12 @@ internal sealed class HudBarEditor
         var defaults = new HudBarsSettings();
 
         {
-            ImGui.TextColored(Theme.TextMuted, "Role colors: the same for every frame (player, target, target of target, focus and party). Used when a frame's HP color is set to the color of the role.");
-            ImGui.TextColored(Theme.TextMuted, "Nameplates take their colors from the game's own options.");
+            ImGui.PushStyleColor(ImGuiCol.Text, Theme.TextMuted);
+            ImGui.TextWrapped("The same for every frame (player, target, target of target, focus and party). Used when a frame's HP color is set to the color of the role.");
+            ImGui.PopStyleColor();
+            ImGui.PushStyleColor(ImGuiCol.Text, Theme.TextMuted);
+            ImGui.TextWrapped("Nameplates take their colors from the game's own options.");
+            ImGui.PopStyleColor();
             ImGui.Spacing();
 
             void Role(string label, Vector4 current, Vector4 original, Action<Vector4> apply)

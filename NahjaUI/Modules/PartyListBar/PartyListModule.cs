@@ -40,7 +40,7 @@ internal sealed class PartyListModule : IDisposable
     // What is shown in the preview when there is no real party: a full party of eight, with a shield, MP and a dead member.
     private static readonly UnitSnapshot[] SampleParty =
     {
-        Sample("Nahja Stark", 24, 100000, 10000, 10000, 0),
+        Sample("Nahja Stark", 24, 100000, 10000, 10000, 0) with { IsLeader = true },
         Sample("Aldric", 19, 82000, 10000, 10000, 12),
         Sample("Brogan", 21, 64000, 10000, 10000, 0),
         Sample("Selene", 28, 100000, 3800, 10000, 18),
@@ -170,6 +170,14 @@ internal sealed class PartyListModule : IDisposable
             return result;
         }
 
+        // Alone with the game set to hide its list alone: the game's HUD agent still lists you as the only member, so it is hidden here
+        // (the Party page preview and the Unlock Mode still show the sample, because an empty list makes them draw it).
+        if (!snapshot.Context.PartyListWhenSolo && snapshot.Context.SoloOptionRaw >= 0 && snapshot.Player is not null &&
+            party.Count == 1 && party[0].EntityId == snapshot.Player.EntityId)
+        {
+            return result;
+        }
+
         // The order is the game's own party list (so the macros <2>, <3>... keep pointing at the same members).
         result.AddRange(party);
 
@@ -232,7 +240,7 @@ internal sealed class PartyListModule : IDisposable
         }
         else if (menuPreview)
         {
-            members = WithPreviewCutscene(members);
+            members = WithPreviewLeader(WithPreviewCutscene(members));
         }
 
         // The raise: real casts on dead members; the preview shows one dead member being raised so the icon can be placed.
@@ -338,6 +346,31 @@ internal sealed class PartyListModule : IDisposable
 
         // In unlock mode the box is the whole stack of bars.
         PartyElement.DisplayRect = (pos, new Vector2(size.X, boxHeight));
+    }
+
+    // The page of the menu shows the crown on the first member when nobody leads (alone, or a party the game does not say the leader of), so the icon can
+    // be placed. The list is a copy: the real data is not touched.
+    private static IReadOnlyList<UnitSnapshot> WithPreviewLeader(IReadOnlyList<UnitSnapshot> members)
+    {
+        if (members.Any(m => m.IsLeader))
+            return members;
+
+        var index = -1;
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (!members[i].IsCompanion)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+            return members;
+
+        var copy = new List<UnitSnapshot>(members);
+        copy[index] = copy[index] with { IsLeader = true };
+        return copy;
     }
 
     // With a real party, the page of the menu shows one member (not you) watching a cutscene when nobody really is, so the icon can be placed.
@@ -462,7 +495,7 @@ internal sealed class PartyListModule : IDisposable
         }
 
         // The ring of the member you have targeted is the border itself painted in the ring color (Appearance > Target ring color).
-        drawList.AddRect(pos, max, ImGui.GetColorU32(selected ? plugin.Configuration.TargetRingColor : look.BorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, max, ImGui.GetColorU32(selected ? plugin.Configuration.TargetRingColor : look.BorderColor), rounding, ImDrawFlags.None, thickness, selected);
 
         if (!member.IsCompanion && ShowsMp(settings.MpMode, member) && member.MaxMp > 0)
             DrawMpBar(drawList, settings, member, pos, size);
@@ -471,6 +504,10 @@ internal sealed class PartyListModule : IDisposable
         // A member who is away (offline, in another area, too far) or dead is faded, and his name is replaced by what is happening.
         var raising = raiseActionId != 0 && settings.ShowRaiseIcon && member.Presence == Presence.Here && (member.IsDead || member.Hp == 0);
         var away = AwayTag(member, raising);
+
+        // Out of reach (the game's own range and sight check): faded like the rest, and his name stays.
+        var dimmed = away is null && plugin.Configuration.HudBars.FadeFrames && member.Presence == Presence.Here && !member.IsCompanion &&
+            ReachCheck.IsOutOfReach(member.EntityId, false);
         var name = away is not null
             ? away
             : UnitTextFormatter.FormatName(member.Name, look.NameFormat, true, look.NameFormatOnlyPlayers);
@@ -501,7 +538,7 @@ internal sealed class PartyListModule : IDisposable
 
         plugin.HudBarSystem.DrawText(drawList, hpText, look.Hp, pos, size);
 
-        if (away is not null)
+        if (away is not null || dimmed)
             DrawListFade.FadeSince(drawList, fadeMark, Fade.Alpha);
 
         // The icon of someone watching a cutscene is drawn after the fade, so it stays clear on a faded bar.
@@ -514,6 +551,18 @@ internal sealed class PartyListModule : IDisposable
             var cutsceneTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(GameDataProvider.CutsceneIconId)).GetWrapOrEmpty();
 
             drawList.AddImage(cutsceneTexture.Handle, iconMin, iconMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
+        }
+
+        // The crown of the party leader, also after the fade.
+        if (settings.ShowLeaderIcon && member.IsLeader && GameDataProvider.PartyLeaderIconId != 0)
+        {
+            var side = MathF.Max(MathF.Round(settings.LeaderIconSizePx * scale), 4f);
+            var attach = pos + size * settings.LeaderIconBarAnchor.Fraction() + new Vector2(settings.LeaderIconOffsetX, settings.LeaderIconOffsetY) * scale;
+            var iconMin = attach - new Vector2(side, side) * settings.LeaderIconSelfAnchor.Fraction();
+            iconMin = new Vector2(MathF.Round(iconMin.X), MathF.Round(iconMin.Y));
+            var leaderTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(GameDataProvider.PartyLeaderIconId)).GetWrapOrEmpty();
+
+            drawList.AddImage(leaderTexture.Handle, iconMin, iconMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
         }
     }
 
@@ -574,6 +623,6 @@ internal sealed class PartyListModule : IDisposable
         if (fillRight > mpPos.X)
             FillRounded(drawList, mpPos, mpMax, fillRight, ImGui.GetColorU32(look.MpColor), rounding, ImDrawFlags.RoundCornersAll);
 
-        drawList.AddRect(mpPos, mpMax, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, MathF.Max(1f, MathF.Round(scale)));
+        BorderStyle.BarRect(drawList, mpPos, mpMax, ImGui.GetColorU32(look.BorderColor), rounding, ImDrawFlags.None, MathF.Max(1f, MathF.Round(scale)));
     }
 }

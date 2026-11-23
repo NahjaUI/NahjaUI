@@ -218,7 +218,8 @@ internal sealed class EnmityListModule : IDisposable
         //  - act 0 with tgt 1: still listed but too far to be selected (the game shows its hover glow but the click does nothing):
         //    the game fades its row a little (our guess is that "act" means "in range").
         var untargetable = enemy.Targetable == 0;
-        var outOfRange = !untargetable && enemy.ActiveInList == 0;
+        var outOfRange = !untargetable && (enemy.ActiveInList == 0 ||
+            (plugin.Configuration.HudBars.FadeFrames && ReachCheck.IsOutOfReach(enemy.Unit.EntityId, true)));
         var fadeMark = DrawListFade.Mark(drawList);
 
         var max = pos + size;
@@ -238,7 +239,7 @@ internal sealed class EnmityListModule : IDisposable
         }
 
         // The target ring is the border painted in the ring color.
-        drawList.AddRect(pos, max, ImGui.GetColorU32(isTarget ? plugin.Configuration.TargetRingColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness);
+        BorderStyle.BarRect(drawList, pos, max, ImGui.GetColorU32(isTarget ? plugin.Configuration.TargetRingColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness, isTarget);
 
         // The dot: one color when the enemy is attacking you, another when it is attacking someone else.
         if (settings.ShowEnmityDot)
@@ -336,7 +337,7 @@ internal sealed class EnmityListModule : IDisposable
             drawList.PopClipRect();
         }
 
-        drawList.AddRect(min, max, ImGui.GetColorU32(settings.ProgressBarBorderColor), rounding, ImDrawFlags.None, MathF.Max(1f, MathF.Round(scale)));
+        BorderStyle.BarRect(drawList, min, max, ImGui.GetColorU32(settings.ProgressBarBorderColor), rounding, ImDrawFlags.None, MathF.Max(1f, MathF.Round(scale)));
 
         // The action name and the time left: texts attached to the progress bar, like the other frames.
         var boxSize = max - min;

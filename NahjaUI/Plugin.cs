@@ -243,6 +243,9 @@ public sealed class Plugin : IDalamudPlugin
         Guard("presets", ImportDefaultPresets);
 
         BarGradient.Strength = System.Math.Clamp(Configuration.BarGradientPercent, 0, 200) / 100f;
+        BarGradient.TargetColor = new System.Numerics.Vector3(Configuration.BarGradientColor.X, Configuration.BarGradientColor.Y, Configuration.BarGradientColor.Z);
+        BorderStyle.BarPx = System.Math.Clamp(Configuration.BarBorderPx, 0, 3);
+        BorderStyle.IconPx = System.Math.Clamp(Configuration.IconBorderPx, 0, 3);
 
         // The elements that have a position for each job show the one of the job being played.
         Guard("layout", () =>
