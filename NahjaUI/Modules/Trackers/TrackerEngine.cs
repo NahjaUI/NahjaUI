@@ -1247,6 +1247,14 @@ internal sealed class TrackerEngine
         if (present != wantPresent)
             return TrackerState.Hidden;
 
+        // A reminder for a status the watched unit cannot receive is not shown: no debuff on an ally, no buff on an enemy.
+        if (!present && !StatusCanApply(rule, snapshot))
+            return TrackerState.Hidden;
+
+        // "Only with N seconds left or fewer": a status with more time left (or with no time at all, like a permanent one) lets the next trigger decide.
+        if (present && rule.MaxRemaining > 0f && (found!.RemainingTime <= 0f || found.RemainingTime > rule.MaxRemaining))
+            return TrackerState.Hidden;
+
         return new TrackerState(true, present, found?.RemainingTime ?? 0f, found?.Param ?? 0, Rule: rule, FoundStatusId: found?.Id ?? 0);
     }
 
@@ -1286,6 +1294,33 @@ internal sealed class TrackerEngine
 
         return new TrackerState(true, false, remaining, 0, phase, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
             cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
+    }
+
+    // Can the unit that the trigger watches have this status at all? Enfeeblements (category 2) only go on enemies and enhancements (category 1)
+    // only on non-enemies. The player (yourself) is not checked. Statuses of another kind (category 0) are always allowed.
+    private static bool StatusCanApply(TrackerRule rule, GameSnapshot snapshot)
+    {
+        if (rule.Unit == TrackerUnit.Player)
+            return true;
+
+        var unit = rule.Unit switch
+        {
+            TrackerUnit.Target => snapshot.Target,
+            TrackerUnit.Focus => snapshot.Focus,
+            TrackerUnit.TargetOfTarget => snapshot.TargetOfTarget,
+            _ => null
+        };
+
+        if (unit is null)
+            return true;
+
+        var category = GameNames.StatusCategory(rule.StatusId);
+        if (category is not (1 or 2))
+            return true;
+
+        // The hostile flag is not enough (a training dummy does not carry it): the game's own check of an attack on the unit counts too.
+        var enemy = unit.IsHostile || ReachCheck.IsEnemy(unit.EntityId);
+        return category == 2 ? enemy : !enemy;
     }
 
     // Looks for the status of the trigger on the unit it watches.
@@ -1405,6 +1440,10 @@ internal sealed class TrackerEngine
         {
             drawList.AddRectFilled(pos, pos + size, ImGui.GetColorU32(Theme.WithAlpha(Theme.Card, 0.9f)), rounding);
         }
+
+        // A gray mask over the icon, as the trigger that decides asks for: it washes the colors out (the icon is drawn first, so the mask follows its shape).
+        if (!ghost && activeRule is { Desaturate: true })
+            drawList.AddRectFilled(pos, pos + size, ImGui.GetColorU32(new Vector4(0.42f, 0.42f, 0.44f, 0.62f)), rounding);
 
         // The dark sweep that covers the part of the icon that is still recharging.
         if (cooling && activeRule is { Sweep: true } && state.Total > 0f)

@@ -109,6 +109,15 @@ public class TrackerRule
     /// <summary>The icon darkened.</summary>
     public bool Dim { get; set; }
 
+    /// <summary>The icon washed out (a gray mask over it): for "the effect is on and there is time left", so it stands out less than when it needs a refresh.</summary>
+    public bool Desaturate { get; set; }
+
+    /// <summary>
+    /// Status triggers ("it is on"): the trigger only matches while the status has this many seconds left or fewer (0 = at any time).
+    /// With one trigger for "few seconds left" above another for "it is on", an upkeep status can look different while it needs a refresh.
+    /// </summary>
+    public float MaxRemaining { get; set; }
+
     /// <summary>A dark sweep over the part of the icon that is still recharging (triggers of an ability, while it recharges).</summary>
     public bool Sweep { get; set; }
 

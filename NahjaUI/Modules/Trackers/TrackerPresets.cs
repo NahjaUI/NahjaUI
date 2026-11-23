@@ -231,6 +231,37 @@ internal static class TrackerPresets
                 };
             }
 
+            // A status of yours on the TARGET (a DoT) is kept up all the time, so it stays quiet while there is time left and calls for attention only when it
+            // is about to run out. For each name, two triggers: with RefreshWindowSeconds left or fewer, the icon in full color with the time big in the center
+            // (time to refresh); with more, the icon dimmed and washed out with the time small. Then, for each name, the red warning while it is missing.
+            if (unit == TrackerUnit.Target)
+            {
+                foreach (var id in ids)
+                {
+                    var refresh = Make(ConditionKind.StatusPresent, id);
+                    refresh.MaxRemaining = RefreshWindowSeconds;
+                    refresh.Texts.Add(TimeText());
+                    tracker.Rules.Add(refresh);
+
+                    var steady = Make(ConditionKind.StatusPresent, id);
+                    steady.Dim = true;
+                    steady.Desaturate = true;
+                    steady.Texts.Add(SmallTimeText());
+                    tracker.Rules.Add(steady);
+                }
+
+                // The engine skips the warnings whose ability is not available yet (Dia at level 72, Aero II at 46...).
+                foreach (var id in ids)
+                {
+                    var missing = Make(ConditionKind.StatusMissing, id);
+                    missing.Red = true;
+                    missing.Dim = true;
+                    tracker.Rules.Add(missing);
+                }
+
+                return;
+            }
+
             if (ids.Length == 1)
             {
                 var onlyPresent = Make(ConditionKind.StatusPresent, ids[0]);
@@ -504,6 +535,19 @@ internal static class TrackerPresets
         }
 
         // 12 px, centred, no offset: the time (status time or cooldown of the active trigger).
+        // The seconds left at which a status of the target that is kept up (a DoT) turns into the full color "refresh it now" look.
+        private const float RefreshWindowSeconds = 6f;
+
+        // The time of a status that is not urgent yet: small (9 px), in the center.
+        private static TrackerTextDefinition SmallTimeText() => new()
+        {
+            Size = 9,
+            Anchor = AnchorPoint.Center,
+            OffsetX = 0,
+            OffsetY = 0,
+            Sources = { new TrackerTextSource { Source = TextSource.OwnTime } }
+        };
+
         private static TrackerTextDefinition TimeText() => new()
         {
             Size = 12,

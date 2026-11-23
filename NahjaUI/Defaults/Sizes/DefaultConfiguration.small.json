@@ -10054,7 +10054,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 1871,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -10094,7 +10137,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 144,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -10134,13 +10220,90 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 143,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
           "Kind": 1,
           "Unit": 1,
           "StatusId": 1871,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 144,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 143,
           "ActionId": 0,
           "OnlyMine": true,
           "Texts": [],
@@ -18303,7 +18466,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 1895,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -18343,7 +18549,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 189,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -18383,13 +18632,90 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 179,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
           "Kind": 1,
           "Unit": 1,
           "StatusId": 1895,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 189,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 179,
           "ActionId": 0,
           "OnlyMine": true,
           "Texts": [],
@@ -21170,7 +21496,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 1881,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -21210,7 +21579,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 843,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -21250,13 +21662,90 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 838,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
           "Kind": 1,
           "Unit": 1,
           "StatusId": 1881,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 843,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 838,
           "ActionId": 0,
           "OnlyMine": true,
           "Texts": [],
@@ -29989,7 +30478,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 161,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -30029,7 +30561,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 163,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -30069,7 +30644,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 3871,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -30109,7 +30727,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 162,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -30149,7 +30810,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 1210,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -30189,6 +30893,83 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 3872,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 161,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 163,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
           "Sweep": false
         },
         {
@@ -30196,6 +30977,57 @@
           "Kind": 1,
           "Unit": 1,
           "StatusId": 3871,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 162,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 1210,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 3872,
           "ActionId": 0,
           "OnlyMine": true,
           "Texts": [],
@@ -31567,7 +32399,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 2616,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -31607,7 +32482,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 2615,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
@@ -31647,13 +32565,90 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 2614,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
           "Kind": 1,
           "Unit": 1,
           "StatusId": 2616,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 2615,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": true,
+          "Dim": true,
+          "Sweep": false
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 1,
+          "Unit": 1,
+          "StatusId": 2614,
           "ActionId": 0,
           "OnlyMine": true,
           "Texts": [],
@@ -34550,7 +35545,50 @@
           "Pulse": false,
           "Red": false,
           "Dim": false,
-          "Sweep": false
+          "Sweep": false,
+          "MaxRemaining": 6.0
+        },
+        {
+          "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",
+          "Kind": 0,
+          "Unit": 1,
+          "StatusId": 2586,
+          "ActionId": 0,
+          "OnlyMine": true,
+          "Texts": [
+            {
+              "$type": "NahjaUI.Modules.Trackers.TrackerTextDefinition, NahjaUI",
+              "Sources": [
+                {
+                  "$type": "NahjaUI.Modules.Trackers.TrackerTextSource, NahjaUI",
+                  "Source": 0,
+                  "StatusId": 0,
+                  "ActionId": 0
+                }
+              ],
+              "Size": 7,
+              "Anchor": 4,
+              "OffsetX": 0,
+              "OffsetY": 0,
+              "Color": {
+                "$type": "System.Numerics.Vector4, System.Private.CoreLib",
+                "X": 1.0,
+                "Y": 1.0,
+                "Z": 1.0,
+                "W": 1.0
+              }
+            }
+          ],
+          "Icon": 0,
+          "IconStatusId": 0,
+          "IconActionId": 0,
+          "Glow": false,
+          "Pulse": false,
+          "Red": false,
+          "Dim": true,
+          "Sweep": false,
+          "MaxRemaining": 0.0,
+          "Desaturate": true
         },
         {
           "$type": "NahjaUI.Modules.Trackers.TrackerRule, NahjaUI",

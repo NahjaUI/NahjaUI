@@ -9,7 +9,7 @@ namespace NahjaUI.Modules.JobGauges;
 /// <summary>
 /// The aura of Freecure of the White Mage (Cure has a chance to make the next Cure II cost no MP). One soft arch of teal mist with faint leaves and vines,
 /// above the character, like the arch of Thunderhead of the Black Mage. It works as a timer, like Sacred Sight: the desaturated arch is always there and
-/// the arch in color is cut from the center toward both sides while the 15 seconds run out (what is left in color is the two ends).
+/// the arch in color is cut from the right toward the left while the 15 seconds run out (what is left in color is the left part).
 /// </summary>
 internal sealed partial class JobGaugeModule
 {
@@ -97,23 +97,13 @@ internal sealed partial class JobGaugeModule
         // The desaturated arch is always there.
         drawList.AddImage(gray.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
 
-        // The part in color is what is left of the time: a hole opens in the center and grows toward both sides as the seconds run out.
+        // The part in color is what is left of the time: it is cut from the right edge toward the left as the seconds run out.
         if (fraction <= 0f)
             return;
 
-        var half = width / 2f * Math.Clamp(fraction, 0f, 1f);
-        var center = min.X + width / 2f;
-        var inner = width / 2f - half;
+        var colorEnd = min.X + width * Math.Clamp(fraction, 0f, 1f);
 
-        // The two ends: from the left edge to the hole and from the hole to the right edge (while the time is full, the hole has no width).
-        var leftEnd = center - inner;
-        var rightStart = center + inner;
-
-        drawList.PushClipRect(min, new Vector2(leftEnd, max.Y), true);
-        drawList.AddImage(texture.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
-        drawList.PopClipRect();
-
-        drawList.PushClipRect(new Vector2(rightStart, min.Y), max, true);
+        drawList.PushClipRect(min, new Vector2(colorEnd, max.Y), true);
         drawList.AddImage(texture.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
         drawList.PopClipRect();
     }

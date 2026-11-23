@@ -340,22 +340,12 @@ internal static class GameNames
         return isRole;
     }
 
-    // The classes and jobs that share the role actions of a role. Once a role action is learned with any of them, the others can use it.
-    private static readonly uint[][] RoleGroups =
-    {
-        new uint[] { 1, 19, 3, 21, 32, 37 },                      // tanks
-        new uint[] { 6, 24, 28, 33, 40 },                         // healers
-        new uint[] { 2, 20, 4, 22, 29, 30, 34, 39, 41 },          // melee DPS
-        new uint[] { 5, 23, 31, 38 },                             // physical ranged DPS
-        new uint[] { 7, 25, 26, 27, 35, 42 },                     // magical ranged DPS
-    };
-
     private static readonly Dictionary<(uint Job, uint Action), (long At, bool Learned)> RoleLearned = new();
 
     /// <summary>
-    /// Has the character learned this role action? It is learned the first time any class or job of the role reaches its level, and from then on
-    /// every class or job of the role can use it at any level (also synced down). The real level of each class is read from the game, so this
-    /// does not depend on the level the player has right now. If it cannot be known, the action counts as learned.
+    /// Has this class or job learned this role action? Each class or job learns its own role actions, when it reaches their level: another class
+    /// of the same role does not count. Once learned, it is kept when the level is synced down (a FATE, a dungeon). The real level of the class
+    /// is read from the game, so it does not depend on the level the player has right now. If it cannot be known, the action counts as learned.
     /// </summary>
     public static unsafe bool RoleActionLearned(uint jobId, uint actionId)
     {
@@ -366,25 +356,9 @@ internal static class GameNames
         var learned = true;
         try
         {
-            var group = RoleGroups.FirstOrDefault(g => g.Contains(jobId));
             var state = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance();
-            if (group is not null && state != null)
-            {
-                var needed = ActionLevel(actionId);
-                var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
-                learned = false;
-                foreach (var id in group)
-                {
-                    if (!sheet.TryGetRow(id, out var row) || row.ExpArrayIndex < 0)
-                        continue;
-
-                    if (state->ClassJobLevels[row.ExpArrayIndex] >= needed)
-                    {
-                        learned = true;
-                        break;
-                    }
-                }
-            }
+            if (state != null && Plugin.DataManager.GetExcelSheet<ClassJob>().TryGetRow(jobId, out var row) && row.ExpArrayIndex >= 0)
+                learned = state->ClassJobLevels[row.ExpArrayIndex] >= ActionLevel(actionId);
         }
         catch
         {

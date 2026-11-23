@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using ActionSheet = Lumina.Excel.Sheets.Action;
 
 namespace NahjaUI.Modules.HudBars;
 
@@ -11,9 +13,8 @@ namespace NahjaUI.Modules.HudBars;
 /// <c>ActionManager.UseAction</c> (the hotbars, the keys, the macros). When the switch is on and the mouse is over one of our frames, the
 /// target given to that call is replaced by the unit of the frame, as long as the game says the action can be used on it
 /// (<c>CanUseActionOnTarget</c>: a heal can go to a party member, an attack to an enemy; an action that only works on yourself, or a heal on an
-/// enemy, is left alone and goes where it would have gone). The actions that are placed on the ground (Asylum, Sacred Soil, Earthly Star...)
-/// are given the unit as their target too, which the game takes as "place it where that unit is", the same as a macro with a target
-/// (<c>/ac "Asylum" &lt;t&gt;</c>). The call used when the position is chosen with the cursor (<c>UseActionLocation</c>) is not touched.
+/// enemy, is left alone and goes where it would have gone). Actions that are placed on the ground (Asylum, Sacred Soil, Leylines) go to the position
+/// of the unit of the frame, as a macro with the mouseover placeholder does, instead of opening the ground cursor and landing under the frame.
 /// This is the only place of the plugin that changes how the game plays.
 /// </summary>
 internal sealed unsafe class MouseoverActions : IDisposable
@@ -22,8 +23,20 @@ internal sealed unsafe class MouseoverActions : IDisposable
     private Hook<ActionManager.Delegates.UseAction>? hook;
     private bool failureLogged;
 
-    // Which actions are placed on the ground (the "TargetArea" column of the Action sheet), looked up once for each.
-    private readonly Dictionary<uint, bool> groundActions = new();
+    // True while our own call to place an action on the ground is running (the game calls UseAction again inside it).
+    private bool placing;
+
+    private static readonly Dictionary<uint, bool> GroundActions = new();
+
+    private static bool IsGroundAction(uint actionId)
+    {
+        if (GroundActions.TryGetValue(actionId, out var known))
+            return known;
+
+        var ground = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) && row.TargetArea;
+        GroundActions[actionId] = ground;
+        return ground;
+    }
 
     public MouseoverActions(Plugin plugin)
     {
@@ -47,16 +60,31 @@ internal sealed unsafe class MouseoverActions : IDisposable
     {
         try
         {
-            if (plugin.Configuration.MouseoverActions && actionType == ActionType.Action)
+            if (plugin.Configuration.MouseoverActions && actionType == ActionType.Action && !placing)
             {
                 var entityId = plugin.HudBarSystem.HoveredFrameEntityId;
                 if (entityId != 0)
                 {
                     var unit = Plugin.ObjectTable.SearchByEntityId(entityId);
+                    if (unit is not null && IsGroundAction(actionId))
+                    {
+                        // On the ground: at the unit, not under the mouse (the frame is on top of the ground).
+                        var position = unit.Position;
+                        placing = true;
+                        try
+                        {
+                            return manager->UseActionLocation(actionType, actionId, 0xE0000000, &position, extraParam);
+                        }
+                        finally
+                        {
+                            placing = false;
+                        }
+                    }
+
                     if (unit is not null)
                     {
                         var gameObject = (GameObject*)unit.Address;
-                        if (IsGroundAction(actionId) || ActionManager.CanUseActionOnTarget(actionId, gameObject))
+                        if (ActionManager.CanUseActionOnTarget(actionId, gameObject))
                             targetId = gameObject->GetGameObjectId().Id;
                     }
                 }
@@ -73,17 +101,6 @@ internal sealed unsafe class MouseoverActions : IDisposable
         }
 
         return hook!.Original(manager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
-    }
-
-    private bool IsGroundAction(uint actionId)
-    {
-        if (groundActions.TryGetValue(actionId, out var known))
-            return known;
-
-        var sheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
-        var ground = sheet is not null && sheet.TryGetRow(actionId, out var row) && row.TargetArea;
-        groundActions[actionId] = ground;
-        return ground;
     }
 
     public void Dispose()

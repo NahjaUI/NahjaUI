@@ -1501,7 +1501,8 @@ internal sealed class TrackerEditor
         var startY = ImGui.GetCursorScreenPos().Y;
 
         {
-            ImGui.PushID(index);
+            // The id follows the trigger, not its position: when it moves, its header keeps the open or closed state it had.
+            ImGui.PushID(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(rule));
 
             // With several triggers each one is a header that opens and closes like the texts of a trigger (it follows the
             // trigger when it moves), to work on the others without a huge card. Everything of the trigger is inside it.
@@ -1592,6 +1593,21 @@ internal sealed class TrackerEditor
                 else
                     DrawAbilityPart(definition, index, rule, pick);
 
+                // "It is on" can be limited to the last seconds of the status (a refresh window). The next trigger takes over when there is more time left.
+                if (isStatus && rule.Kind == ConditionKind.StatusPresent)
+                {
+                    ImGui.Spacing();
+                    var maxRemaining = (int)MathF.Round(rule.MaxRemaining);
+                    if (ImGui.InputInt("Max seconds left (0 = any)", ref maxRemaining, 1, 5))
+                    {
+                        rule.MaxRemaining = Math.Clamp(maxRemaining, 0, 3600);
+                        plugin.RequestSave();
+                    }
+
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("This trigger only counts while the status has this many seconds left or fewer.\nWith more time left, the next trigger decides. 0 = at any time.");
+                }
+
                 ImGui.Spacing();
                 DrawRuleIcon(rule, iconPick);
 
@@ -1602,6 +1618,7 @@ internal sealed class TrackerEditor
                 rule.Pulse = EffectCheckbox("Pulse", rule.Pulse);
                 rule.Red = EffectCheckbox("Red", rule.Red);
                 rule.Dim = EffectCheckbox("Dimmed", rule.Dim);
+                rule.Desaturate = EffectCheckbox("Washed out", rule.Desaturate);
 
                 // The sweep is for the triggers of an ability: it covers the part of the icon that is still recharging.
                 if (rule.IsAbility)
