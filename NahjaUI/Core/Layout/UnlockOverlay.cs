@@ -453,8 +453,31 @@ internal sealed class UnlockOverlay
             ImGui.TextColored(Theme.TextMuted, "Point at a box to see its name and position. Click it to keep its panel open, drag it to move it, or type exact values. Right click lets go.");
             ImGui.Spacing();
 
-            if (Widgets.PrimaryButton("Done"))
-                layout.UnlockMode = false;
+            if (layout.ConfirmExitPending)
+            {
+                // Something was moved or resized: save it or go back to how everything was when unlock mode started.
+                ImGui.TextColored(Theme.Accent, "Save the changes to the layout?");
+                if (Widgets.PrimaryButton("Save"))
+                {
+                    layout.SaveAndExit();
+                    plugin.RequestSave();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Discard"))
+                {
+                    layout.DiscardAndExit();
+                    plugin.RequestSave();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Keep editing"))
+                    layout.ConfirmExitPending = false;
+            }
+            else if (Widgets.PrimaryButton("Done"))
+            {
+                layout.RequestExitUnlock();
+            }
         }
 
         ImGui.End();

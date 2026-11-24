@@ -53,7 +53,10 @@ internal sealed class ServerInfoBarEntry : IDisposable
                 break;
 
             case MouseClickType.Right:
-                plugin.Layout.UnlockMode = !plugin.Layout.UnlockMode;
+                if (plugin.Layout.UnlockMode)
+                    plugin.Layout.RequestExitUnlock();
+                else
+                    plugin.Layout.UnlockMode = true;
                 break;
         }
     }

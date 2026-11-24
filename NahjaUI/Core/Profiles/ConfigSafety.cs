@@ -44,6 +44,34 @@ internal static class ConfigSafety
         }
     }
 
+    private const int UnlockCopiesToKeep = 5;
+
+    public static string UnlockCopiesDirectory => Path.Combine(Plugin.PluginInterface.GetPluginConfigDirectory(), "backups", "before-unlock");
+
+    /// <summary>A plain copy of the saved settings each time unlock mode starts (the last few are kept), in case a change is regretted after saving it.</summary>
+    public static void BeforeUnlock(Plugin plugin)
+    {
+        try
+        {
+            plugin.SaveNow();
+
+            var file = Plugin.PluginInterface.ConfigFile;
+            if (!file.Exists)
+                return;
+
+            Directory.CreateDirectory(UnlockCopiesDirectory);
+            file.CopyTo(Path.Combine(UnlockCopiesDirectory, $"NahjaUI-before-unlock-{DateTime.Now:yyyyMMdd-HHmmss}.json"), false);
+
+            foreach (var old in new DirectoryInfo(UnlockCopiesDirectory).GetFiles("NahjaUI-before-unlock-*.json").OrderByDescending(f => f.LastWriteTimeUtc).Skip(UnlockCopiesToKeep))
+                old.Delete();
+        }
+        catch (Exception ex)
+        {
+            // A failed copy must never stop unlock mode.
+            Plugin.Log.Warning(ex, "Could not copy the NahjaUI settings before unlock mode.");
+        }
+    }
+
     /// <summary>The copies made before updates, newest first.</summary>
     public static FileInfo[] List()
     {

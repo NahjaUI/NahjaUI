@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
@@ -23,6 +24,9 @@ internal sealed partial class JobGaugeModule
 
     private static uint sacredSightId;
     private static bool sacredSightIdFound;
+
+    private long sacredSightFirstSeen;
+    private bool sacredSightTimeKnown;
 
     public LayoutElement SacredSightElement { get; private set; } = null!;
 
@@ -71,7 +75,7 @@ internal sealed partial class JobGaugeModule
                     {
                         // The stacks are in the parameter of the status; a status that does not report them counts as the full three.
                         stacks = status.Param is >= 1 and <= 3 ? status.Param : 3;
-                        fraction = Math.Clamp(status.RemainingTime / SacredSightSeconds, 0f, 1f);
+                        fraction = TimedFraction(status.RemainingTime, SacredSightSeconds, ref sacredSightFirstSeen, ref sacredSightTimeKnown);
                         break;
                     }
                 }
@@ -79,7 +83,11 @@ internal sealed partial class JobGaugeModule
         }
 
         if (stacks == 0)
+        {
+            sacredSightFirstSeen = 0;
+            sacredSightTimeKnown = false;
             return;
+        }
 
         Cover(sample, () => DrawSacredSight(settings, stacks, fraction), SacredSightElement);
     }

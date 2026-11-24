@@ -1207,7 +1207,7 @@ internal sealed class TrackerEditor
             }
 
             var spacing = definition.Spacing;
-            if (ImGui.InputInt("Space between icons (px)", ref spacing, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Space between icons (px)", ref spacing, 1, 5))
             {
                 definition.Spacing = Math.Clamp(spacing, -1, 128);
                 plugin.RequestSave();
@@ -1598,7 +1598,7 @@ internal sealed class TrackerEditor
                 {
                     ImGui.Spacing();
                     var maxRemaining = (int)MathF.Round(rule.MaxRemaining);
-                    if (ImGui.InputInt("Max seconds left (0 = any)", ref maxRemaining, 1, 5))
+                    if (NahjaUI.Core.Ui.CommitInput.Int("Max seconds left (0 = any)", ref maxRemaining, 1, 5))
                     {
                         rule.MaxRemaining = Math.Clamp(maxRemaining, 0, 3600);
                         plugin.RequestSave();
@@ -2320,14 +2320,14 @@ internal sealed class TrackerEditor
             {
                 // Width and height are chosen apart, so the icon does not have to be square. The +/- buttons move by 2 px (10 px with Ctrl).
                 var width = elementLayout.Width;
-                if (ImGui.InputInt("Icon width (px)", ref width, 1, 10))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Icon width (px)", ref width, 1, 10))
                 {
                     elementLayout.Width = Math.Clamp(width, 1, 512);
                     plugin.RequestSave();
                 }
 
                 var height = elementLayout.Height;
-                if (ImGui.InputInt("Icon height (px)", ref height, 1, 10))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Icon height (px)", ref height, 1, 10))
                 {
                     elementLayout.Height = Math.Clamp(height, 1, 512);
                     plugin.RequestSave();
@@ -2362,14 +2362,14 @@ internal sealed class TrackerEditor
             Widgets.SectionLabel("Apply to every tracker in the group");
 
             var width = group.Definition.IconWidth;
-            if (ImGui.InputInt("Icon width (px)", ref width, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Icon width (px)", ref width, 1, 10))
             {
                 group.Definition.IconWidth = Math.Clamp(width, 1, 512);
                 changed = true;
             }
 
             var height = group.Definition.IconHeight;
-            if (ImGui.InputInt("Icon height (px)", ref height, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Icon height (px)", ref height, 1, 10))
             {
                 group.Definition.IconHeight = Math.Clamp(height, 1, 512);
                 changed = true;
@@ -2645,12 +2645,12 @@ internal sealed class TrackerEditor
         if (EnumCombo($"{label} position", ref anchor, AnchorLabel))
             changed = true;
 
-        if (ImGui.InputInt($"{label} offset X (px)", ref offsetX, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int($"{label} offset X (px)", ref offsetX, 1, 5))
             changed = true;
 
         // Up is plus (the saved value counts downwards, so the sign is turned here).
         var up = -offsetY;
-        if (ImGui.InputInt($"{label} offset Y (px)", ref up, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int($"{label} offset Y (px)", ref up, 1, 5))
         {
             offsetY = -up;
             changed = true;

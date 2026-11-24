@@ -125,9 +125,9 @@ internal static class TrackerPresets
 
         // A short enhancement or a ready action: shown only while it is on you, with its time (and stacks) and a glow.
         // iconAbility: show the icon of this ability instead of the icon of the status (the game's status icon can carry its own stack count).
-        public void Enhancement(TrackerGroupRuntime group, string statusName, bool stacks = false, string? iconAbility = null)
+        public void Enhancement(TrackerGroupRuntime group, string statusName, bool stacks = false, string? iconAbility = null, bool enabled = true)
         {
-            StatusTracker(group, statusName, glow: true, stacks: stacks, iconAbility: iconAbility);
+            StatusTracker(group, statusName, glow: true, stacks: stacks, iconAbility: iconAbility, enabled: enabled);
         }
 
         // An enfeeblement that is yours on the target and must always be up (a DoT, the Bard's poisons): always shown, with its time, red and dimmed while it
@@ -141,9 +141,10 @@ internal static class TrackerPresets
         // A step of a combo: shown only while the game makes it glow (its button changes into it). No text.
         // A step that the game upgrades by level (Rage of Halone into Royal Authority) is ONE tracker: it follows the lowest ability (the game
         // upgrades the button by itself) and is named like the newest one (shownName).
-        public void Step(TrackerGroupRuntime group, string abilityName, string? shownName = null, bool withTime = false)
+        public void Step(TrackerGroupRuntime group, string abilityName, string? shownName = null, bool withTime = false, bool enabled = true)
         {
             var tracker = NewTracker(group, shownName ?? abilityName);
+            tracker.Enabled = enabled;
             var id = FindAction(abilityName, jobId, Pvp);
             if (id == 0)
                 Missing.Add($"ability \"{abilityName}\"");
@@ -444,9 +445,10 @@ internal static class TrackerPresets
         public List<string> Missing { get; } = new();
 
         // An enhancement or a ready action: shown only while the status is on you. Text: its time (and, optionally, its stacks).
-        public void StatusTracker(TrackerGroupRuntime group, string statusName, bool glow = false, bool stacks = false, string? iconAbility = null)
+        public void StatusTracker(TrackerGroupRuntime group, string statusName, bool glow = false, bool stacks = false, string? iconAbility = null, bool enabled = true)
         {
             var tracker = NewTracker(group, statusName);
+            tracker.Enabled = enabled;
             var rule = StatusRule(statusName, glow);
             UseAbilityIcon(rule, iconAbility);
             rule.Texts.Add(TimeText());
@@ -538,10 +540,10 @@ internal static class TrackerPresets
         // The seconds left at which a status of the target that is kept up (a DoT) turns into the full color "refresh it now" look.
         private const float RefreshWindowSeconds = 6f;
 
-        // The time of a status that is not urgent yet: small (9 px), in the center.
+        // The time of a status that is not urgent yet: the same size as the urgent one (12 px), in the center, so the number does not jump in size.
         private static TrackerTextDefinition SmallTimeText() => new()
         {
-            Size = 9,
+            Size = 12,
             Anchor = AnchorPoint.Center,
             OffsetX = 0,
             OffsetY = 0,
@@ -622,6 +624,13 @@ internal static class TrackerPresets
         ["Equilibrium"] = 2681,
         ["Raw Intuition"] = 735,
         ["Bloodwhetting"] = 2678,
+        // The Black Mage Thunders. The game calls both High Thunders "High Thunder" (3871 single target, 3872 area), so the second one has a name of its own here.
+        ["Thunder"] = 161,
+        ["Thunder II"] = 162,
+        ["Thunder III"] = 163,
+        ["Thunder IV"] = 1210,
+        ["High Thunder"] = 3871,
+        ["High Thunder II"] = 3872,
     };
 
     // The status with exactly this name. Several statuses can share a name (PvP, old versions): the lowest id is taken.

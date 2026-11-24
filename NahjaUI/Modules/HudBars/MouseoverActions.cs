@@ -28,12 +28,15 @@ internal sealed unsafe class MouseoverActions : IDisposable
 
     private static readonly Dictionary<uint, bool> GroundActions = new();
 
+    private readonly HashSet<uint> loggedActions = new();
+
     private static bool IsGroundAction(uint actionId)
     {
         if (GroundActions.TryGetValue(actionId, out var known))
             return known;
 
-        var ground = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) && row.TargetArea;
+        // Placed on the ground: the circle that is put where you click (cast type 7), not the ones that rush to a unit or hit around it.
+        var ground = Plugin.DataManager.GetExcelSheet<ActionSheet>().TryGetRow(actionId, out var row) && row.TargetArea && row.CastType == 7;
         GroundActions[actionId] = ground;
         return ground;
     }
@@ -84,8 +87,13 @@ internal sealed unsafe class MouseoverActions : IDisposable
                     if (unit is not null)
                     {
                         var gameObject = (GameObject*)unit.Address;
-                        if (ActionManager.CanUseActionOnTarget(actionId, gameObject))
+                        var canUse = ActionManager.CanUseActionOnTarget(actionId, gameObject);
+                        if (canUse)
                             targetId = gameObject->GetGameObjectId().Id;
+
+                        // Once per action, so a failing one can be seen in the log (/xllog).
+                        if (loggedActions.Add(actionId))
+                            Plugin.Log.Information($"NahjaUI mouseover: action {actionId}, ground {IsGroundAction(actionId)}, usable on the frame's unit {canUse}.");
                     }
                 }
             }

@@ -169,6 +169,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         RegisterThunderheadElement();
         RegisterSacredSightElement();
         RegisterFreeCureElement();
+        RegisterRedMageAuraElement();
 
         PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
         {
@@ -549,6 +550,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             ParadoxElement.IsHidden = true;
             SacredSightElement.IsHidden = true;
             FreeCureElement.IsHidden = true;
+            RedProcAurasElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -617,6 +619,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         RedWhiteElement.IsHidden = !isRedMage;
         RedBlackElement.IsHidden = !isRedMage;
         RedStackElement.IsHidden = !isRedMage;
+        RedProcAurasElement.IsHidden = !isRedMage || !plugin.Configuration.JobGauges.RedMage.ShowProcAuras;
 
         var unlock = plugin.Layout.UnlockMode;
 
@@ -651,6 +654,9 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         // The aura of Freecure (the next Cure II costs no MP) of the White Mage.
         DrawFreeCureAura(plugin.Configuration.JobGauges.WhiteMageAura, player, previewJob, unlock);
+
+        // The auras of Verfire Ready and Verstone Ready of the Red Mage.
+        DrawRedMageProcAuras(plugin.Configuration.JobGauges.RedMage, player, previewJob, unlock, isRedMage);
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)
@@ -713,7 +719,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         {
             var gauge = snapshot.RedMage ?? (previewJob == RedMageJobId || (unlock && isRedMage) ? RedMageSample : null);
             if (gauge is not null)
-                Cover(snapshot.RedMage is null, () => DrawRedMage(redMage, gauge), RedWhiteElement, RedBlackElement, RedStackElement);
+                Cover(snapshot.RedMage is null, () => DrawRedMage(redMage, gauge, snapshot.RedMage is null || unlock ? 100 : player?.Level ?? 100), RedWhiteElement, RedBlackElement, RedStackElement);
         }
 
         DrawExtraGauges(snapshot, player, previewJob, unlock);
@@ -880,22 +886,62 @@ internal sealed partial class JobGaugeModule : IDisposable
         }
     }
 
-    private void DrawRedMage(RedMageGaugeSettings settings, RedMageGaugeSnapshot gauge)
+    // When one mana is this far ahead of the other, the gauge is unbalanced (the crystal of the game's gauge changes color and the lesser mana is harder to
+    // build). The job guide gives no number; 30 is the value known from the game.
+    private const int RedMageImbalanceGap = 30;
+
+    // The mana the melee combo needs of each color, by level: Riposte 20, plus Zwerchhau 15 (from 35), plus Redoublement 15 (from 50).
+    private static int RedMageComboMana(int level) => level >= 50 ? 50 : level >= 35 ? 35 : 20;
+
+    private void DrawRedMage(RedMageGaugeSettings settings, RedMageGaugeSnapshot gauge, int level)
     {
         var drawList = ImGui.GetBackgroundDrawList();
         var white = Math.Clamp((int)gauge.WhiteMana, 0, 100);
         var black = Math.Clamp((int)gauge.BlackMana, 0, 100);
-        var frame = settings.FrameWhenReady && white >= 50 && black >= 50;
+        var threshold = RedMageComboMana(level);
 
-        DrawMana(drawList, settings, RedWhiteElement, white, settings.WhiteColor, frame, settings.Text);
-        DrawMana(drawList, settings, RedBlackElement, black, settings.BlackColor, frame, settings.SeparateBlackText ? settings.BlackText : settings.Text);
+        // The combo can be used (both mana at the level's amount): the bars glow inside. Balanced: both in the ready color; unbalanced: only the
+        // bar that is ahead, white on the white one and blue on the black one.
+        Vector4? whiteGlow = null;
+        Vector4? blackGlow = null;
+        if (settings.FrameWhenReady && white >= threshold && black >= threshold)
+        {
+            if (white - black >= RedMageImbalanceGap)
+                whiteGlow = settings.WhiteGlowColor;
+            else if (black - white >= RedMageImbalanceGap)
+                blackGlow = settings.BlackGlowColor;
+            else
+            {
+                whiteGlow = settings.ReadyFrameColor;
+                blackGlow = settings.ReadyFrameColor;
+            }
+        }
 
-        if (settings.ShowStacks)
+        DrawMana(drawList, settings, RedWhiteElement, white, settings.WhiteColor, threshold, whiteGlow, settings.Text);
+        DrawMana(drawList, settings, RedBlackElement, black, settings.BlackColor, threshold, blackGlow, settings.SeparateBlackText ? settings.BlackText : settings.Text);
+
+        // The Mana Stacks come with the trait of level 68.
+        if (settings.ShowStacks && level >= 68)
             DrawStacks(drawList, settings, Math.Min((int)gauge.ManaStacks, 3));
     }
 
+    // A soft glow inside a bar: lines along the border that fade toward the middle.
+    private static void DrawInnerGlow(ImDrawListPtr drawList, Vector2 pos, Vector2 end, float rounding, Vector4 color)
+    {
+        var depth = (int)Math.Clamp(MathF.Round((end.Y - pos.Y) * 0.45f), 2f, 7f);
+        drawList.PushClipRect(pos, end, true);
+        for (var i = 0; i < depth; i++)
+        {
+            var t = 1f - i / (float)depth;
+            var layer = new Vector4(color.X, color.Y, color.Z, Math.Clamp(color.W * t * t, 0f, 1f));
+            drawList.AddRect(pos + new Vector2(i, i), end - new Vector2(i, i), ImGui.GetColorU32(layer), MathF.Max(0f, rounding - i), ImDrawFlags.None, 1f);
+        }
+
+        drawList.PopClipRect();
+    }
+
     // One mana bar: rounded, filled from the left, optional mark at 50, optional number.
-    private void DrawMana(ImDrawListPtr drawList, RedMageGaugeSettings settings, LayoutElement element, int value, Vector4 color, bool frame, FrameTextSettings text)
+    private void DrawMana(ImDrawListPtr drawList, RedMageGaugeSettings settings, LayoutElement element, int value, Vector4 color, int threshold, Vector4? glow, FrameTextSettings text)
     {
         if (!LayoutManager.IsShownNow(element))
             return;
@@ -921,12 +967,15 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         if (settings.ShowThreshold)
         {
-            var x = pos.X + MathF.Round(size.X / 2f);
+            var x = pos.X + MathF.Round(size.X * threshold / 100f);
             drawList.AddLine(new Vector2(x, pos.Y), new Vector2(x, end.Y), ImGui.GetColorU32(settings.ThresholdColor), thickness);
         }
 
-        // The ready frame is the border painted in its color.
-        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(frame ? settings.ReadyFrameColor : settings.BorderColor), rounding, ImDrawFlags.None, thickness, frame);
+        // The combo can be used: the glow is inside the bar, under the border and the number.
+        if (glow is { } glowColor)
+            DrawInnerGlow(drawList, pos, end, rounding, glowColor);
+
+        BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness, false);
 
         if (settings.ShowNumbers)
         {

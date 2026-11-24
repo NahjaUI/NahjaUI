@@ -252,7 +252,7 @@ internal static class JobSetups
             foreach (var info in job.Spellbook ? Array.Empty<ActionInfo>() : GameNames.AbilitiesOfJob(job.Id, 100))
             {
                 var group = RecastGroup(info.Id);
-                if (info.Id == GameNames.SprintId || builder.TrackedActions.Contains(info.Id) || (group >= 0 && trackedGroups.Contains(group)))
+                if (info.Id == GameNames.SprintId || NeverTracked.Contains(info.Name) || builder.TrackedActions.Contains(info.Id) || (group >= 0 && trackedGroups.Contains(group)))
                     continue;
 
                 builder.Cd(cooldowns, info.Name, new[] { info.Name }, charges: Math.Max(info.MaxCharges, (int)ActionManager.GetMaxCharges(info.Id, 100)) > 1);
@@ -1358,10 +1358,15 @@ internal static class JobSetups
         // each other, so they are all in this one tracker (newest first; the icon is the one of the Thunder that is on).
         // Flare Star and the Polyglot spells depend on the gauge.
         b.Enfeeblement(row, "High Thunder", "High Thunder II", "Thunder III", "Thunder IV", "Thunder II", "Thunder");
-        b.Enhancement(row, "Firestarter");
-        b.Enhancement(row, "Thunderhead");
-        b.Step(row, "Paradox");
+        // Firestarter, Thunderhead and Paradox have an aura of their own (see the Black Mage gauge), so their trackers are made switched off: whoever
+        // turns the auras off can switch the trackers on.
+        b.Enhancement(row, "Firestarter", enabled: false);
+        b.Enhancement(row, "Thunderhead", enabled: false);
+        b.Step(row, "Paradox", enabled: false);
     }
+
+    // Abilities that are never installed as a tracker, not even by the safety net that adds every ability with a cooldown.
+    private static readonly HashSet<string> NeverTracked = new(StringComparer.OrdinalIgnoreCase) { "Transpose" };
 
     private static void BlackMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {

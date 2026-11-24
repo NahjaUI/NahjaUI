@@ -389,7 +389,7 @@ internal sealed class NamePlateEditor
     private int Number(string label, int current, int min, int max, int step, int fastStep)
     {
         var value = current;
-        if (ImGui.InputInt(label, ref value, step, fastStep))
+        if (NahjaUI.Core.Ui.CommitInput.Int(label, ref value, step, fastStep))
         {
             value = Math.Clamp(value, min, max);
             plugin.RequestSave();
