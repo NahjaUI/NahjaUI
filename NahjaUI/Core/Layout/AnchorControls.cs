@@ -78,7 +78,7 @@ internal static class AnchorControls
 
         ImGui.SetNextItemWidth(fieldWidth);
         var width = data.Width;
-        if (ImGui.InputInt("Width", ref width, 1, 10) && !data.Locked)
+        if (NahjaUI.Core.Ui.CommitInput.Int("Width", ref width, 1, 10) && !data.Locked)
         {
             data.Width = System.Math.Clamp(width, 1, 4000);
             changed = true;
@@ -88,7 +88,7 @@ internal static class AnchorControls
 
         ImGui.SetNextItemWidth(fieldWidth);
         var height = data.Height;
-        if (ImGui.InputInt("Height", ref height, 1, 10) && !data.Locked)
+        if (NahjaUI.Core.Ui.CommitInput.Int("Height", ref height, 1, 10) && !data.Locked)
         {
             data.Height = System.Math.Clamp(height, 1, 1000);
             changed = true;

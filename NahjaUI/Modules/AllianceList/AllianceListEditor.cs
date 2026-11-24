@@ -49,14 +49,14 @@ internal sealed class AllianceListEditor
             var layout = plugin.AllianceListSystem.AllianceElement.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
@@ -148,7 +148,7 @@ internal sealed class AllianceListEditor
                 }
 
                 var iconOffsetX = settings.JobIconOffsetX;
-                if (ImGui.InputInt("Offset X (px)", ref iconOffsetX, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Offset X (px)", ref iconOffsetX, 1, 5))
                 {
                     settings.JobIconOffsetX = Math.Clamp(iconOffsetX, -500, 500);
                     plugin.RequestSave();
@@ -156,7 +156,7 @@ internal sealed class AllianceListEditor
 
                 // Up is plus (the saved value counts downwards).
                 var iconOffsetY = -settings.JobIconOffsetY;
-                if (ImGui.InputInt("Offset Y (px)", ref iconOffsetY, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Offset Y (px)", ref iconOffsetY, 1, 5))
                 {
                     settings.JobIconOffsetY = -Math.Clamp(iconOffsetY, -500, 500);
                     plugin.RequestSave();
@@ -164,14 +164,14 @@ internal sealed class AllianceListEditor
             }
 
             var raiseWidth = settings.RaiseIconWidthPx;
-            if (ImGui.InputInt("Raise icon width (px)", ref raiseWidth, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Raise icon width (px)", ref raiseWidth, 1, 10))
             {
                 settings.RaiseIconWidthPx = Math.Clamp(raiseWidth, 4, 200);
                 plugin.RequestSave();
             }
 
             var raiseHeight = settings.RaiseIconHeightPx;
-            if (ImGui.InputInt("Raise icon height (px)", ref raiseHeight, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Raise icon height (px)", ref raiseHeight, 1, 10))
             {
                 settings.RaiseIconHeightPx = Math.Clamp(raiseHeight, 4, 200);
                 plugin.RequestSave();
@@ -192,14 +192,14 @@ internal sealed class AllianceListEditor
             }
 
             var raiseOffsetX = settings.RaiseIconOffsetX;
-            if (ImGui.InputInt("Raise icon offset X (px)", ref raiseOffsetX, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Raise icon offset X (px)", ref raiseOffsetX, 1, 5))
             {
                 settings.RaiseIconOffsetX = Math.Clamp(raiseOffsetX, -500, 500);
                 plugin.RequestSave();
             }
 
             var raiseOffsetY = -settings.RaiseIconOffsetY;
-            if (ImGui.InputInt("Raise icon offset Y (px)", ref raiseOffsetY, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Raise icon offset Y (px)", ref raiseOffsetY, 1, 5))
             {
                 settings.RaiseIconOffsetY = -Math.Clamp(raiseOffsetY, -500, 500);
                 plugin.RequestSave();

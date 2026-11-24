@@ -474,6 +474,10 @@ public sealed class Plugin : IDalamudPlugin
 
         if (unlocked)
         {
+            // A copy of the saved settings and of the positions as they are now, to go back if the changes are not wanted.
+            NahjaUI.Core.Profiles.ConfigSafety.BeforeUnlock(this);
+            Layout.TakeUnlockSnapshot();
+
             reopenWindowAfterUnlock = MainWindow.IsOpen;
             reopenMiniBarAfterUnlock = MiniBar.IsOpen;
             reopenSetupAfterUnlock = SetupWindow.IsOpen;
@@ -549,7 +553,11 @@ public sealed class Plugin : IDalamudPlugin
         var argument = args.Trim().ToLowerInvariant();
         if (argument == "unlock")
         {
-            Layout.UnlockMode = !Layout.UnlockMode;
+            if (Layout.UnlockMode)
+                Layout.RequestExitUnlock();
+            else
+                Layout.UnlockMode = true;
+
             return;
         }
 

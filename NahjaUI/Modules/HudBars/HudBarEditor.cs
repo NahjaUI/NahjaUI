@@ -292,14 +292,14 @@ internal sealed class HudBarEditor
             var layout = element.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
@@ -370,7 +370,7 @@ internal sealed class HudBarEditor
                 }
 
                 var iconOffsetX = party.JobIconOffsetX;
-                if (ImGui.InputInt("Offset X (px)", ref iconOffsetX, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Offset X (px)", ref iconOffsetX, 1, 5))
                 {
                     party.JobIconOffsetX = Math.Clamp(iconOffsetX, -500, 500);
                     plugin.RequestSave();
@@ -378,7 +378,7 @@ internal sealed class HudBarEditor
 
                 // Up is plus (the saved value counts downwards).
                 var iconOffsetY = -party.JobIconOffsetY;
-                if (ImGui.InputInt("Offset Y (px)", ref iconOffsetY, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Offset Y (px)", ref iconOffsetY, 1, 5))
                 {
                     party.JobIconOffsetY = -Math.Clamp(iconOffsetY, -500, 500);
                     plugin.RequestSave();
@@ -421,7 +421,7 @@ internal sealed class HudBarEditor
                 }
 
                 var cutsceneOffsetX = party.CutsceneIconOffsetX;
-                if (ImGui.InputInt("Cutscene icon: offset X (px)", ref cutsceneOffsetX, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Cutscene icon: offset X (px)", ref cutsceneOffsetX, 1, 5))
                 {
                     party.CutsceneIconOffsetX = Math.Clamp(cutsceneOffsetX, -500, 500);
                     plugin.RequestSave();
@@ -429,7 +429,7 @@ internal sealed class HudBarEditor
 
                 // Up is plus (the saved value counts downwards).
                 var cutsceneOffsetY = -party.CutsceneIconOffsetY;
-                if (ImGui.InputInt("Cutscene icon: offset Y (px)", ref cutsceneOffsetY, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Cutscene icon: offset Y (px)", ref cutsceneOffsetY, 1, 5))
                 {
                     party.CutsceneIconOffsetY = -Math.Clamp(cutsceneOffsetY, -500, 500);
                     plugin.RequestSave();
@@ -472,7 +472,7 @@ internal sealed class HudBarEditor
                 }
 
                 var leaderOffsetX = party.LeaderIconOffsetX;
-                if (ImGui.InputInt("Leader icon: offset X (px)", ref leaderOffsetX, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Leader icon: offset X (px)", ref leaderOffsetX, 1, 5))
                 {
                     party.LeaderIconOffsetX = Math.Clamp(leaderOffsetX, -500, 500);
                     plugin.RequestSave();
@@ -480,7 +480,7 @@ internal sealed class HudBarEditor
 
                 // Up is plus (the saved value counts downwards).
                 var leaderOffsetY = -party.LeaderIconOffsetY;
-                if (ImGui.InputInt("Leader icon: offset Y (px)", ref leaderOffsetY, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Leader icon: offset Y (px)", ref leaderOffsetY, 1, 5))
                 {
                     party.LeaderIconOffsetY = -Math.Clamp(leaderOffsetY, -500, 500);
                     plugin.RequestSave();
@@ -523,7 +523,7 @@ internal sealed class HudBarEditor
                 }
 
                 var raiseOffsetX = party.RaiseIconOffsetX;
-                if (ImGui.InputInt("Raise icon: offset X (px)", ref raiseOffsetX, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Raise icon: offset X (px)", ref raiseOffsetX, 1, 5))
                 {
                     party.RaiseIconOffsetX = Math.Clamp(raiseOffsetX, -500, 500);
                     plugin.RequestSave();
@@ -531,7 +531,7 @@ internal sealed class HudBarEditor
 
                 // Up is plus (the saved value counts downwards).
                 var raiseOffsetY = -party.RaiseIconOffsetY;
-                if (ImGui.InputInt("Raise icon: offset Y (px)", ref raiseOffsetY, 1, 5))
+                if (NahjaUI.Core.Ui.CommitInput.Int("Raise icon: offset Y (px)", ref raiseOffsetY, 1, 5))
                 {
                     party.RaiseIconOffsetY = -Math.Clamp(raiseOffsetY, -500, 500);
                     plugin.RequestSave();
@@ -551,14 +551,14 @@ internal sealed class HudBarEditor
             }
 
             var mpWidth = party.MpWidthPx;
-            if (ImGui.InputInt("Width (px, 0 = same as the bar)", ref mpWidth, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Width (px, 0 = same as the bar)", ref mpWidth, 1, 10))
             {
                 party.MpWidthPx = Math.Clamp(mpWidth, 0, 500);
                 plugin.RequestSave();
             }
 
             var mpHeight = party.Look.MpHeightPx;
-            if (ImGui.InputInt("Height (px)", ref mpHeight, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Height (px)", ref mpHeight, 1, 10))
             {
                 party.Look.MpHeightPx = Math.Clamp(mpHeight, 1, 1000);
                 plugin.RequestSave();
@@ -579,7 +579,7 @@ internal sealed class HudBarEditor
             }
 
             var offsetX = party.MpOffsetX;
-            if (ImGui.InputInt("Offset X (px)", ref offsetX, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Offset X (px)", ref offsetX, 1, 5))
             {
                 party.MpOffsetX = Math.Clamp(offsetX, -500, 500);
                 plugin.RequestSave();
@@ -587,7 +587,7 @@ internal sealed class HudBarEditor
 
             // Up is plus (the saved value counts downwards, so the sign is turned in the editors).
             var offsetY = -party.MpOffsetY;
-            if (ImGui.InputInt("Offset Y (px)", ref offsetY, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Offset Y (px)", ref offsetY, 1, 5))
             {
                 party.MpOffsetY = -Math.Clamp(offsetY, -500, 500);
                 plugin.RequestSave();
@@ -705,7 +705,7 @@ internal sealed class HudBarEditor
             }
 
             var offsetX = row.OffsetX;
-            if (ImGui.InputInt("Offset X (px)", ref offsetX, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Offset X (px)", ref offsetX, 1, 5))
             {
                 row.OffsetX = Math.Clamp(offsetX, -500, 500);
                 plugin.RequestSave();
@@ -713,7 +713,7 @@ internal sealed class HudBarEditor
 
             // Up is plus (the saved value counts downwards, so the sign is turned in the editors).
             var offsetY = -row.OffsetY;
-            if (ImGui.InputInt("Offset Y (px)", ref offsetY, 1, 5))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Offset Y (px)", ref offsetY, 1, 5))
             {
                 row.OffsetY = -Math.Clamp(offsetY, -500, 500);
                 plugin.RequestSave();
@@ -739,14 +739,14 @@ internal sealed class HudBarEditor
             ImGui.Spacing();
 
             var width = row.IconWidth;
-            if (ImGui.InputInt("Icon width (px)", ref width, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Icon width (px)", ref width, 1, 10))
             {
                 row.IconWidth = Math.Clamp(width, 8, 128);
                 plugin.RequestSave();
             }
 
             var height = row.IconHeight;
-            if (ImGui.InputInt("Icon height (px)", ref height, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Icon height (px)", ref height, 1, 10))
             {
                 row.IconHeight = Math.Clamp(height, 8, 128);
                 plugin.RequestSave();
@@ -1295,14 +1295,14 @@ internal sealed class HudBarEditor
             var boxLayout = plugin.HudBarSystem.MpElement.Layout;
 
             var boxWidth = boxLayout.Width;
-            if (ImGui.InputInt("Width (px)", ref boxWidth, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Width (px)", ref boxWidth, 1, 10))
             {
                 boxLayout.Width = Math.Clamp(boxWidth, 1, 4000);
                 plugin.RequestSave();
             }
 
             var boxHeight = boxLayout.Height;
-            if (ImGui.InputInt("Height (px)", ref boxHeight, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Height (px)", ref boxHeight, 1, 10))
             {
                 boxLayout.Height = Math.Clamp(boxHeight, 1, 1000);
                 plugin.RequestSave();
@@ -1479,7 +1479,7 @@ internal sealed class HudBarEditor
         }
 
         var x = time ? row.TimerOffsetX : row.StacksOffsetX;
-        if (ImGui.InputInt($"{name} offset X (px)", ref x, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int($"{name} offset X (px)", ref x, 1, 5))
         {
             if (time) row.TimerOffsetX = x; else row.StacksOffsetX = x;
             changed = true;
@@ -1487,7 +1487,7 @@ internal sealed class HudBarEditor
 
         // Up is plus (the saved value counts downwards, so the sign is turned here).
         var y = -(time ? row.TimerOffsetY : row.StacksOffsetY);
-        if (ImGui.InputInt($"{name} offset Y (px)", ref y, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int($"{name} offset Y (px)", ref y, 1, 5))
         {
             if (time) row.TimerOffsetY = -y; else row.StacksOffsetY = -y;
             changed = true;
@@ -1517,14 +1517,14 @@ internal sealed class HudBarEditor
         }
 
         var x = text.OffsetX;
-        if (ImGui.InputInt("Offset X (px)", ref x, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int("Offset X (px)", ref x, 1, 5))
         {
             text.OffsetX = x;
             changed = true;
         }
 
         var y = -text.OffsetY;
-        if (ImGui.InputInt("Offset Y (px)", ref y, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int("Offset Y (px)", ref y, 1, 5))
         {
             text.OffsetY = -y;
             changed = true;

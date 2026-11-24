@@ -1233,6 +1233,11 @@ internal sealed class GameDataProvider : IDisposable
                 groupActive = actionManager->IsRecastTimerActive(ActionType.Action, id);
             }
 
+            // An ability that stores one charge at this level: the game's own charge count can say "1" long before the recast ends
+            // (Acceleration, whose second charge comes at level 88, reported 1 charge after about half of its recast). The timer decides.
+            if (maxCharges <= 1 && totalForAllCharges > 0f)
+                charges = groupActive && elapsed < totalForAllCharges ? 0 : 1;
+
             var perCharge = totalForAllCharges / maxCharges;
 
             // Seconds until the next charge. It does not depend on the "active" flag: an ability with one charge

@@ -71,14 +71,14 @@ internal sealed class EnmityListEditor
             var layout = plugin.EnmityListSystem.Element.Layout;
 
             var width = layout.Width;
-            if (ImGui.InputInt("Width (px)", ref width, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Width (px)", ref width, 1, 10))
             {
                 layout.Width = Math.Clamp(width, 1, 4000);
                 plugin.RequestSave();
             }
 
             var height = layout.Height;
-            if (ImGui.InputInt("Height (px)", ref height, 1, 10))
+            if (NahjaUI.Core.Ui.CommitInput.Int("Height (px)", ref height, 1, 10))
             {
                 layout.Height = Math.Clamp(height, 1, 1000);
                 plugin.RequestSave();
@@ -229,7 +229,7 @@ internal sealed class EnmityListEditor
     private void Offset(string label, int current, Action<int> apply)
     {
         var value = current;
-        if (ImGui.InputInt(label, ref value, 1, 5))
+        if (NahjaUI.Core.Ui.CommitInput.Int(label, ref value, 1, 5))
         {
             apply(Math.Clamp(value, -500, 500));
             plugin.RequestSave();
@@ -240,7 +240,7 @@ internal sealed class EnmityListEditor
     private void Size(string label, int current, int min, int max, Action<int> apply)
     {
         var value = current;
-        if (ImGui.InputInt(label, ref value, 1, 10))
+        if (NahjaUI.Core.Ui.CommitInput.Int(label, ref value, 1, 10))
         {
             apply(Math.Clamp(value, min, max));
             plugin.RequestSave();

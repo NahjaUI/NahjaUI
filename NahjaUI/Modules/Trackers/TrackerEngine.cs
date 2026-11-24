@@ -1226,7 +1226,8 @@ internal sealed class TrackerEngine
             return TrackerState.Hidden;
 
         // Standard number: the cooldown of the ability (the global cooldown does not count).
-        var remaining = cooldown.IsOnCooldown && !(cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds) ? cooldown.Remaining : 0f;
+        var remaining = (cooldown.IsOnCooldown || cooldown.MaxCharges > 1 && cooldown.Charges < cooldown.MaxCharges)
+            && !(cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds) ? cooldown.Remaining : 0f;
 
         return new TrackerState(true, true, remaining, 0, TrackerPhase.Active, cooldown.Total, cooldown.Charges, cooldown.MaxCharges,
             cooldown.CurrentActionId, cooldown.Highlighted, true, rule);
@@ -1541,7 +1542,9 @@ internal sealed class TrackerEngine
                     return cooldown.MaxCharges > 1 ? cooldown.Charges.ToString() : null;
 
                 // The global cooldown is not a real cooldown.
-                if (!cooldown.IsOnCooldown || (cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds))
+                // With several charges, the time of the charge that is coming back is shown while one is left to use (the game does the same).
+                var recharging = cooldown.MaxCharges > 1 && cooldown.Charges < cooldown.MaxCharges;
+                if (!(cooldown.IsOnCooldown || recharging) || (cooldown.MaxCharges <= 1 && cooldown.Total <= GlobalCooldownSeconds))
                     return null;
 
                 return cooldown.Remaining > 0f ? FormatTime(cooldown.Remaining) : null;

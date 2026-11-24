@@ -470,16 +470,21 @@ public class RedMageGaugeSettings
 {
     public bool Enabled { get; set; } = true;
 
+    /// <summary>The two flame arcs at the sides of the character while Verfire Ready or Verstone Ready is on (see JobGaugeModule.RedMage).</summary>
+    public bool ShowProcAuras { get; set; } = true;
+
+    public float ProcAuraOpacity { get; set; } = 1f;
+
     /// <summary>Write the numbers on the bars.</summary>
     public bool ShowNumbers { get; set; } = true;
 
-    /// <summary>Draw a thin mark at 50 on each bar (the melee combo needs 50 of each).</summary>
+    /// <summary>Draw a thin mark on each bar where the melee combo can be done (20, 35 or 50, by level).</summary>
     public bool ShowThreshold { get; set; } = true;
 
-    /// <summary>Show the Mana Stacks (three pips).</summary>
+    /// <summary>Show the Mana Stacks (three pips), from level 68.</summary>
     public bool ShowStacks { get; set; } = true;
 
-    /// <summary>Frame both bars while each has 50 or more (the melee combo can start).</summary>
+    /// <summary>Glow inside the bars while both have the mana the melee combo needs (the name is from when it was a frame).</summary>
     public bool FrameWhenReady { get; set; } = true;
 
     public int GapPx { get; set; } = 3;
@@ -523,7 +528,14 @@ public class RedMageGaugeSettings
 
     public Vector4 ThresholdColor { get; set; } = new(0f, 0f, 0f, 0.9f);
 
+    /// <summary>The glow inside both bars while the melee combo can be used and the gauge is balanced (it used to be the color of a frame).</summary>
     public Vector4 ReadyFrameColor { get; set; } = NahjaUI.Core.Ui.Theme.Gold;
+
+    /// <summary>The glow inside the White Mana bar while the combo can be used and the White Mana is far ahead.</summary>
+    public Vector4 WhiteGlowColor { get; set; } = new(1f, 1f, 1f, 1f);
+
+    /// <summary>The glow inside the Black Mana bar while the combo can be used and the Black Mana is far ahead.</summary>
+    public Vector4 BlackGlowColor { get; set; } = new(0.35f, 0.58f, 1f, 1f);
 }
 
 /// <summary>

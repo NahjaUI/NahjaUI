@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using Newtonsoft.Json;
 using NahjaUI.Core.Ui;
 
 namespace NahjaUI.Core.Layout;
@@ -102,6 +103,91 @@ internal sealed class LayoutManager
 
     /// <summary>True while the user is moving elements around.</summary>
     public bool UnlockMode { get; set; }
+
+    // The positions and sizes as they were when unlock mode started (as text), to know if something changed and to go back to them.
+    private string? unlockSnapshot;
+
+    /// <summary>True while the unlock bar asks whether to save the changes (the user pressed Done and something had changed).</summary>
+    public bool ConfirmExitPending { get; set; }
+
+    private sealed class LayoutSnapshot
+    {
+        public Dictionary<string, ElementLayout> Layouts { get; set; } = new();
+        public Dictionary<string, Dictionary<uint, ElementLayout>> CommonLayouts { get; set; } = new();
+        public Dictionary<string, Dictionary<uint, ElementLayout>> JobLayouts { get; set; } = new();
+    }
+
+    private string SerializeLayouts()
+        => JsonConvert.SerializeObject(new LayoutSnapshot { Layouts = config.Layouts, CommonLayouts = config.CommonLayouts, JobLayouts = config.JobLayouts });
+
+    /// <summary>Remembers how everything is placed right now. Called when unlock mode starts.</summary>
+    public void TakeUnlockSnapshot()
+    {
+        unlockSnapshot = SerializeLayouts();
+        ConfirmExitPending = false;
+    }
+
+    /// <summary>True when something was moved or resized since unlock mode started.</summary>
+    public bool HasUnsavedChanges => unlockSnapshot is not null && SerializeLayouts() != unlockSnapshot;
+
+    /// <summary>Leaves unlock mode. When something changed, it asks first (see <see cref="ConfirmExitPending"/>).</summary>
+    public void RequestExitUnlock()
+    {
+        if (!UnlockMode)
+            return;
+
+        if (HasUnsavedChanges)
+            ConfirmExitPending = true;
+        else
+            UnlockMode = false;
+    }
+
+    /// <summary>Keeps the changes (the plugin saves them) and leaves unlock mode.</summary>
+    public void SaveAndExit()
+    {
+        unlockSnapshot = null;
+        ConfirmExitPending = false;
+        UnlockMode = false;
+    }
+
+    /// <summary>Puts every position and size back as it was when unlock mode started, and leaves unlock mode.</summary>
+    public void DiscardAndExit()
+    {
+        if (unlockSnapshot is not null)
+        {
+            var saved = JsonConvert.DeserializeObject<LayoutSnapshot>(unlockSnapshot);
+            if (saved is not null)
+            {
+                // The layout objects are changed in place: the elements keep pointing at them.
+                foreach (var (id, layout) in saved.Layouts)
+                {
+                    if (config.Layouts.TryGetValue(id, out var live))
+                    {
+                        live.CopyPositionFrom(layout);
+                        live.Locked = layout.Locked;
+                        live.ShowInCombat = layout.ShowInCombat;
+                        live.ShowWithWeapon = layout.ShowWithWeapon;
+                    }
+                    else
+                    {
+                        config.Layouts[id] = layout;
+                    }
+                }
+
+                config.CommonLayouts.Clear();
+                foreach (var (id, jobs) in saved.CommonLayouts)
+                    config.CommonLayouts[id] = jobs;
+
+                config.JobLayouts.Clear();
+                foreach (var (id, jobs) in saved.JobLayouts)
+                    config.JobLayouts[id] = jobs;
+            }
+        }
+
+        unlockSnapshot = null;
+        ConfirmExitPending = false;
+        UnlockMode = false;
+    }
 
     public string? SelectedId { get; set; }
 

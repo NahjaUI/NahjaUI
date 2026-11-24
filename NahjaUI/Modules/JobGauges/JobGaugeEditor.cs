@@ -62,6 +62,7 @@ internal sealed class JobGaugeEditor
                 break;
             case 35:
                 DrawRedMage(plugin.Configuration.JobGauges.RedMage);
+                DrawRedMageAuras(plugin.Configuration.JobGauges.RedMage);
                 break;
             case 28:
                 DrawScholar(plugin.Configuration.JobGauges.Scholar);
@@ -619,9 +620,9 @@ internal sealed class JobGaugeEditor
             Check("Enabled", settings.Enabled, v => settings.Enabled = v);
             Widgets.EnabledHint();
             Check("Show the number on the bar", settings.ShowNumbers, v => settings.ShowNumbers = v);
-            Check("Show a mark at 50", settings.ShowThreshold, v => settings.ShowThreshold = v);
+            Check("Show a mark where the combo can be done", settings.ShowThreshold, v => settings.ShowThreshold = v);
             Check("Show the Mana Stacks", settings.ShowStacks, v => settings.ShowStacks = v);
-            Check("Frame the bars when both have 50 or more", settings.FrameWhenReady, v => settings.FrameWhenReady = v);
+            Check("Glow the bars when the melee combo can be used", settings.FrameWhenReady, v => settings.FrameWhenReady = v);
 
             ImGui.Spacing();
 
@@ -676,7 +677,9 @@ internal sealed class JobGaugeEditor
             Pick("White Mana color", settings.WhiteColor, false, v => settings.WhiteColor = v, Widgets.Default(settings).WhiteColor);
             Pick("Black Mana color", settings.BlackColor, false, v => settings.BlackColor = v, Widgets.Default(settings).BlackColor);
             Pick("Mana Stack color", settings.StackColor, false, v => settings.StackColor = v, Widgets.Default(settings).StackColor);
-            Pick("Ready frame color", settings.ReadyFrameColor, false, v => settings.ReadyFrameColor = v, Widgets.Default(settings).ReadyFrameColor);
+            Pick("Glow color (balanced)", settings.ReadyFrameColor, false, v => settings.ReadyFrameColor = v, Widgets.Default(settings).ReadyFrameColor);
+            Pick("Glow color (White Mana ahead)", settings.WhiteGlowColor, false, v => settings.WhiteGlowColor = v, Widgets.Default(settings).WhiteGlowColor);
+            Pick("Glow color (Black Mana ahead)", settings.BlackGlowColor, false, v => settings.BlackGlowColor = v, Widgets.Default(settings).BlackGlowColor);
             if (HudBarEditor.BackgroundAndBorder($"bgbd10_{id}", "Background color", "Border color",
                 settings.CustomBackground, settings.BackgroundColor, onBg => settings.CustomBackground = onBg, colBg => settings.BackgroundColor = colBg,
                 settings.CustomBorder, settings.BorderColor, onBd => settings.CustomBorder = onBd, colBd => settings.BorderColor = colBd))
@@ -824,6 +827,32 @@ internal sealed class JobGaugeEditor
             if (ImGui.SliderFloat("Freecure opacity##whmf", ref freeCureOpacity, 0.1f, 1f))
             {
                 settings.FreeCureAuraOpacity = freeCureOpacity;
+                plugin.RequestSave();
+            }
+        });
+    }
+
+    // The auras of Verfire Ready and Verstone Ready of the Red Mage: on or off, with a size and an opacity.
+    private void DrawRedMageAuras(RedMageGaugeSettings settings)
+    {
+        Widgets.Card("##card_gauge_rdm_auras", 6, () =>
+        {
+            Widgets.SectionLabel("Red Mage (Verfire Ready and Verstone Ready auras)");
+
+            var show = settings.ShowProcAuras;
+            if (ImGui.Checkbox("Show the Verfire and Verstone auras##rdma", ref show))
+            {
+                settings.ShowProcAuras = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Verfire and Verstone auras (the box holds both arcs)", plugin.JobGaugeSystem.RedProcAurasElement.Layout);
+
+            var opacity = settings.ProcAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##rdma", ref opacity, 0.1f, 1f))
+            {
+                settings.ProcAuraOpacity = opacity;
                 plugin.RequestSave();
             }
         });
@@ -1038,14 +1067,14 @@ internal sealed class JobGaugeEditor
     private void SizeControls(string rowName, ElementLayout layout)
     {
         var width = layout.Width;
-        if (ImGui.InputInt($"{rowName} width (px)", ref width, 1, 10))
+        if (NahjaUI.Core.Ui.CommitInput.Int($"{rowName} width (px)", ref width, 1, 10))
         {
             layout.Width = Math.Clamp(width, 1, 4000);
             plugin.RequestSave();
         }
 
         var height = layout.Height;
-        if (ImGui.InputInt($"{rowName} height (px)", ref height, 1, 10))
+        if (NahjaUI.Core.Ui.CommitInput.Int($"{rowName} height (px)", ref height, 1, 10))
         {
             layout.Height = Math.Clamp(height, 1, 1000);
             plugin.RequestSave();

@@ -24,7 +24,7 @@ internal static class OffsetField
     public static bool Draw(string label, ref float offset, bool invert)
     {
         var value = ToField(invert ? -offset : offset);
-        if (!ImGui.InputInt(label, ref value, 1, 5))
+        if (!NahjaUI.Core.Ui.CommitInput.Int(label, ref value, 1, 5))
             return false;
 
         var saved = FromField(value);

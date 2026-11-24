@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using NahjaUI.Core.Layout;
@@ -23,6 +24,26 @@ internal sealed partial class JobGaugeModule
     private const float FreeCureSeconds = 15f;
 
     public LayoutElement FreeCureElement { get; private set; } = null!;
+
+    private long freeCureFirstSeen;
+    private bool freeCureTimeKnown;
+
+    // The fraction of time left of an aura that works as a timer. A status that has just appeared can report no time for a moment (the game sends
+    // it a little later): during the first two seconds that counts as full, so the aura does not flash desaturated before the time arrives.
+    private static float TimedFraction(float remaining, float total, ref long firstSeen, ref bool timeKnown)
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (firstSeen == 0)
+            firstSeen = now;
+
+        if (remaining > 0f)
+        {
+            timeKnown = true;
+            return Math.Clamp(remaining / total, 0f, 1f);
+        }
+
+        return !timeKnown && Stopwatch.GetElapsedTime(firstSeen, now).TotalSeconds < 2.0 ? 1f : 0f;
+    }
 
     private void RegisterFreeCureElement()
     {
@@ -62,14 +83,18 @@ internal sealed partial class JobGaugeModule
             {
                 if (status.Id == FreeCureStatusId)
                 {
-                    fraction = Math.Clamp(status.RemainingTime / FreeCureSeconds, 0f, 1f);
+                    fraction = TimedFraction(status.RemainingTime, FreeCureSeconds, ref freeCureFirstSeen, ref freeCureTimeKnown);
                     found = true;
                     break;
                 }
             }
 
             if (!found)
+            {
+                freeCureFirstSeen = 0;
+                freeCureTimeKnown = false;
                 return;
+            }
         }
 
         Cover(sample, () => DrawFreeCure(settings, fraction), FreeCureElement);
