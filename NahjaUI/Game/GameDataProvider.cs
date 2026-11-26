@@ -622,7 +622,7 @@ internal sealed class GameDataProvider : IDisposable
             41 => BuildViper(),
             23 => BuildBard(),
             31 => BuildMachinist(),
-            38 => BuildDancer(),
+            38 => BuildDancer(player, Plugin.Condition[ConditionFlag.InCombat] || (Plugin.TargetManager.Target is { } enemy && ReachCheck.IsEnemy(enemy.EntityId))),
             25 or 7 => BuildBlackMage(player),    // Thaumaturge has the same gauge, with only what it has learned so far
             27 => BuildSummoner(),
             42 => BuildPictomancer(),
@@ -768,30 +768,86 @@ internal sealed class GameDataProvider : IDisposable
         };
     }
 
-    private static GaugePartSnapshot[] BuildDancer()
+    // The Dancer: the Standard Finish bar (60 seconds), the four colours of the dance (yellow, green, blue, red: always the same four, in and out of the dance)
+    // and the Fan Dance feathers. The colours are the ones of the steps of the game: Emboite red, Entrechat blue, Jete green, Pirouette yellow.
+    private const int DancerRed = 3;
+    private const int DancerBlue = 2;
+    private const int DancerGreen = 1;
+    private const int DancerYellow = 0;
+    private static uint standardFinishId, silkenSymmetryId, silkenFlowId, flourishingSymmetryId, flourishingFlowId, cascadeId, windmillId;
+    private static bool dancerIdsFound;
+
+    // engaged: in combat or with an enemy targeted. The bar of Standard Finish only pulses in red then; out of combat, empty, it is just an empty bar.
+    private static GaugePartSnapshot[] BuildDancer(UnitSnapshot player, bool engaged)
     {
         var gauge = Plugin.JobGauges.Get<DNCGauge>();
 
-        GaugePartSnapshot first;
+        if (!dancerIdsFound)
+        {
+            standardFinishId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Standard Finish");
+            silkenSymmetryId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Silken Symmetry");
+            silkenFlowId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Silken Flow");
+            flourishingSymmetryId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Flourishing Symmetry");
+            flourishingFlowId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Flourishing Flow");
+            cascadeId = NahjaUI.Modules.Trackers.TrackerPresets.FindAction("Cascade", 38);
+            windmillId = NahjaUI.Modules.Trackers.TrackerPresets.FindAction("Windmill", 38);
+            dancerIdsFound = true;
+        }
+
+        // The buffs of the player: Standard Finish (its time) and the procs that light the green and the yellow pip (the ones that Flourish gives work the same).
+        var finish = 0f;
+        var symmetry = false;
+        var flow = false;
+        foreach (var status in player.Statuses)
+        {
+            if (standardFinishId != 0 && status.Id == standardFinishId)
+                finish = Math.Max(status.RemainingTime, 0f);
+            else if ((silkenSymmetryId != 0 && status.Id == silkenSymmetryId) || (flourishingSymmetryId != 0 && status.Id == flourishingSymmetryId))
+                symmetry = true;
+            else if ((silkenFlowId != 0 && status.Id == silkenFlowId) || (flourishingFlowId != 0 && status.Id == flourishingFlowId))
+                flow = true;
+        }
+
+        // Lit: what can be done now (the step of the dance, or the buttons that can be pressed). Dim: the step after it in the dance. The rest is off.
+        var highlights = 0;
+        var dim = 0;
+
         if (gauge.IsDancing)
         {
-            // The steps still to do, each in its own colour (the colours 1 to 4 of the row: Emboite, Entrechat, Jete, Pirouette).
+            // The step to do is lit and the next one is shown at 25 %: Emboite red, Entrechat blue, Jete green, Pirouette yellow. When the steps are done every pip is off.
             var steps = gauge.Steps;
-            var slots = new int[4];
-            for (var i = 0; i < 4; i++)
-            {
-                var step = (long)steps[i] - 15999L + 1L;
-                slots[i] = i >= gauge.CompletedSteps && step is >= 1 and <= 4 ? (int)step : -1;
-            }
-
-            first = Slots("feathers", slots);
+            var next = (int)gauge.CompletedSteps;
+            highlights = next >= 0 && next < 4 ? StepBit((long)steps[next]) : 0;
+            dim = next >= -1 && next + 1 < 4 ? StepBit((long)steps[next + 1]) : 0;
         }
         else
         {
-            first = Pips("feathers", gauge.Feathers, 4);
+            // Out of the dance, the buttons of the combo that can be pressed. The procs change the button: Silken Symmetry turns Cascade / Windmill into Reverse Cascade /
+            // Bloodshower, and Silken Flow turns Fountain / Bladeshower into Fountainfall / Rising Windmill.
+            var combo = BuildCombo();
+            var comboOn = combo.Timer > 0f && ((cascadeId != 0 && combo.Action == cascadeId) || (windmillId != 0 && combo.Action == windmillId));
+            if (!comboOn && !symmetry) highlights |= 1 << DancerRed;
+            if (comboOn && !flow) highlights |= 1 << DancerBlue;
+            if (symmetry) highlights |= 1 << DancerGreen;
+            if (flow) highlights |= 1 << DancerYellow;
         }
 
-        return new[] { first, Bar("esprit", gauge.Esprit, 100f, gauge.Esprit.ToString()) };
+        var slots = new[] { DancerYellow, DancerGreen, DancerBlue, DancerRed };
+        return new[]
+        {
+            new GaugePartSnapshot("standard", GaugePartKind.Bar, finish, 60f, 0f, finish > 0f ? ((int)MathF.Ceiling(finish)).ToString() : null, 0, null, 0, finish <= 0f && engaged),
+            new GaugePartSnapshot("steps", GaugePartKind.Slots, 0f, 4, 0f, null, 0, slots, highlights, false, dim),
+            Pips("feathers", gauge.Feathers, 4),
+            Bar("esprit", gauge.Esprit, 100f, gauge.Esprit.ToString())
+        };
+    }
+
+    // The bit of the colour of a step of the dance (0 when the value is not a step: the dance has fewer steps).
+    private static int StepBit(long raw)
+    {
+        var step = raw - 15999L + 1L;
+        var colour = step switch { 1 => DancerRed, 2 => DancerBlue, 3 => DancerGreen, 4 => DancerYellow, _ => -1 };
+        return colour >= 0 ? 1 << colour : 0;
     }
 
     private static GaugePartSnapshot[] BuildBlackMage(UnitSnapshot player)
@@ -850,6 +906,8 @@ internal sealed class GameDataProvider : IDisposable
         [(23, "soulvoice")] = "Apex Arrow",
         [(31, "heat")] = "Hypercharge",
         [(31, "battery")] = "Rook Autoturret",
+        [(38, "standard")] = "Standard Step",
+        [(38, "steps")] = "Standard Step",
         [(38, "feathers")] = "Fan Dance",
         [(38, "esprit")] = "Saber Dance",
         [(27, "aetherflow")] = "Energy Drain",

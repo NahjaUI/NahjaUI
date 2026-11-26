@@ -330,7 +330,10 @@ internal sealed class HudBarModule : IDisposable
         MpElement.IsHidden = inPvp || (player is not null && !mpOn);
         MpPvpElement.IsHidden = !inPvp;
 
-        if (hpOn)
+        // While you are dead the bar of your own HP is not drawn (it would only be an empty black bar in the middle of the screen). Unlock mode and the previews still show it.
+        var dead = player is not null && (player.IsDead || player.Hp == 0);
+
+        if (hpOn && (preview || !dead))
             DrawUnit(frames.Player, PlayerElement, snapshot.Player, SamplePlayer, true, preview);
 
         // (The box of PvP is also drawn while it is selected in the Layout page, so it can be placed outside PvP.)

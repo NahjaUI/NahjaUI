@@ -79,6 +79,12 @@ internal sealed class JobGaugeEditor
 
                 DrawBlackMageAura(plugin.Configuration.JobGauges.BlackMage);
                 break;
+            case 38:
+                if (ExtraGauges.ByJob.TryGetValue(38, out var dancer))
+                    DrawExtra(dancer);
+
+                DrawDancerAuras(plugin.Configuration.JobGauges.Dancer);
+                break;
             case 21:
                 DrawBarGauge("Warrior", "war", plugin.Configuration.JobGauges.Warrior, plugin.JobGaugeSystem.WarriorElement, "Beast Gauge", extra: () => DrawWarriorBeastExtras(plugin.Configuration.JobGauges.Warrior));
                 DrawWarriorExtras(plugin.Configuration.JobGauges.Warrior);
@@ -853,6 +859,54 @@ internal sealed class JobGaugeEditor
             if (ImGui.SliderFloat("Aura opacity##rdma", ref opacity, 0.1f, 1f))
             {
                 settings.ProcAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
+        });
+    }
+
+    // The auras of Threefold Fan Dance and Fourfold Fan Dance of the Dancer: on or off, each with a size and an opacity. They have no timer.
+    private void DrawDancerAuras(DancerAuraSettings settings)
+    {
+        Widgets.Card("##card_gauge_dnc_threefold", 6, () =>
+        {
+            Widgets.SectionLabel("Dancer (Threefold Fan Dance)");
+
+            var show = settings.ShowThreefoldAura;
+            if (ImGui.Checkbox("Show the Fan Dance III auras##dnct", ref show))
+            {
+                settings.ShowThreefoldAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Fan Dance III auras (the box holds both arcs)", plugin.JobGaugeSystem.ThreefoldElement.Layout);
+
+            var opacity = settings.ThreefoldAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##dnct", ref opacity, 0.1f, 1f))
+            {
+                settings.ThreefoldAuraOpacity = opacity;
+                plugin.RequestSave();
+            }
+        });
+
+        Widgets.Card("##card_gauge_dnc_fourfold", 6, () =>
+        {
+            Widgets.SectionLabel("Dancer (Fourfold Fan Dance)");
+
+            var show = settings.ShowFourfoldAura;
+            if (ImGui.Checkbox("Show the Fan Dance IV aura##dncf", ref show))
+            {
+                settings.ShowFourfoldAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Fan Dance IV aura", plugin.JobGaugeSystem.FourfoldElement.Layout);
+
+            var opacity = settings.FourfoldAuraOpacity;
+            if (ImGui.SliderFloat("Aura opacity##dncf", ref opacity, 0.1f, 1f))
+            {
+                settings.FourfoldAuraOpacity = opacity;
                 plugin.RequestSave();
             }
         });

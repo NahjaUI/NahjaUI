@@ -526,7 +526,13 @@ internal sealed class PartyListModule : IDisposable
                 raiseMin = new Vector2(MathF.Round(raiseMin.X), MathF.Round(raiseMin.Y));
                 var raiseTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(raiseIconId)).GetWrapOrEmpty();
 
-                drawList.AddImage(raiseTexture.Handle, raiseMin, raiseMin + new Vector2(side, side), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
+                // Like the icons of the trackers: the empty margins of the game's icon are cut so the art fills the box, and the corners are rounded
+                // with the same rounding as the rest of the interface (never more than half of the side).
+                var raiseMargins = IconMargins.Get(raiseIconId);
+                var (raiseUv0, raiseUv1) = TrackerEngine.IconUv(new Vector2(side, side), 1f, raiseMargins.Left, raiseMargins.Top, raiseMargins.Right, raiseMargins.Bottom);
+                var raiseRounding = MathF.Min(MathF.Round(GlobalColors.Current.Rounding * scale), side / 2f);
+
+                drawList.AddImageRounded(raiseTexture.Handle, raiseMin, raiseMin + new Vector2(side, side), raiseUv0, raiseUv1, 0xFFFFFFFFu, raiseRounding, ImDrawFlags.RoundCornersAll);
             }
 
             fadeMark = DrawListFade.Mark(drawList);

@@ -135,8 +135,11 @@ internal enum GaugePartKind
 /// One row of a generic job gauge (the melee, physical ranged and caster jobs). Id is the row of the job's definition; the job decides every frame
 /// how the row is drawn (Kind), so a row can change shape (the Reaper's Shroud becomes the Lemure Shroud while enshrouded).
 /// Variant is the index of the colour in the row's list of colours. Text is written over the row.
+/// Highlights (slots): one bit per slot, a slot with its bit on is lit; Dim: a slot with its bit on is shown at 25 % (the next one to light); the others are off
+/// (only the background). Alert (bars): the bar pulses in red
+/// (the buff it follows is missing).
 /// </summary>
-internal sealed record GaugePartSnapshot(string Id, GaugePartKind Kind, float Value, float Max, float Partial = 0f, string? Text = null, int Variant = 0, int[]? SlotColors = null);
+internal sealed record GaugePartSnapshot(string Id, GaugePartKind Kind, float Value, float Max, float Partial = 0f, string? Text = null, int Variant = 0, int[]? SlotColors = null, int Highlights = 0, bool Alert = false, int Dim = 0);
 
 /// <summary>The gauge of one of the jobs that use the generic gauge: its rows, in the order of the job's definition.</summary>
 /// <summary>The global cooldown: whether it is running, how long it has run and how long it lasts (seconds).</summary>

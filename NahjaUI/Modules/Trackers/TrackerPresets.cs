@@ -209,6 +209,14 @@ internal static class TrackerPresets
             AddUpkeepRules(tracker, TrackerUnit.Player, statusNames);
         }
 
+        // The same, made switched off or on (enabled false: the tracker is there but off, for a job whose gauge already follows the status).
+        public void Upkeep(TrackerGroupRuntime group, bool enabled, params string[] statusNames)
+        {
+            var tracker = NewTracker(group, statusNames[0]);
+            AddUpkeepRules(tracker, TrackerUnit.Player, statusNames);
+            tracker.Enabled = enabled;
+        }
+
         // One name: a single rule that is always shown. Several names: one rule for each while it is on (the icon is the one of the status
         // that is there), and a last one that is red while none of them is on, with the icon of the newest.
         private void AddUpkeepRules(TrackerDefinition tracker, TrackerUnit unit, string[] statusNames)

@@ -57,7 +57,7 @@ internal static class JobSetups
     private static readonly Dictionary<string, Job> Jobs = new()
     {
         ["Paladin"] = new Job(19, "PLD", p => new[] { p.JobGaugeSystem.PaladinElement }, PaladinRotation, PaladinCooldowns, PaladinDefensives, Stance: "Iron Will"),
-        ["Warrior"] = new Job(21, "WAR", p => new[] { p.JobGaugeSystem.WarriorElement }, WarriorRotation, WarriorCooldowns, WarriorDefensives, Stance: "Defiance"),
+        ["Warrior"] = new Job(21, "WAR", p => new[] { p.JobGaugeSystem.WarriorReleaseElement, p.JobGaugeSystem.WarriorTempestElement, p.JobGaugeSystem.WarriorElement, p.JobGaugeSystem.WarriorComboElement }, WarriorRotation, WarriorCooldowns, WarriorDefensives, Stance: "Defiance"),
         ["Dark Knight"] = new Job(32, "DRK", p => new[] { p.JobGaugeSystem.DarksideElement, p.JobGaugeSystem.DarkBloodElement }, DarkKnightRotation, DarkKnightCooldowns, DarkKnightDefensives, MpBar: true, Moves: new[] { new Move("Shadowstride", true) }, Stance: "Grit"),
         ["Gunbreaker"] = new Job(37, "GNB", p => new[] { p.JobGaugeSystem.GunbreakerElement }, GunbreakerRotation, GunbreakerCooldowns, GunbreakerDefensives, Moves: new[] { new Move("Trajectory", true) }, Stance: "Royal Guard"),
         ["White Mage"] = new Job(24, "WHM", p => new[] { p.JobGaugeSystem.BloodLilyElement, p.JobGaugeSystem.LilyElement }, WhiteMageRotation, WhiteMageCooldowns, WhiteMageDefensives, Moves: new[] { new Move("Aetherial Shift") }),
@@ -240,7 +240,17 @@ internal static class JobSetups
 
                     var stores = known.Any(info => info.Name == move.Name && (info.MaxCharges > 1 || ActionManager.GetMaxCharges(info.Id, 100) > 1));
                     builder.Cd(general, move.Name, new[] { move.Name }, move.Effect is null ? null : new[] { move.Effect }, charges: move.Charges || stores, glow: false, showWhenReady: move.ShowWhenReady);
-                    PutInJobOrder(engine, general, job.Id);
+
+                    // The cooldown of Peloton goes BEFORE its enhancement (the general one, the same for every job): first what you can press, then what is on you.
+                    var enhancement = move.Name == "Peloton"
+                        ? engine.MembersOf(general).FirstOrDefault(a => a.Definition.Name == "Peloton" && a.Definition.Load.JobIds.Count == 0
+                                                                        && a.Definition.Rules.All(rule => rule.Kind == ConditionKind.StatusPresent))
+                        : null;
+                    var made = engine.Trackers.LastOrDefault(a => a.Definition.GroupId == general.Definition.Id);
+                    if (enhancement is not null && made is not null && made != enhancement)
+                        engine.MoveTrackerIntoGroup(made, general, enhancement, false);
+                    else
+                        PutInJobOrder(engine, general, job.Id);
                 }
             }
 
@@ -691,10 +701,11 @@ internal static class JobSetups
     private static void HealerRole(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The order chosen by the owner: Surecast, Rescue, Swiftcast, Lucid Dreaming.
-        b.Cd(row, "Surecast", new[] { "Surecast" }, new[] { "Surecast" });
-        b.Cd(row, "Rescue", new[] { "Rescue" });
-        b.Cd(row, "Swiftcast", new[] { "Swiftcast" }, new[] { "Swiftcast" });
-        b.Cd(row, "Lucid Dreaming", new[] { "Lucid Dreaming" }, new[] { "Lucid Dreaming" });
+        // None of them lights up: the game does not highlight them for a healer in any case worth showing.
+        b.Cd(row, "Surecast", new[] { "Surecast" }, new[] { "Surecast" }, glow: false);
+        b.Cd(row, "Rescue", new[] { "Rescue" }, glow: false);
+        b.Cd(row, "Swiftcast", new[] { "Swiftcast" }, new[] { "Swiftcast" }, glow: false);
+        b.Cd(row, "Lucid Dreaming", new[] { "Lucid Dreaming" }, new[] { "Lucid Dreaming" }, glow: false);
     }
 
     private static void MeleeRole(TrackerPresets.Builder b, TrackerGroupRuntime row)
@@ -710,20 +721,23 @@ internal static class JobSetups
 
     private static void PhysicalRangedRole(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // The defensive one, then the crowd control (Peloton is in "General", next to Sprint).
-        b.Cd(row, "Second Wind", new[] { "Second Wind" });
-        b.Cd(row, "Foot Graze", new[] { "Foot Graze" });
-        b.Cd(row, "Leg Graze", new[] { "Leg Graze" });
-        b.Cd(row, "Head Graze", new[] { "Head Graze" });
+        // The defensive ones (Arm's Length is shared with the tanks, the melee and the Bard, Machinist and Dancer), then the crowd control
+        // (Peloton is in "General", next to Sprint). None of them lights up.
+        b.Cd(row, "Arm's Length", new[] { "Arm's Length" }, new[] { "Arm's Length" }, glow: false);
+        b.Cd(row, "Second Wind", new[] { "Second Wind" }, glow: false);
+        b.Cd(row, "Foot Graze", new[] { "Foot Graze" }, glow: false);
+        b.Cd(row, "Head Graze", new[] { "Head Graze" }, glow: false);
+        b.Cd(row, "Leg Graze", new[] { "Leg Graze" }, glow: false);
     }
 
     private static void MagicalRangedRole(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The rest from the longest cooldown to the shortest. Addle is an enfeeblement on the enemy: only its cooldown is shown.
-        b.Cd(row, "Surecast", new[] { "Surecast" }, new[] { "Surecast" });
-        b.Cd(row, "Addle", new[] { "Addle" });
-        b.Cd(row, "Lucid Dreaming", new[] { "Lucid Dreaming" }, new[] { "Lucid Dreaming" });
-        b.Cd(row, "Swiftcast", new[] { "Swiftcast" }, new[] { "Swiftcast" });
+        // None of them lights up.
+        b.Cd(row, "Surecast", new[] { "Surecast" }, new[] { "Surecast" }, glow: false);
+        b.Cd(row, "Addle", new[] { "Addle" }, glow: false);
+        b.Cd(row, "Swiftcast", new[] { "Swiftcast" }, new[] { "Swiftcast" }, glow: false);
+        b.Cd(row, "Lucid Dreaming", new[] { "Lucid Dreaming" }, new[] { "Lucid Dreaming" }, glow: false);
     }
 
     // ---- Paladin
@@ -788,15 +802,16 @@ internal static class JobSetups
     {
         // The priority of The Balance guide, highest first: Primal Wrath (do not drop it), Primal Rend and then Primal Ruination (20 s),
         // the combo and, last, Surging Tempest (the upkeep: always shown, red while it is missing).
-        b.Enhancement(row, "Wrathful");
-        b.Enhancement(row, "Primal Rend Ready");
-        b.Enhancement(row, "Primal Ruination Ready");
+        // They are all made switched off: the Warrior gauge already shows everything here (the auras, the combo and Surging Tempest).
+        b.Enhancement(row, "Wrathful", enabled: false);
+        b.Enhancement(row, "Primal Rend Ready", enabled: false);
+        b.Enhancement(row, "Primal Ruination Ready", enabled: false);
 
         // The steps of a combo go in reverse: the last one first.
         foreach (var step in new[] { "Storm's Path", "Maim", "Mythril Tempest" })
-            b.Step(row, step);
+            b.Step(row, step, enabled: false);
 
-        b.Upkeep(row, "Surging Tempest");
+        b.Upkeep(row, false, "Surging Tempest");
     }
 
     private static void WarriorCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
@@ -843,12 +858,13 @@ internal static class JobSetups
 
     private static void DarkKnightCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // The one tied to the Blood gauge first, then the rest from the longest cooldown to the shortest. No abilities light up here (no glow).
+        // Living Shadow and Salted Earth first, then Delirium, then the rest. No abilities light up here (no glow).
+        b.Cd(row, "Living Shadow", new[] { "Living Shadow" }, glow: false);
+        b.Cd(row, "Salted Earth", new[] { "Salted Earth" }, new[] { "Salted Earth" }, glow: false, followUp: "Salt and Darkness");
+
         // The game turns the button of Blood Weapon into Delirium by itself: one ability, and an effect for each version.
         // Its icon is shown while the effect is on, and the effect counts its stacks.
         b.Cd(row, "Delirium", new[] { "Blood Weapon" }, new[] { "Delirium", "Blood Weapon" }, glow: false, effectStacks: true, abilityIcon: true);
-        b.Cd(row, "Living Shadow", new[] { "Living Shadow" }, glow: false);
-        b.Cd(row, "Salted Earth", new[] { "Salted Earth" }, new[] { "Salted Earth" }, glow: false, followUp: "Salt and Darkness");
 
         // Carve and Spit and Abyssal Drain are two buttons that share their cooldown: only the single-target one is tracked
         // (like Upheaval for the Warrior, which has Orogeny as its AoE twin).
@@ -860,17 +876,18 @@ internal static class JobSetups
     {
         b.Cd(row, "Living Dead", new[] { "Living Dead" }, new[] { "Living Dead", "Walking Dead" }, glow: false);
 
-        // It spends MP, but the game does not light it (no spender). Another Dark Knight can put it on you: only the one applied by you counts.
-        b.Cd(row, "The Blackest Night", new[] { "The Blackest Night" }, new[] { "Blackest Night" }, glow: false, effectOnlyMine: true);
-
         // The one that also covers the party. Another Dark Knight can put it on you: only the one applied by you counts.
         b.Cd(row, "Dark Missionary", new[] { "Dark Missionary" }, new[] { "Dark Missionary" }, glow: false, effectOnlyMine: true);
 
-        // The individual ones. The game turns Shadow Wall into Shadowed Vigil by itself: one ability, and an effect for each version.
-        // Another Dark Knight can put Oblation on you: only the one applied by you counts.
+        // The individual ones. Another Dark Knight can put Oblation on you: only the one applied by you counts.
+        b.Cd(row, "Oblation", new[] { "Oblation" }, new[] { "Oblation" }, charges: true, glow: false, effectOnlyMine: true);
+
+        // The game turns Shadow Wall into Shadowed Vigil by itself: one ability, and an effect for each version.
         b.Cd(row, "Shadowed Vigil", new[] { "Shadow Wall" }, new[] { "Shadow Wall", "Shadowed Vigil" }, glow: false);
         b.Cd(row, "Dark Mind", new[] { "Dark Mind" }, new[] { "Dark Mind" }, glow: false);
-        b.Cd(row, "Oblation", new[] { "Oblation" }, new[] { "Oblation" }, charges: true, glow: false, effectOnlyMine: true);
+
+        // It spends MP, but the game does not light it (no spender). Another Dark Knight can put it on you: only the one applied by you counts.
+        b.Cd(row, "The Blackest Night", new[] { "The Blackest Night" }, new[] { "Blackest Night" }, glow: false, effectOnlyMine: true);
     }
 
     // ---- Gunbreaker (the Cartridges are in the gauge)
@@ -891,26 +908,28 @@ internal static class JobSetups
 
     private static void GunbreakerCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Bloodfest", new[] { "Bloodfest" });
-        b.Cd(row, "No Mercy", new[] { "No Mercy" }, new[] { "No Mercy" });
-        b.Cd(row, "Double Down", new[] { "Double Down" });
-        b.Cd(row, "Bow Shock", new[] { "Bow Shock" }, new[] { "Bow Shock" });
+        // The ones that cost Cartridges first (Double Down, Gnashing Fang: the game lights their button only while there are enough), then the rest.
+        // None lights up.
+        b.Cd(row, "Double Down", new[] { "Double Down" }, glow: false, spender: true);
         b.Cd(row, "Gnashing Fang", new[] { "Gnashing Fang" }, charges: true, glow: false, spender: true);
-        b.Cd(row, "Blasting Zone", new[] { "Danger Zone", "Blasting Zone" });
+        b.Cd(row, "Bloodfest", new[] { "Bloodfest" }, glow: false);
+        b.Cd(row, "No Mercy", new[] { "No Mercy" }, new[] { "No Mercy" }, glow: false);
+        b.Cd(row, "Bow Shock", new[] { "Bow Shock" }, glow: false);
+        b.Cd(row, "Blasting Zone", new[] { "Danger Zone", "Blasting Zone" }, glow: false);
     }
 
     private static void GunbreakerDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Superbolide", new[] { "Superbolide" }, new[] { "Superbolide" });
+        b.Cd(row, "Superbolide", new[] { "Superbolide" }, new[] { "Superbolide" }, glow: false);
 
         // The ones that also cover the party.
-        b.Cd(row, "Heart of Light", new[] { "Heart of Light" }, new[] { "Heart of Light" });
-        b.Cd(row, "Aurora", new[] { "Aurora" }, new[] { "Aurora" }, charges: true);
+        b.Cd(row, "Heart of Light", new[] { "Heart of Light" }, new[] { "Heart of Light" }, glow: false);
+        b.Cd(row, "Aurora", new[] { "Aurora" }, new[] { "Aurora" }, charges: true, glow: false);
 
-        // The individual ones.
-        b.Cd(row, "Great Nebula", new[] { "Nebula", "Great Nebula" }, new[] { "Nebula", "Great Nebula" });
-        b.Cd(row, "Camouflage", new[] { "Camouflage" }, new[] { "Camouflage" });
-        b.Cd(row, "Heart of Corundum", new[] { "Heart of Stone", "Heart of Corundum" }, new[] { "Heart of Stone", "Heart of Corundum" });
+        // The individual ones: Heart of Corundum (the one that is always up), then Great Nebula and Camouflage.
+        b.Cd(row, "Heart of Corundum", new[] { "Heart of Stone", "Heart of Corundum" }, new[] { "Heart of Stone", "Heart of Corundum" }, glow: false);
+        b.Cd(row, "Great Nebula", new[] { "Nebula", "Great Nebula" }, new[] { "Nebula", "Great Nebula" }, glow: false);
+        b.Cd(row, "Camouflage", new[] { "Camouflage" }, new[] { "Camouflage" }, glow: false);
     }
 
     // ---- White Mage (Lilies and Blood Lilies are in the gauge)
@@ -927,23 +946,23 @@ internal static class JobSetups
 
     private static void WhiteMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Presence of Mind", new[] { "Presence of Mind" }, new[] { "Presence of Mind" });
-        b.Cd(row, "Thin Air", new[] { "Thin Air" }, new[] { "Thin Air" }, charges: true);
-        b.Cd(row, "Assize", new[] { "Assize" });
+        b.Cd(row, "Presence of Mind", new[] { "Presence of Mind" }, new[] { "Presence of Mind" }, glow: false);
+        b.Cd(row, "Thin Air", new[] { "Thin Air" }, new[] { "Thin Air" }, charges: true, glow: false);
+        b.Cd(row, "Assize", new[] { "Assize" }, glow: false);
     }
 
     private static void WhiteMageDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // The ones that cover the party (Plenary Indulgence gives the status Confession), then Benediction, then the individual ones.
-        b.Cd(row, "Liturgy of the Bell", new[] { "Liturgy of the Bell" }, new[] { "Liturgy of the Bell" }, effectStacks: true, abilityIcon: true);
-        b.Cd(row, "Temperance", new[] { "Temperance" }, new[] { "Temperance" });
-        b.Cd(row, "Asylum", new[] { "Asylum" }, new[] { "Asylum" });
-        b.Cd(row, "Plenary Indulgence", new[] { "Plenary Indulgence" }, new[] { "Confession" });
-        b.Cd(row, "Benediction", new[] { "Benediction" });
+        b.Cd(row, "Liturgy of the Bell", new[] { "Liturgy of the Bell" }, new[] { "Liturgy of the Bell" }, glow: false, effectStacks: true, abilityIcon: true);
+        b.Cd(row, "Temperance", new[] { "Temperance" }, new[] { "Temperance" }, glow: false);
+        b.Cd(row, "Asylum", new[] { "Asylum" }, new[] { "Asylum" }, glow: false);
+        b.Cd(row, "Plenary Indulgence", new[] { "Plenary Indulgence" }, new[] { "Confession" }, glow: false);
+        b.Cd(row, "Benediction", new[] { "Benediction" }, glow: false);
 
-        b.Cd(row, "Aquaveil", new[] { "Aquaveil" }, new[] { "Aquaveil" });
-        b.Cd(row, "Tetragrammaton", new[] { "Tetragrammaton" }, charges: true);
-        b.Cd(row, "Divine Benison", new[] { "Divine Benison" }, new[] { "Divine Benison" }, charges: true);
+        b.Cd(row, "Aquaveil", new[] { "Aquaveil" }, new[] { "Aquaveil" }, glow: false);
+        b.Cd(row, "Tetragrammaton", new[] { "Tetragrammaton" }, charges: true, glow: false);
+        b.Cd(row, "Divine Benison", new[] { "Divine Benison" }, new[] { "Divine Benison" }, charges: true, glow: false);
     }
 
     private static void ScholarRotation(TrackerPresets.Builder b, TrackerGroupRuntime row)
@@ -1316,14 +1335,16 @@ internal static class JobSetups
     {
         // Standard Finish always up, then what the other buttons give, the most important first (Dance of the Dawn, Tillana, Starfall Dance,
         // Last Dance, Finishing Move, the Fan Dances and the ready actions of the combos).
-        b.Upkeep(row, "Standard Finish");
+        // Standard Finish has its bar in the gauge (the first way to follow it), so its tracker is made switched off: whoever turns the bar off can switch it on.
+        b.Upkeep(row, false, "Standard Finish");
         b.Enhancement(row, "Dance of the Dawn Ready");
         b.Enhancement(row, "Flourishing Finish");
         b.Enhancement(row, "Flourishing Starfall");
         b.Enhancement(row, "Last Dance Ready");
         b.Enhancement(row, "Finishing Move Ready");
-        b.Enhancement(row, "Fourfold Fan Dance");
-        b.Enhancement(row, "Threefold Fan Dance");
+        // Fourfold and Threefold Fan Dance have an aura of their own (see the Dancer gauge), so their trackers are made switched off.
+        b.Enhancement(row, "Fourfold Fan Dance", enabled: false);
+        b.Enhancement(row, "Threefold Fan Dance", enabled: false);
         b.Enhancement(row, "Silken Flow");
         b.Enhancement(row, "Silken Symmetry");
         b.Enhancement(row, "Flourishing Flow");
@@ -1332,19 +1353,19 @@ internal static class JobSetups
 
     private static void DancerCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // Flourish gives the Fan Dance ready actions (the Feathers): first. Then from the longest cooldown to the shortest.
-        b.Cd(row, "Flourish", new[] { "Flourish" });
-        b.Cd(row, "Technical Step", new[] { "Technical Step" }, new[] { "Technical Finish" });
-        b.Cd(row, "Devilment", new[] { "Devilment" }, new[] { "Devilment" });
-        b.Cd(row, "Standard Step", new[] { "Standard Step" });
+        // The steps first (Standard, then Technical), then Devilment and Flourish (it gives the Fan Dance ready actions). None lights up.
+        b.Cd(row, "Standard Step", new[] { "Standard Step" }, glow: false);
+        b.Cd(row, "Technical Step", new[] { "Technical Step" }, new[] { "Technical Finish" }, glow: false);
+        b.Cd(row, "Devilment", new[] { "Devilment" }, new[] { "Devilment" }, glow: false);
+        b.Cd(row, "Flourish", new[] { "Flourish" }, glow: false);
     }
 
     private static void DancerDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
         // All of them cover the party: from the longest cooldown to the shortest.
-        b.Cd(row, "Improvisation", new[] { "Improvisation" }, new[] { "Improvisation" });
-        b.Cd(row, "Shield Samba", new[] { "Shield Samba" }, new[] { "Shield Samba" });
-        b.Cd(row, "Curing Waltz", new[] { "Curing Waltz" });
+        b.Cd(row, "Improvisation", new[] { "Improvisation" }, new[] { "Improvisation" }, glow: false);
+        b.Cd(row, "Shield Samba", new[] { "Shield Samba" }, new[] { "Shield Samba" }, glow: false);
+        b.Cd(row, "Curing Waltz", new[] { "Curing Waltz" }, glow: false);
     }
 
     // ================================================================ magical ranged
@@ -1366,20 +1387,22 @@ internal static class JobSetups
     }
 
     // Abilities that are never installed as a tracker, not even by the safety net that adds every ability with a cooldown.
-    private static readonly HashSet<string> NeverTracked = new(StringComparer.OrdinalIgnoreCase) { "Transpose" };
+    // Orogeny shares its cooldown with Upheaval (only Upheaval is tracked), and Damnation and Bloodwhetting are only tracked as defensives.
+    private static readonly HashSet<string> NeverTracked = new(StringComparer.OrdinalIgnoreCase) { "Transpose", "Closed Position", "Orogeny", "Damnation", "Bloodwhetting" };
 
     private static void BlackMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // Amplifier gives Polyglot and Manafont gives MP: first. Then from the longest cooldown to the shortest.
-        b.Cd(row, "Amplifier", new[] { "Amplifier" });
-        b.Cd(row, "Manafont", new[] { "Manafont" });
-        b.Cd(row, "Ley Lines", new[] { "Ley Lines" }, new[] { "Ley Lines" });
-        b.Cd(row, "Triplecast", new[] { "Triplecast" }, new[] { "Triplecast" }, effectStacks: true);
+        // Retrace (the follow-up of Ley Lines) first, then Amplifier (gives Polyglot), Ley Lines, Manafont (gives MP) and Triplecast. None lights up.
+        b.Cd(row, "Retrace", new[] { "Retrace" }, glow: false);
+        b.Cd(row, "Amplifier", new[] { "Amplifier" }, glow: false);
+        b.Cd(row, "Ley Lines", new[] { "Ley Lines" }, new[] { "Ley Lines" }, glow: false);
+        b.Cd(row, "Manafont", new[] { "Manafont" }, glow: false);
+        b.Cd(row, "Triplecast", new[] { "Triplecast" }, new[] { "Triplecast" }, glow: false, effectStacks: true);
     }
 
     private static void BlackMageDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Manaward", new[] { "Manaward" }, new[] { "Manaward" });
+        b.Cd(row, "Manaward", new[] { "Manaward" }, new[] { "Manaward" }, glow: false);
     }
 
     // ---- Summoner
@@ -1422,8 +1445,9 @@ internal static class JobSetups
         b.Enhancement(row, "Prefulgence Ready");
         b.Enhancement(row, "Thorned Flourish");
         b.Enhancement(row, "Magicked Swordplay", stacks: true);
-        b.Enhancement(row, "Verfire Ready");
-        b.Enhancement(row, "Verstone Ready");
+        // Verfire Ready and Verstone Ready have an aura of their own (see the Red Mage gauge), so their trackers are made switched off.
+        b.Enhancement(row, "Verfire Ready", enabled: false);
+        b.Enhancement(row, "Verstone Ready", enabled: false);
 
         foreach (var step in new[] { "Resolution", "Scorch", "Verholy", "Verflare" })
             b.Step(row, step);
@@ -1431,20 +1455,21 @@ internal static class JobSetups
 
     private static void RedMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // Manafication gives mana: first. Then from the longest cooldown to the shortest. Corps-a-corps and Engagement hit, so they stay here.
-        // Displacement shares its charges with Engagement, so one tracker is enough.
+        // The order of the Red Mage that plays it: Embolden, Displacement, Corps-a-corps, Manafication, Acceleration, Contre Sixte, Fleche and Engagement last.
+        // Only Manafication and Engagement light up (the others do not). Displacement shares its charges with Engagement but has its own tracker.
+        b.Cd(row, "Embolden", new[] { "Embolden" }, new[] { "Embolden" }, glow: false);
+        b.Cd(row, "Displacement", new[] { "Displacement" }, charges: true, glow: false);
+        b.Cd(row, "Corps-a-corps", new[] { "Corps-a-corps" }, charges: true, glow: false);
         b.Cd(row, "Manafication", new[] { "Manafication" }, new[] { "Manafication" }, effectStacks: true);
-        b.Cd(row, "Embolden", new[] { "Embolden" }, new[] { "Embolden" });
-        b.Cd(row, "Acceleration", new[] { "Acceleration" }, new[] { "Acceleration" }, charges: true);
-        b.Cd(row, "Corps-a-corps", new[] { "Corps-a-corps" }, charges: true);
+        b.Cd(row, "Acceleration", new[] { "Acceleration" }, new[] { "Acceleration" }, charges: true, glow: false);
+        b.Cd(row, "Contre Sixte", new[] { "Contre Sixte" }, glow: false);
+        b.Cd(row, "Fleche", new[] { "Fleche" }, glow: false);
         b.Cd(row, "Engagement", new[] { "Engagement" }, charges: true);
-        b.Cd(row, "Contre Sixte", new[] { "Contre Sixte" });
-        b.Cd(row, "Fleche", new[] { "Fleche" });
     }
 
     private static void RedMageDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        b.Cd(row, "Magick Barrier", new[] { "Magick Barrier" }, new[] { "Magick Barrier" });
+        b.Cd(row, "Magick Barrier", new[] { "Magick Barrier" }, new[] { "Magick Barrier" }, glow: false);
     }
 
     // ---- Pictomancer (Smudge is in "General")

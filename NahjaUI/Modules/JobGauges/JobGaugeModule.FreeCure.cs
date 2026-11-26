@@ -17,8 +17,8 @@ internal sealed partial class JobGaugeModule
     // The status Freecure of the game.
     private const uint FreeCureStatusId = 155;
 
-    // The width of the arch over its height (the image is 960 x 365).
-    private const float FreeCureAspect = 960f / 365f;
+    // The width of the arch over its height (the image is 960 x 360, like every top aura).
+    private const float FreeCureAspect = 960f / 360f;
 
     // The duration of the status (the time left over this is the part in color).
     private const float FreeCureSeconds = 15f;
@@ -53,9 +53,9 @@ internal sealed partial class JobGaugeModule
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = -190,
-            Width = 240,
-            Height = 92
+            OffsetY = 0,
+            Width = 150,
+            Height = 90
         });
     }
 

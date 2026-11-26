@@ -123,7 +123,7 @@ internal sealed partial class JobGaugeModule
                 }
 
                 default:
-                    DrawExtraSlots(drawList, settings, partDef, pos, size, part.SlotColors ?? Array.Empty<int>(), -1, 0f, 0, part.Text);
+                    DrawExtraSlots(drawList, settings, partDef, pos, size, SlotsShown(part), -1, 0f, 0, part.Text, part.Dim);
                     break;
             }
         }
@@ -138,6 +138,13 @@ internal sealed partial class JobGaugeModule
         var end = pos + size;
 
         drawList.AddRectFilled(pos, end, ImGui.GetColorU32(settings.BackgroundColor), rounding);
+
+        // The buff that the bar follows is missing: the whole bar pulses in red.
+        if (part.Alert)
+        {
+            var pulse = 0.35f + 0.65f * (0.5f + 0.5f * MathF.Sin((float)ImGui.GetTime() * 5f));
+            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(new Vector4(0.85f, 0.12f, 0.12f, pulse)), rounding);
+        }
 
         var fraction = part.Max <= 0f ? 0f : Math.Clamp(part.Value / part.Max, 0f, 1f);
         var fillWidth = MathF.Round(size.X * fraction);
@@ -164,9 +171,25 @@ internal sealed partial class JobGaugeModule
             QueueText(drawList, part.Text, settings.Text, pos, size);
     }
 
+    // The slots of a row of steps: a slot is lit when its bit is in Highlights, at 33 % when it is in Dim, and off (only the background) otherwise.
+    private static int[] SlotsShown(GaugePartSnapshot part)
+    {
+        var colours = part.SlotColors ?? Array.Empty<int>();
+        var shown = new int[colours.Length];
+
+        for (var i = 0; i < colours.Length; i++)
+        {
+            var bit = i < 31 ? 1 << i : 0;
+            shown[i] = (part.Highlights & bit) != 0 || (part.Dim & bit) != 0 ? colours[i] : -1;
+        }
+
+        return shown;
+    }
+
     // Slots side by side. Each slot colour is an index into the row's colours (-1 is an empty slot). In a row of pips the next slot after
     // the full ones (index <filled>) is filled by <partial> from the left, like a small bar.
-    private void DrawExtraSlots(ImDrawListPtr drawList, ExtraGaugeJobSettings settings, GaugePartDef def, Vector2 pos, Vector2 size, int[] slots, int filled, float partial, int partialVariant, string? text)
+    // dim: one bit per slot; the slots with their bit on are drawn at 33 % of their colour (the next one to light up).
+    private void DrawExtraSlots(ImDrawListPtr drawList, ExtraGaugeJobSettings settings, GaugePartDef def, Vector2 pos, Vector2 size, int[] slots, int filled, float partial, int partialVariant, string? text, int dim = 0)
     {
         if (slots.Length == 0)
             return;
@@ -194,7 +217,11 @@ internal sealed partial class JobGaugeModule
 
             if (slots[i] >= 0)
             {
-                BarGradient.Fill(drawList, a, b, ImGui.GetColorU32(settings.ColorOf(def, slots[i])), rounding, ImDrawFlags.None, left, left + total);
+                var colour = settings.ColorOf(def, slots[i]);
+                if (i < 31 && (dim & (1 << i)) != 0)
+                    colour = Theme.WithAlpha(colour, 0.33f);
+
+                BarGradient.Fill(drawList, a, b, ImGui.GetColorU32(colour), rounding, ImDrawFlags.None, left, left + total);
             }
             else if (i == filled && partial > 0f)
             {

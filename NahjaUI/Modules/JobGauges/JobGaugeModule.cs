@@ -39,6 +39,7 @@ internal sealed partial class JobGaugeModule : IDisposable
     private const string NativeRedMageGauge = "JobHudRDM0";
 
     private const uint RedMageJobId = 35;
+    private const uint DancerJobId = 38;
 
     // The game's own Dark Knight gauge.
     private const string NativeDarkKnightGauge = "JobHudDRK0";
@@ -170,6 +171,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         RegisterSacredSightElement();
         RegisterFreeCureElement();
         RegisterRedMageAuraElement();
+        RegisterDancerAuraElements();
 
         PaladinElement = plugin.Layout.Register("gauge.pld.oath", "Paladin Oath Gauge", new ElementLayout
         {
@@ -551,6 +553,8 @@ internal sealed partial class JobGaugeModule : IDisposable
             SacredSightElement.IsHidden = true;
             FreeCureElement.IsHidden = true;
             RedProcAurasElement.IsHidden = true;
+            ThreefoldElement.IsHidden = true;
+            FourfoldElement.IsHidden = true;
             PaladinElement.IsHidden = true;
             DarkBloodElement.IsHidden = true;
             DarksideElement.IsHidden = true;
@@ -621,6 +625,10 @@ internal sealed partial class JobGaugeModule : IDisposable
         RedStackElement.IsHidden = !isRedMage;
         RedProcAurasElement.IsHidden = !isRedMage || !plugin.Configuration.JobGauges.RedMage.ShowProcAuras;
 
+        var isDancerJob = player is null || player.JobId == DancerJobId;
+        ThreefoldElement.IsHidden = !isDancerJob || !plugin.Configuration.JobGauges.Dancer.ShowThreefoldAura;
+        FourfoldElement.IsHidden = !isDancerJob || !plugin.Configuration.JobGauges.Dancer.ShowFourfoldAura;
+
         var unlock = plugin.Layout.UnlockMode;
 
         var whiteMage = plugin.Configuration.JobGauges.WhiteMage;
@@ -657,6 +665,9 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         // The auras of Verfire Ready and Verstone Ready of the Red Mage.
         DrawRedMageProcAuras(plugin.Configuration.JobGauges.RedMage, player, previewJob, unlock, isRedMage);
+
+        // The auras of Threefold Fan Dance and Fourfold Fan Dance of the Dancer.
+        DrawDancerAuras(plugin.Configuration.JobGauges.Dancer, player, previewJob, unlock, isDancerJob);
 
         var paladin = plugin.Configuration.JobGauges.Paladin;
         if (paladin.Enabled)

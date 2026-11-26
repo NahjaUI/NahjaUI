@@ -38,9 +38,9 @@ internal sealed partial class JobGaugeModule
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = 20,
-            Width = 330,
-            Height = 300
+            OffsetY = 120,
+            Width = 300,
+            Height = 180
         });
     }
 

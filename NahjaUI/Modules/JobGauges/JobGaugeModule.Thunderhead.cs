@@ -19,8 +19,8 @@ internal sealed partial class JobGaugeModule
     // The width of the Thunderhead arch over its height (the image is 960 x 360).
     private const float ThunderheadAspect = 960f / 360f;
 
-    // The width of each Paradox spiral over its height (the images are 240 x 720).
-    private const float ParadoxAspect = 240f / 720f;
+    // The width of each Paradox spiral over its height (the images are 360 x 768, like every side aura).
+    private const float ParadoxAspect = 360f / 768f;
 
     private static uint thunderheadId;
     private static uint firestarterId;
@@ -40,8 +40,8 @@ internal sealed partial class JobGaugeModule
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = -190,
-            Width = 240,
+            OffsetY = 0,
+            Width = 150,
             Height = 90
         });
 
@@ -51,20 +51,20 @@ internal sealed partial class JobGaugeModule
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = 20,
-            Width = 380,
-            Height = 270
+            OffsetY = 120,
+            Width = 300,
+            Height = 180
         });
 
-        // Wider than the Firestarter box, so the two auras can be on together without covering each other.
+        // The standard side box, but 360 wide (Firestarter is 300) so that its spirals sit outside Firestarter's and the two do not overlap when both are active.
         ParadoxElement = plugin.Layout.Register("gauge.blm.paradox", "Black Mage Paradox auras", new ElementLayout
         {
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = 20,
-            Width = 520,
-            Height = 300
+            OffsetY = 120,
+            Width = 360,
+            Height = 180
         });
     }
 

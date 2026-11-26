@@ -114,10 +114,16 @@ internal static class ExtraGauges
 
         new(38, "DNC", "Dancer", new GaugePartDef[]
         {
-            new("feathers", "Feathers and steps", 6, new[] { C(0.55f, 0.85f, 0.55f), C(0.90f, 0.35f, 0.30f), C(0.40f, 0.60f, 1f), C(0.45f, 0.85f, 0.50f), C(1f, 0.85f, 0.35f) }, new[] { "Feathers", "Emboite", "Entrechat", "Jete", "Pirouette" }),
+            // The buff to keep up: it pulses in red while Standard Finish is missing.
+            new("standard", "Standard Finish", 6, new[] { C(0.95f, 0.75f, 0.30f) }, new[] { "Standard Finish" }),
+            // The four colours of the steps of the dance (lit: the step to do in the dance, the procs and the combo button that can be pressed outside it; dim: the next step of the dance).
+            new("steps", "Steps and procs", 6, new[] { C(1f, 0.85f, 0.35f), C(0.45f, 0.85f, 0.50f), C(0.40f, 0.60f, 1f), C(0.90f, 0.35f, 0.30f) }, new[] { "Pirouette / Silken Flow", "Jete / Silken Symmetry", "Entrechat / Fountain combo", "Emboite" }),
+            new("feathers", "Feathers", 6, new[] { C(0.55f, 0.85f, 0.55f) }, new[] { "Feathers" }),
             new("esprit", "Esprit", 6, new[] { C(1f, 0.55f, 0.75f) }, new[] { "Esprit" }, Half)
         }, new[] { "JobHudDNC0", "JobHudDNC1" }, new GaugePartSnapshot[]
         {
+            new("standard", GaugePartKind.Bar, 38, 60, Text: "38"),
+            new("steps", GaugePartKind.Slots, 0, 4, SlotColors: new[] { 0, 1, 2, 3 }, Highlights: 1 << 2, Dim: 1 << 1),
             new("feathers", GaugePartKind.Pips, 3, 4),
             new("esprit", GaugePartKind.Bar, 60, 100, Text: "60")
         }),

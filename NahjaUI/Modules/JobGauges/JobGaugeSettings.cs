@@ -34,6 +34,9 @@ public class JobGaugesSettings
     /// <summary>The Sacred Sight aura of the White Mage.</summary>
     public WhiteMageAuraSettings WhiteMageAura { get; set; } = new();
 
+    /// <summary>The Threefold Fan Dance and Fourfold Fan Dance auras of the Dancer (the rest of its gauge is the generic one, see Extra).</summary>
+    public DancerAuraSettings Dancer { get; set; } = new();
+
     /// <summary>The jobs that use the generic gauge (melee, physical ranged and casters), by abbreviation.</summary>
     public ExtraGaugesSettings Extra { get; set; } = new();
 
@@ -224,6 +227,19 @@ public class WhiteMageAuraSettings
     public bool ShowFreeCureAura { get; set; } = true;
 
     public float FreeCureAuraOpacity { get; set; } = 1f;
+}
+
+/// <summary>The auras of the Dancer procs. Threefold Fan Dance (Fan Dance III) is two green feather arcs at both sides of the character; Fourfold Fan Dance (Fan Dance IV) is one blue arch of wings above it. No timer.</summary>
+[Serializable]
+public class DancerAuraSettings
+{
+    public bool ShowThreefoldAura { get; set; } = true;
+
+    public float ThreefoldAuraOpacity { get; set; } = 1f;
+
+    public bool ShowFourfoldAura { get; set; } = true;
+
+    public float FourfoldAuraOpacity { get; set; } = 1f;
 }
 
 /// <summary>The aura of the Black Mage: an arch above the character while Thunderhead is on (the next Thunder is instant). It has no timer: it is there or it is not.</summary>

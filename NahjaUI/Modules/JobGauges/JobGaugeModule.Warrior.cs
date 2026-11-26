@@ -30,8 +30,8 @@ internal sealed partial class JobGaugeModule
     private const float RuinationMaxSeconds = 20f;
     private const float WrathMaxSeconds = 30f;
 
-    // The width of an aura image over its height (the images are 360 x 540).
-    private const float AuraAspect = 360f / 540f;
+    // The width of an aura image over its height (the images are 360 x 768).
+    private const float AuraAspect = 360f / 768f;
 
     // ComboLength is 0 while there is no combo of the Warrior going on; ComboDone is how many of its steps have been used.
     // AuraSeconds is the time left of the proc whose aura is shown (Primal Ruination Ready if both are on).
@@ -77,11 +77,12 @@ internal sealed partial class JobGaugeModule
         "sacred_sight_3_stacks_left_gray", "sacred_sight_3_stacks_right_gray",
         "free_cure", "free_cure_gray",
         "verfire_left", "verfire_right", "verstone_left", "verstone_right",
-        "verfire_left_gray", "verfire_right_gray", "verstone_left_gray", "verstone_right_gray"
+        "verfire_left_gray", "verfire_right_gray", "verstone_left_gray", "verstone_right_gray",
+        "fan_dance_3_left", "fan_dance_3_right", "fan_dance_4"
     };
 
-    // The width of the Primal Wrath arch over its height (the image is 640 x 240).
-    private const float WrathAspect = 640f / 240f;
+    // The width of the Primal Wrath arch over its height (the image is 960 x 360).
+    private const float WrathAspect = 960f / 360f;
 
     private readonly ConcurrentDictionary<string, IDalamudTextureWrap> auraTextures = new();
     private bool disposed;
@@ -134,9 +135,9 @@ internal sealed partial class JobGaugeModule
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = -190,
-            Width = 320,
-            Height = 120
+            OffsetY = 0,
+            Width = 150,
+            Height = 90
         });
 
         // The box of the auras holds both wings: one on its left edge, the other on its right edge.
@@ -145,9 +146,9 @@ internal sealed partial class JobGaugeModule
             ScreenAnchor = AnchorPoint.Center,
             SelfAnchor = AnchorPoint.Center,
             OffsetX = 0,
-            OffsetY = 20,
-            Width = 380,
-            Height = 270
+            OffsetY = 120,
+            Width = 300,
+            Height = 180
         });
     }
 
@@ -400,7 +401,7 @@ internal sealed partial class JobGaugeModule
     }
 
     // The arch of Primal Wrath (Wrathful, 30 seconds): one crescent above the character while the status is on. It keeps the proportions of its image inside
-    // the box. Like the wings it works as a timer: the desaturated arch is always there and the gray spreads from the center to both sides over the one in color.
+    // the box. Like the wings it works as a timer: the desaturated arch is always there and the part in color is cut from the right edge toward the left (like Freecure).
     private void DrawWrathAura(ImDrawListPtr drawList, WarriorGaugeSettings settings, WarriorState state)
     {
         if (!settings.ShowWrathAura || !state.WrathReady || !LayoutManager.IsShownNow(WarriorWrathElement)
@@ -419,18 +420,14 @@ internal sealed partial class JobGaugeModule
         var max = min + new Vector2(width, height);
         drawList.AddImage(gray.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
 
-        // The gray grows from the center to both sides: the color stays in the two outer parts, and each one shrinks toward its end as the time runs out.
+        // The part in color is what is left of the time: it is cut from the right edge toward the left as the seconds run out.
         var left = Math.Clamp(state.WrathSeconds / WrathMaxSeconds, 0f, 1f);
-        var half = width / 2f * left;
-        var centerX = min.X + width / 2f;
-        foreach (var (from, to) in new[] { (min.X, MathF.Round(min.X + half)), (MathF.Round(max.X - half), max.X) })
-        {
-            if (to - from < 1f)
-                continue;
+        var colorEnd = MathF.Round(min.X + width * left);
+        if (colorEnd - min.X < 1f)
+            return;
 
-            drawList.PushClipRect(new Vector2(from, min.Y), new Vector2(to, max.Y), true);
-            drawList.AddImage(texture.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
-            drawList.PopClipRect();
-        }
+        drawList.PushClipRect(min, new Vector2(colorEnd, max.Y), true);
+        drawList.AddImage(texture.Handle, min, max, new Vector2(0f, 0f), new Vector2(1f, 1f), tint);
+        drawList.PopClipRect();
     }
 }
