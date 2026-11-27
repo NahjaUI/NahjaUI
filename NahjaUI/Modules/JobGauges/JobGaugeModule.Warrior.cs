@@ -75,7 +75,7 @@ internal sealed partial class JobGaugeModule
         "sacred_sight_3_stacks_left", "sacred_sight_3_stacks_right",
         "sacred_sight_1_stacks_left_gray", "sacred_sight_1_stacks_right_gray", "sacred_sight_2_stacks_left_gray", "sacred_sight_2_stacks_right_gray",
         "sacred_sight_3_stacks_left_gray", "sacred_sight_3_stacks_right_gray",
-        "free_cure", "free_cure_gray",
+        "free_cure", "free_cure_gray", "hawks_eye", "hawks_eye_gray",
         "verfire_left", "verfire_right", "verstone_left", "verstone_right",
         "verfire_left_gray", "verfire_right_gray", "verstone_left_gray", "verstone_right_gray",
         "fan_dance_3_left", "fan_dance_3_right", "fan_dance_4"

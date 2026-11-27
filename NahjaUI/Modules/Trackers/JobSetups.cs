@@ -70,7 +70,7 @@ internal static class JobSetups
         ["Samurai"] = new Job(34, "SAM", p => BottomUp(p.JobGaugeSystem.ElementsOf("SAM")), SamuraiRotation, SamuraiCooldowns, SamuraiDefensives),
         ["Reaper"] = new Job(39, "RPR", p => BottomUp(p.JobGaugeSystem.ElementsOf("RPR")), ReaperRotation, ReaperCooldowns, ReaperDefensives, Moves: new[] { new Move("Hell's Ingress"), new Move("Hell's Egress") }),
         ["Viper"] = new Job(41, "VPR", p => BottomUp(p.JobGaugeSystem.ElementsOf("VPR")), ViperRotation, ViperCooldowns, NoAbilities, Moves: new[] { new Move("Slither", true) }),
-        ["Bard"] = new Job(23, "BRD", p => Pick(p.JobGaugeSystem.ElementsOf("BRD"), 2, 0, 1), BardRotation, BardCooldowns, BardDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("Repelling Shot") }),
+        ["Bard"] = new Job(23, "BRD", p => Pick(p.JobGaugeSystem.ElementsOf("BRD"), 2, 0, 3, 1), BardRotation, BardCooldowns, BardDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("Repelling Shot") }),
         ["Machinist"] = new Job(31, "MCH", p => BottomUp(p.JobGaugeSystem.ElementsOf("MCH")), MachinistRotation, MachinistCooldowns, MachinistDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false) }),
         ["Dancer"] = new Job(38, "DNC", p => BottomUp(p.JobGaugeSystem.ElementsOf("DNC")), DancerRotation, DancerCooldowns, DancerDefensives, Moves: new[] { new Move("Peloton", ShowWhenReady: false), new Move("En Avant", true) }, Stance: "Closed Position"),
         ["Black Mage"] = new Job(25, "BLM", p => BottomUp(p.JobGaugeSystem.ElementsOf("BLM")), BlackMageRotation, BlackMageCooldowns, BlackMageDefensives, Moves: new[] { new Move("Aetherial Manipulation") }),
@@ -1263,13 +1263,14 @@ internal static class JobSetups
 
     private static void BardRotation(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // The two DoTs always up, then what the other buttons give (Blast Arrow, Resonant Arrow, Radiant Encore), then Hawk's Eye.
-        b.Enfeeblement(row, "Stormbite", "Windbite");
-        b.Enfeeblement(row, "Caustic Bite", "Venomous Bite");
+        // The two DoTs and Hawk's Eye are followed by the gauge (two pips) and by an aura, so their trackers are there but switched off. Then what the other
+        // buttons give (Blast Arrow, Resonant Arrow, Radiant Encore).
+        b.Enfeeblement(row, false, "Stormbite", "Windbite");
+        b.Enfeeblement(row, false, "Caustic Bite", "Venomous Bite");
         b.Enhancement(row, "Blast Arrow Ready");
         b.Enhancement(row, "Resonant Arrow Ready");
         b.Enhancement(row, "Radiant Encore Ready");
-        b.Enhancement(row, "Hawk's Eye");
+        b.Enhancement(row, "Hawk's Eye", enabled: false);
     }
 
     private static void BardCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
@@ -1388,7 +1389,7 @@ internal static class JobSetups
 
     // Abilities that are never installed as a tracker, not even by the safety net that adds every ability with a cooldown.
     // Orogeny shares its cooldown with Upheaval (only Upheaval is tracked), and Damnation and Bloodwhetting are only tracked as defensives.
-    private static readonly HashSet<string> NeverTracked = new(StringComparer.OrdinalIgnoreCase) { "Transpose", "Closed Position", "Orogeny", "Damnation", "Bloodwhetting" };
+    private static readonly HashSet<string> NeverTracked = new(StringComparer.OrdinalIgnoreCase) { "Transpose", "Closed Position", "Orogeny", "Damnation", "Bloodwhetting", "Engagement" };
 
     private static void BlackMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
@@ -1455,8 +1456,8 @@ internal static class JobSetups
 
     private static void RedMageCooldowns(TrackerPresets.Builder b, TrackerGroupRuntime row)
     {
-        // The order of the Red Mage that plays it: Embolden, Displacement, Corps-a-corps, Manafication, Acceleration, Contre Sixte, Fleche and Engagement last.
-        // Only Manafication and Engagement light up (the others do not). Displacement shares its charges with Engagement but has its own tracker.
+        // The order of the Red Mage that plays it: Embolden, Displacement, Corps-a-corps, Manafication, Acceleration, Contre Sixte and Fleche.
+        // Only Manafication lights up (the others do not). Engagement is not tracked: it shares its charges with Displacement, so Displacement alone is enough.
         b.Cd(row, "Embolden", new[] { "Embolden" }, new[] { "Embolden" }, glow: false);
         b.Cd(row, "Displacement", new[] { "Displacement" }, charges: true, glow: false);
         b.Cd(row, "Corps-a-corps", new[] { "Corps-a-corps" }, charges: true, glow: false);
@@ -1464,7 +1465,6 @@ internal static class JobSetups
         b.Cd(row, "Acceleration", new[] { "Acceleration" }, new[] { "Acceleration" }, charges: true, glow: false);
         b.Cd(row, "Contre Sixte", new[] { "Contre Sixte" }, glow: false);
         b.Cd(row, "Fleche", new[] { "Fleche" }, glow: false);
-        b.Cd(row, "Engagement", new[] { "Engagement" }, charges: true);
     }
 
     private static void RedMageDefensives(TrackerPresets.Builder b, TrackerGroupRuntime row)

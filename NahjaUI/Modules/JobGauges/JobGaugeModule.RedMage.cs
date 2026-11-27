@@ -30,8 +30,10 @@ internal sealed partial class JobGaugeModule
 
     private long verfireFirstSeen;
     private bool verfireTimeKnown;
+    private float verfireLastRemaining;
     private long verstoneFirstSeen;
     private bool verstoneTimeKnown;
+    private float verstoneLastRemaining;
 
     public LayoutElement RedProcAurasElement { get; private set; } = null!;
 
@@ -78,21 +80,23 @@ internal sealed partial class JobGaugeModule
             foreach (var status in player!.Statuses)
             {
                 if (verfireReadyId != 0 && status.Id == verfireReadyId)
-                    verfire = TimedFraction(status.RemainingTime, RedMageProcSeconds, ref verfireFirstSeen, ref verfireTimeKnown);
+                    verfire = TimedFraction(status.RemainingTime, RedMageProcSeconds, ref verfireFirstSeen, ref verfireTimeKnown, ref verfireLastRemaining);
                 else if (verstoneReadyId != 0 && status.Id == verstoneReadyId)
-                    verstone = TimedFraction(status.RemainingTime, RedMageProcSeconds, ref verstoneFirstSeen, ref verstoneTimeKnown);
+                    verstone = TimedFraction(status.RemainingTime, RedMageProcSeconds, ref verstoneFirstSeen, ref verstoneTimeKnown, ref verstoneLastRemaining);
             }
 
             if (verfire < 0f)
             {
                 verfireFirstSeen = 0;
                 verfireTimeKnown = false;
+                verfireLastRemaining = 0f;
             }
 
             if (verstone < 0f)
             {
                 verstoneFirstSeen = 0;
                 verstoneTimeKnown = false;
+                verstoneLastRemaining = 0f;
             }
 
             if (verfire < 0f && verstone < 0f)

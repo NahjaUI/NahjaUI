@@ -138,6 +138,14 @@ internal static class TrackerPresets
             AddUpkeepRules(tracker, TrackerUnit.Target, statusNames);
         }
 
+        // The same, made switched off or on (enabled false: the tracker is there but off, for a job whose gauge already follows the debuff).
+        public void Enfeeblement(TrackerGroupRuntime group, bool enabled, params string[] statusNames)
+        {
+            var tracker = NewTracker(group, statusNames[0]);
+            AddUpkeepRules(tracker, TrackerUnit.Target, statusNames);
+            tracker.Enabled = enabled;
+        }
+
         // A step of a combo: shown only while the game makes it glow (its button changes into it). No text.
         // A step that the game upgrades by level (Rage of Halone into Royal Authority) is ONE tracker: it follows the lowest ability (the game
         // upgrades the button by itself) and is named like the newest one (shownName).
@@ -199,6 +207,9 @@ internal static class TrackerPresets
                 Red = true,
                 Dim = true,
             });
+
+            // Closed Position needs a dance partner: with nobody in the party there is nothing to warn about.
+            tracker.Load.OnlyInParty = statusName == "Closed Position";
         }
 
         // An enhancement of yours to keep up (Surging Tempest): always shown, with its time; red and dimmed while it is missing.
@@ -602,6 +613,8 @@ internal static class TrackerPresets
     internal static readonly Dictionary<string, uint> ConfirmedStatusIds = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Rampart"] = 1191,
+        // The Bard's proc (30 s): the table has an older status with the same name (id 123) that never shows up.
+        ["Hawk's Eye"] = 3861,
         ["Arm's Length"] = 1209,
         ["Iron Will"] = 79,
         ["Divine Might"] = 2673,

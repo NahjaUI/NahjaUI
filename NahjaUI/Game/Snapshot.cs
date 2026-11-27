@@ -139,7 +139,7 @@ internal enum GaugePartKind
 /// (only the background). Alert (bars): the bar pulses in red
 /// (the buff it follows is missing).
 /// </summary>
-internal sealed record GaugePartSnapshot(string Id, GaugePartKind Kind, float Value, float Max, float Partial = 0f, string? Text = null, int Variant = 0, int[]? SlotColors = null, int Highlights = 0, bool Alert = false, int Dim = 0);
+internal sealed record GaugePartSnapshot(string Id, GaugePartKind Kind, float Value, float Max, float Partial = 0f, string? Text = null, int Variant = 0, int[]? SlotColors = null, int Highlights = 0, bool Alert = false, int Dim = 0, float Value2 = -1f, int Variant2 = 0, bool Alert2 = false, string? Text2 = null, float[]? Marks = null, float Flash = 0f);
 
 /// <summary>The gauge of one of the jobs that use the generic gauge: its rows, in the order of the job's definition.</summary>
 /// <summary>The global cooldown: whether it is running, how long it has run and how long it lasts (seconds).</summary>

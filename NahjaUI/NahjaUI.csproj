@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.6.6.8</Version>
+    <Version>0.6.6.9</Version>
     <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
     <Author>Nahja Stark</Author>
     <Name>NahjaUI</Name>
@@ -63,6 +63,8 @@ Join the testers on Discord: https://nahjaui.github.io/discord</Description>
     <EmbeddedResource Include="Assets\Auras\sacred_sight_3_stacks_right_gray.png" LogicalName="Aura.sacred_sight_3_stacks_right_gray.png" />
     <EmbeddedResource Include="Assets\Auras\free_cure.png" LogicalName="Aura.free_cure.png" />
     <EmbeddedResource Include="Assets\Auras\free_cure_gray.png" LogicalName="Aura.free_cure_gray.png" />
+    <EmbeddedResource Include="Assets\Auras\hawks_eye.png" LogicalName="Aura.hawks_eye.png" />
+    <EmbeddedResource Include="Assets\Auras\hawks_eye_gray.png" LogicalName="Aura.hawks_eye_gray.png" />
     <EmbeddedResource Include="Assets\Auras\verfire_left.png" LogicalName="Aura.verfire_left.png" />
     <EmbeddedResource Include="Assets\Auras\verfire_right.png" LogicalName="Aura.verfire_right.png" />
     <EmbeddedResource Include="Assets\Auras\verstone_left.png" LogicalName="Aura.verstone_left.png" />

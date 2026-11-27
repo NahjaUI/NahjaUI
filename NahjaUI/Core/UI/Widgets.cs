@@ -286,15 +286,25 @@ internal static class Widgets
 
         // The card opens or folds when the button is let go, over the same title where it was pressed (like a button): pressing and then moving
         // away cancels it.
-        if (hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+        if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
-            TakeClick();
-            pressedCard = currentCard;
+            if (hovered)
+            {
+                TakeClick();
+                pressedCard = currentCard;
+            }
+            else if (pressedCard == currentCard)
+            {
+                // A click somewhere else cancels a press that was left over on this title.
+                pressedCard = null;
+            }
         }
 
-        if (pressedCard is not null && ImGui.IsMouseReleased(ImGuiMouseButton.Left))
+        // Only the card that was pressed answers to the release. (Every card drawn before it in the same frame also gets here: if it cleared the
+        // press, the pressed card would never see it, and only the first card of a page could be folded.)
+        if (pressedCard is not null && pressedCard == currentCard && ImGui.IsMouseReleased(ImGuiMouseButton.Left))
         {
-            if (hovered && pressedCard == currentCard)
+            if (hovered)
             {
                 if (!Collapsed.Remove(currentCard))
                     Collapsed.Add(currentCard);

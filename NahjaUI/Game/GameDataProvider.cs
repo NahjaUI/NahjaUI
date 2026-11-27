@@ -149,11 +149,12 @@ internal sealed class GameDataProvider : IDisposable
             localPlayer.StatusFlags.HasFlag(StatusFlags.WeaponOut));
 
         var player = ToUnit(localPlayer);
+        var targetUnit = ToUnit(target);
 
         var snapshot = new GameSnapshot(
             true,
             player,
-            ToUnit(target),
+            targetUnit,
             ToUnit(Plugin.TargetManager.FocusTarget),
             ToUnit(TargetOfTarget(target, localPlayer)),
             BuildParty(),
@@ -175,7 +176,7 @@ internal sealed class GameDataProvider : IDisposable
             BuildScholarGauge(player),
             BuildAstrologianGauge(player),
             BuildSageGauge(player),
-            BuildExtraGauge(player),
+            BuildExtraGauge(player, targetUnit),
             BuildGcd(),
             BuildAlliance());
 
@@ -301,7 +302,7 @@ internal sealed class GameDataProvider : IDisposable
             if (gameObject is null)
                 continue;
 
-            var name = StreamerMode.Name(CleanName(gameObject.Name.ToString()), isPlayer);
+            var name = StreamerMode.Name(CleanName(gameObject.Name.ToString()), isPlayer, gameObject.EntityId);
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
@@ -607,7 +608,7 @@ internal sealed class GameDataProvider : IDisposable
     private static GaugePartSnapshot Slots(string id, params int[] colors)
         => new(id, GaugePartKind.Slots, 0f, colors.Length, 0f, null, 0, colors);
 
-    private ExtraGaugeSnapshot? BuildExtraGauge(UnitSnapshot? player)
+    private ExtraGaugeSnapshot? BuildExtraGauge(UnitSnapshot? player, UnitSnapshot? target)
     {
         if (player is null)
             return null;
@@ -620,7 +621,7 @@ internal sealed class GameDataProvider : IDisposable
             34 => BuildSamurai(),
             39 => BuildReaper(),
             41 => BuildViper(),
-            23 => BuildBard(),
+            23 or 5 => BuildBard(player, target),
             31 => BuildMachinist(),
             38 => BuildDancer(player, Plugin.Condition[ConditionFlag.InCombat] || (Plugin.TargetManager.Target is { } enemy && ReachCheck.IsEnemy(enemy.EntityId))),
             25 or 7 => BuildBlackMage(player),    // Thaumaturge has the same gauge, with only what it has learned so far
@@ -630,11 +631,15 @@ internal sealed class GameDataProvider : IDisposable
         };
 
         // Only the rows the player has unlocked (the Black Mage does this itself).
+        // The Archer (5) uses the rows of the Bard (23): the ones of the job (songs) stay hidden until the Bard learns them.
         if (parts is not null && player.JobId is not (25 or 7))
-            parts = parts.Where(part => !RowUnlockActions.TryGetValue((player.JobId, part.Id), out var action) || GaugeLearned(player, player.JobId, action)).ToArray();
+        {
+            var rowsJob = player.JobId == 5 ? 23u : player.JobId;
+            parts = parts.Where(part => !RowUnlockActions.TryGetValue((rowsJob, part.Id), out var action) || GaugeLearned(player, rowsJob, action)).ToArray();
+        }
 
         // The Thaumaturge (7) uses the gauge of the Black Mage (25).
-        return parts is null ? null : new ExtraGaugeSnapshot(player.JobId == 7 ? 25u : player.JobId, parts);
+        return parts is null ? null : new ExtraGaugeSnapshot(player.JobId == 7 ? 25u : player.JobId == 5 ? 23u : player.JobId, parts);
     }
 
     private static GaugePartSnapshot[] BuildMonk()
@@ -730,8 +735,31 @@ internal sealed class GameDataProvider : IDisposable
         };
     }
 
-    private static GaugePartSnapshot[] BuildBard()
+    // The DoTs of the Bard: the status ids (the old name and the one it upgrades to at level 64), found by name once.
+    private static uint windbiteId, stormbiteId, venomousBiteId, causticBiteId;
+    private static bool bardIdsFound;
+
+    private static GaugePartSnapshot[] BuildBard(UnitSnapshot player, UnitSnapshot? target)
     {
+        if (!bardIdsFound)
+        {
+            windbiteId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Windbite");
+            stormbiteId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Stormbite");
+            venomousBiteId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Venomous Bite");
+            causticBiteId = NahjaUI.Modules.Trackers.TrackerPresets.FindStatus("Caustic Bite");
+            bardIdsFound = true;
+        }
+
+        // The DoTs are the ones of the player on the target. With no enemy targeted the bars are empty and do not warn.
+        var enemy = target is not null && !target.IsDead && (target.IsHostile || ReachCheck.IsEnemy(target.EntityId));
+        var engaged = enemy || Plugin.Condition[ConditionFlag.InCombat];
+
+        // The Archer has no gauge of its own: only the DoT rows (Venomous Bite and Windbite).
+        if (player.JobId != 23)
+        {
+            return new[] { BardDots(player, target, enemy, engaged) };
+        }
+
         var gauge = Plugin.JobGauges.Get<BRDGauge>();
 
         // The names of the enum are the ones of the songs, whatever their numbers are.
@@ -744,12 +772,103 @@ internal sealed class GameDataProvider : IDisposable
         float time = variant == 3 ? 0f : gauge.SongTimer;
         var stacks = variant switch { 0 => 3, 1 => 1, 2 => 4, _ => 3 };
 
-        return new[]
+        // The mark of the song is where to leave it to start the next one: with 3 seconds left in the Minuet and the Ballad, and with about 12 in the Paeon
+        // (the guide of The Balance: 3-2 seconds the first two, 12-10 the Paeon).
+        var leaveMark = variant == 2 ? 12f / 45f : 3f / 45f;
+
+        var parts = new List<GaugePartSnapshot>
         {
-            Bar("song", time, 45000f, time > 0f ? Secs(time) : null, variant),
-            Pips("repertoire", gauge.Repertoire, stacks, 0f, null, Math.Min(variant, 2)),
-            Bar("soulvoice", gauge.SoulVoice, 100f, gauge.SoulVoice.ToString())
+            Bar("song", time, 45000f, time > 0f ? Secs(time) : null, variant) with { Marks = variant == 3 ? Array.Empty<float>() : new[] { leaveMark }, Flash = BalladProcFlash(variant == 1, gauge.Repertoire) }
         };
+
+        // The Repertoire is only kept in the Minuet (Pitch Perfect, up to 3) and the Paeon (up to 4). In the Ballad the proc has no stacks: it gives back
+        // a Bloodletter charge at once, so the row is not shown.
+        if (variant is 0 or 2)
+            parts.Add(Pips("repertoire", gauge.Repertoire, stacks, 0f, null, variant));
+
+        parts.Add(Bar("soulvoice", gauge.SoulVoice, 100f, gauge.SoulVoice.ToString()));
+        parts.Add(BardDots(player, target, enemy, engaged));
+        return parts.ToArray();
+    }
+
+    // The proc of the Repertoire in the Mage's Ballad (takes 7.5 seconds off the recast of Bloodletter / Heartbreak Shot) has no status. It is noticed when the
+    // recast of Bloodletter jumps forward by more than a few seconds between two frames, or when the Repertoire of the gauge goes up. It gives a number from
+    // 1 to 0 for 0.7 seconds, which the bar uses for its white flash. The cooldown trackers read the game every frame, so they need nothing more.
+    private const uint BloodletterId = 110;
+    private const float BalladFlashSeconds = 0.7f;
+    private static float lastBloodletterElapsed = -1f;
+    private static int lastRepertoire;
+    private static long balladProcStamp;
+
+    private static unsafe float BalladProcFlash(bool ballad, int repertoire)
+    {
+        var elapsed = -1f;
+        var manager = ActionManager.Instance();
+        if (manager != null)
+        {
+            var group = manager->GetRecastGroup((int)ActionType.Action, manager->GetAdjustedActionId(BloodletterId));
+            var detail = group >= 0 ? manager->GetRecastGroupDetail(group) : null;
+            if (detail != null && detail->IsActive)
+                elapsed = detail->Elapsed;
+        }
+
+        var jumped = lastBloodletterElapsed >= 0f && elapsed - lastBloodletterElapsed > 5f;
+        if (ballad && (jumped || repertoire > lastRepertoire))
+        {
+            balladProcStamp = Stopwatch.GetTimestamp();
+        }
+
+        lastBloodletterElapsed = elapsed;
+        lastRepertoire = repertoire;
+
+        if (balladProcStamp == 0)
+            return 0f;
+
+        var seconds = (float)Stopwatch.GetElapsedTime(balladProcStamp).TotalSeconds;
+        return seconds < BalladFlashSeconds ? 1f - seconds / BalladFlashSeconds : 0f;
+    }
+
+    // The time left of the player's own DoT on the target (the old name and the one it upgrades to), 0 when it is not there.
+    private static float BardDotRemaining(UnitSnapshot player, UnitSnapshot? target, bool enemy, uint oldId, uint newId)
+    {
+        var remaining = 0f;
+
+        if (enemy && target is not null)
+        {
+            foreach (var status in target.Statuses)
+            {
+                if (status.SourceId == player.EntityId && ((oldId != 0 && status.Id == oldId) || (newId != 0 && status.Id == newId)))
+                    remaining = Math.Max(remaining, status.RemainingTime);
+            }
+        }
+
+        return remaining;
+    }
+
+    // The DoTs of the Bard as one row of two progress bars side by side: Windbite / Stormbite on the left (blue) and Venomous Bite / Caustic Bite on the right
+    // (pink). Iron Jaws refreshes both, so they go together. The right bar only exists once Windbite is learned (level 30 and its class quest); until then
+    // there is only the left one, over the whole row. Each bar holds the time left of its DoT (45 seconds). Colours (see the row's definition): 0 pink,
+    // 1 blue, 2 orange (6 seconds or less: time to refresh). A bar pulses in red when its DoT is missing on an enemy and we are in combat.
+    private const float DotWarningSeconds = 6f;
+
+    private static GaugePartSnapshot BardDots(UnitSnapshot player, UnitSnapshot? target, bool enemy, bool engaged)
+    {
+        var venom = BardDotRemaining(player, target, enemy, venomousBiteId, causticBiteId);
+        var wind = BardDotRemaining(player, target, enemy, windbiteId, stormbiteId);
+        var hasWind = GaugeLearned(player, 23, "Windbite");
+
+        static string? Seconds(float remaining) => remaining > 0f ? ((int)MathF.Ceiling(remaining)).ToString() : null;
+        static int Colour(float remaining, int normal) => remaining > 0f && remaining <= DotWarningSeconds ? 2 : normal;
+
+        var alarm = enemy && engaged;
+
+        // Until Windbite is learned there is only the pink bar (Venomous), over the whole row. Then Windbite goes on the left and Venomous on the right.
+        if (!hasWind)
+            return new GaugePartSnapshot("dots", GaugePartKind.Bar, venom, 45f, 0f, Seconds(venom), Colour(venom, 0), null, 0, alarm && venom <= 0f);
+
+        return new GaugePartSnapshot(
+            "dots", GaugePartKind.Bar, wind, 45f, 0f, Seconds(wind), Colour(wind, 1), null, 0, alarm && wind <= 0f, 0,
+            venom, Colour(venom, 0), alarm && venom <= 0f, Seconds(venom));
     }
 
     private GaugePartSnapshot[] BuildMachinist()
@@ -866,7 +985,8 @@ internal sealed class GameDataProvider : IDisposable
 
         // The other rows only exist once the player can use them: the level is high enough AND the action that gives or spends them is learned
         // (a Thaumaturge has not learned the actions of the Black Mage). A row that is not there is not drawn.
-        if (BlackMageLearned(player, "Umbral Soul"))
+        // Umbral Hearts come from Blizzard IV (level 58): Umbral Soul and Freeze only give them from that level too.
+        if (BlackMageLearned(player, "Blizzard IV"))
             parts.Add(Pips("hearts", gauge.UmbralHearts, 3));
 
         // Polyglot: 1 stack from level 70 (Foul), 2 from level 80 and 3 from level 98. The game counts the Polyglot timer down from 30 seconds while Enochian is on.
@@ -904,6 +1024,7 @@ internal sealed class GameDataProvider : IDisposable
         [(23, "song")] = "Mage's Ballad",
         [(23, "repertoire")] = "Mage's Ballad",
         [(23, "soulvoice")] = "Apex Arrow",
+        [(23, "dots")] = "Venomous Bite",
         [(31, "heat")] = "Hypercharge",
         [(31, "battery")] = "Rook Autoturret",
         [(38, "standard")] = "Standard Step",
@@ -1047,7 +1168,7 @@ internal sealed class GameDataProvider : IDisposable
 
         return new UnitSnapshot(
             chara.EntityId,
-            StreamerMode.Name(CleanName(chara.Name.ToString()), chara.ObjectKind == ObjectKind.Pc),
+            StreamerMode.Name(CleanName(chara.Name.ToString()), chara.ObjectKind == ObjectKind.Pc, chara.EntityId),
             chara.ClassJob.RowId,
             chara.Level,
             chara.CurrentHp,
@@ -1144,7 +1265,7 @@ internal sealed class GameDataProvider : IDisposable
 
         return new UnitSnapshot(
             member.EntityId,
-            StreamerMode.Name(CleanName(member.Name.ToString()), true),
+            StreamerMode.Name(CleanName(member.Name.ToString()), true, member.EntityId),
             member.ClassJob.RowId,
             member.Level,
             member.CurrentHP,
@@ -1296,16 +1417,28 @@ internal sealed class GameDataProvider : IDisposable
             if (maxCharges <= 1 && totalForAllCharges > 0f)
                 charges = groupActive && elapsed < totalForAllCharges ? 0 : 1;
 
-            var perCharge = totalForAllCharges / maxCharges;
+            // The gauge of the group is as long as all the charges the ability can ever have (Bloodletter: 3 charges of 15 seconds = 45), not only the ones
+            // of the current level (2 at level 42). So the time of one charge is the whole gauge over the most charges there are, not over the ones we have now.
+            var gaugeCharges = maxCharges > 1 ? Math.Max(maxCharges, (int)ActionManager.GetMaxCharges(id, 100)) : maxCharges;
+            var perCharge = totalForAllCharges / gaugeCharges;
 
             // Seconds until the next charge. It does not depend on the "active" flag: an ability with one charge
             // spent and one left is still recharging, because its gauge is not full yet.
             var remaining = 0f;
             if (charges < maxCharges && perCharge > 0f && elapsed < totalForAllCharges)
             {
-                remaining = maxCharges > 1
-                    ? perCharge - (elapsed % perCharge)
-                    : MathF.Max(0f, totalForAllCharges - elapsed);
+                if (maxCharges > 1)
+                {
+                    // The next charge is back when the gauge reaches (charges + 1) times the time of one charge. This follows the charges the game says it
+                    // has even when the recast was cut in the middle (the Repertoire of Mage's Ballad takes 7.5 seconds off Heartbreak Shot). The rest of
+                    // the division is the fallback when the two numbers do not agree.
+                    var untilNext = (charges + 1) * perCharge - elapsed;
+                    remaining = untilNext > 0f && untilNext <= perCharge + 0.05f ? untilNext : perCharge - (elapsed % perCharge);
+                }
+                else
+                {
+                    remaining = MathF.Max(0f, totalForAllCharges - elapsed);
+                }
             }
 
             result[requested] = new CooldownSnapshot(
@@ -1453,7 +1586,7 @@ internal sealed class GameDataProvider : IDisposable
 
                 result.Add(new UnitSnapshot(
                     member.EntityId,
-                    StreamerMode.Name(CleanName(member.NameString), true),
+                    StreamerMode.Name(CleanName(member.NameString), true, member.EntityId),
                     member.ClassJobId,
                     member.Level,
                     0u, 0u, 0u, 0u,

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using NahjaUI.Core.Layout;
 
 namespace NahjaUI.Core.Profiles;
 
@@ -107,6 +108,38 @@ internal static class ConfigMigrations
         {
             // One case per version number goes here, converting the settings of that version to the next one.
             config.Version++;
+        }
+
+        MergeBardDotRows(config);
+    }
+
+    // The first version of the Bard DoT rows had two bars ("stormbite" and "causticbite"); they are now one row of two pips ("dots"). The saved
+    // position of the first bar moves to the new row, and whatever was attached to one of the two old rows (the Repertoire row, the progress
+    // bar and, through them, the trackers) is attached to the new row. Without this they hang from a row that no longer exists and disappear.
+    // It does nothing once there is no old row left, so it can run every time.
+    private static void MergeBardDotRows(Configuration config)
+    {
+        const string oldTop = "gauge.brd.stormbite";
+        const string oldBottom = "gauge.brd.causticbite";
+        const string merged = "gauge.brd.dots";
+
+        if (config.Layouts.Remove(oldTop, out var top) && !config.Layouts.ContainsKey(merged))
+            config.Layouts[merged] = top;
+
+        config.Layouts.Remove(oldBottom);
+
+        foreach (var table in new[] { config.JobLayouts, config.CommonLayouts })
+        {
+            if (table.Remove(oldTop, out var jobs) && !table.ContainsKey(merged))
+                table[merged] = jobs;
+
+            table.Remove(oldBottom);
+        }
+
+        foreach (var layout in config.Layouts.Values.Concat(config.JobLayouts.Values.SelectMany(jobs => jobs.Values)).Concat(config.CommonLayouts.Values.SelectMany(jobs => jobs.Values)))
+        {
+            if (layout.AttachTo is oldTop or oldBottom)
+                layout.AttachTo = merged;
         }
     }
 }

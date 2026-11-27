@@ -63,6 +63,9 @@ public class NamePlateStyle
     // The game's icon of a player of your party or alliance who is watching a cutscene (same status the party list shows). It sits on a point of
     // the HP bar, moved by the offsets; saved Y counts downward like the rest. Only plates of party and alliance members use it.
     public bool ShowCutsceneIcon { get; set; } = true;
+
+    // Party plates only: when the game draws nothing at all for a member (no name, no bar), his class icon stays, centered over his head.
+    public bool ShowClassIconAlone { get; set; } = true;
     public int CutsceneIconSizePx { get; set; } = 24;
     public AnchorPoint CutsceneIconBarAnchor { get; set; } = AnchorPoint.Right;
     public AnchorPoint CutsceneIconSelfAnchor { get; set; } = AnchorPoint.Left;

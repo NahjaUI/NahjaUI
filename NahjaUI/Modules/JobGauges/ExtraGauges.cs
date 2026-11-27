@@ -94,12 +94,17 @@ internal static class ExtraGauges
         {
             new("song", "Song", 6, new[] { C(0.95f, 0.85f, 0.35f), C(0.70f, 0.45f, 0.95f), C(1f, 0.55f, 0.30f), C(0.30f, 0.30f, 0.35f) }, new[] { "Wanderer's Minuet", "Mage's Ballad", "Army's Paeon", "No song" }),
             new("repertoire", "Repertoire", 6, new[] { C(0.95f, 0.85f, 0.35f), C(0.70f, 0.45f, 0.95f), C(1f, 0.55f, 0.30f) }, new[] { "Wanderer's Minuet", "Mage's Ballad", "Army's Paeon" }),
-            new("soulvoice", "Soul Voice", 6, new[] { C(0.95f, 0.80f, 0.40f) }, new[] { "Soul Voice" }, new[] { 0.2f, 0.8f })
+            new("soulvoice", "Soul Voice", 6, new[] { C(0.95f, 0.80f, 0.40f) }, new[] { "Soul Voice" }, new[] { 0.2f, 0.8f }),
+            // The two DoTs on the target as two progress bars side by side (Iron Jaws refreshes both): Venomous / Caustic Bite on the left, Windbite / Stormbite on
+            // the right (it only appears once Windbite is learned). They empty as the time runs out (45 seconds); the mark is where to refresh them (6 seconds left),
+            // and below it the bar turns orange. A bar pulses in red when its DoT is missing on an enemy, in combat.
+            new("dots", "DoTs (Venomous / Windbite)", 6, new[] { C(0.90f, 0.30f, 0.80f), C(0.30f, 0.65f, 1f), C(1f, 0.55f, 0.25f) }, new[] { "Caustic Bite / Venomous Bite", "Stormbite / Windbite", "6 seconds or less" }, new[] { 6f / 45f })
         }, new[] { "JobHudBRD0" }, new GaugePartSnapshot[]
         {
             new("song", GaugePartKind.Bar, 30000, 45000, Text: "30"),
             new("repertoire", GaugePartKind.Pips, 2, 3),
-            new("soulvoice", GaugePartKind.Bar, 40, 100, Text: "40")
+            new("soulvoice", GaugePartKind.Bar, 40, 100, Text: "40"),
+            new("dots", GaugePartKind.Bar, 30, 45, Text: "30", Variant: 1, Value2: 5, Variant2: 2, Text2: "5")
         }),
 
         new(31, "MCH", "Machinist", new GaugePartDef[]

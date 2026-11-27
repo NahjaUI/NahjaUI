@@ -59,6 +59,8 @@ internal sealed class NamePlateModule : IDisposable
 
     // The party members who are watching a cutscene this frame (their plates get the cutscene icon).
     private readonly HashSet<uint> cutsceneMembers = new();
+    // The job of every member of the party (entity id -> job id), for the class icon of a plate that the game draws nothing for.
+    private readonly Dictionary<uint, uint> partyJobs = new();
 
     // The key of the made-up plate of the preview: no real object has it, so nothing the game told us is mixed in.
     private const ulong PreviewKey = ulong.MaxValue - 1;
@@ -244,8 +246,10 @@ internal sealed class NamePlateModule : IDisposable
         var plates = snapshot.NamePlates.Where(p => settings.StyleOf(p.Relation).Active).ToList();
 
         cutsceneMembers.Clear();
+        partyJobs.Clear();
         foreach (var member in snapshot.Party)
         {
+            partyJobs[member.EntityId] = member.JobId;
             if (member.Presence == Presence.ViewingCutscene)
                 cutsceneMembers.Add(member.EntityId);
         }
@@ -382,7 +386,9 @@ internal sealed class NamePlateModule : IDisposable
         // The small icon belongs to enemies and players. On friendly battle NPCs (the turn-in NPCs of a FATE, for example) the value
         // the game keeps in that slot is a leftover (sometimes a hostile icon, sometimes a class icon) that the game never shows.
         var hasNameIcon = hasHp && plate.Relation != NamePlateRelation.Friendly;
-        var drawBar = hasHp && (flags & GameDrawsGauge) != 0;
+        // Your own plate has no bar while you are dead (it would only be an empty bar over your body). The made-up plate of the preview keeps it.
+        var ownDead = plate.Relation == NamePlateRelation.Self && !isPreview && plate.MaxHp > 0 && plate.Hp == 0;
+        var drawBar = hasHp && !ownDead && (flags & GameDrawsGauge) != 0;
         var drawName = (flags & GameDrawsName) != 0;
 
         // The target without a HP bar (an NPC, a door...) is marked with chevrons around its name, so its name always shows.
@@ -538,6 +544,24 @@ internal sealed class NamePlateModule : IDisposable
                     var titleX = MathF.Round(blockLeft + (blockWidth - titleSize.X) * anchorFraction.X);
                     face.Draw(drawList, new Vector2(titleX, MathF.Round(titleTop)), title, nameColor, edgeColor);
                 }
+            }
+        }
+
+        // A party member whose name the game does not write: his class icon is always there, centered over the head when the game draws nothing, and
+        // centered over the HP bar when it draws only the bar (below 100 %). When the name shows, the icon next to the name is the class icon, so
+        // this one is not drawn (never twice). It is the icon the game puts next to the name when it has one, else the icon of his job.
+        if (plate.Relation == NamePlateRelation.Party && style.ShowClassIconAlone && !drawName)
+        {
+            var classIconId = nameIconId > 0 ? (uint)nameIconId : partyJobs.TryGetValue(plate.EntityId, out var partyJob) && partyJob != 0 ? 62100u + partyJob : 0u;
+            if (classIconId != 0)
+            {
+                var classSide = MathF.Max(MathF.Round(style.NameIconSizePx * scale), 4f);
+                var classMin = new Vector2(MathF.Round(markerCenterX - classSide / 2f), MathF.Round(markerTop - classSide - MathF.Round(2f * scale)));
+                var classTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(classIconId)).GetWrapOrEmpty();
+                drawList.AddImage(classTexture.Handle, classMin, classMin + new Vector2(classSide, classSide), new Vector2(0f, 0f), new Vector2(1f, 1f), 0xFFFFFFFFu);
+
+                // What goes over the head or the bar (the cutscene icon of a plate with no bar, the big marker) goes above this icon.
+                markerTop = classMin.Y;
             }
         }
 

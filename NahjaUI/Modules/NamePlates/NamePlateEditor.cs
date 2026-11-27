@@ -127,7 +127,7 @@ internal sealed class NamePlateEditor
             ImGui.TextColored(Theme.TextMuted, "The color of the HP is the game's own (set in the game).");
         });
 
-        Widgets.Card("##card_np_name", 25, () =>
+        Widgets.Card("##card_np_name", 26, () =>
         {
             Widgets.SectionLabel("Name");
 
@@ -179,6 +179,9 @@ internal sealed class NamePlateEditor
             // Players of the party: the game's icon of someone who is watching a cutscene.
             if (kind == NamePlateRelation.Party)
             {
+                if (Check("Always show the class icon of a member when the name does not show", settings.ShowClassIconAlone, out var showClassAlone))
+                    settings.ShowClassIconAlone = showClassAlone;
+
                 if (Check("Show an icon when a party member is watching a cutscene", settings.ShowCutsceneIcon, out var showCutscene))
                     settings.ShowCutsceneIcon = showCutscene;
 

@@ -170,6 +170,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         RegisterThunderheadElement();
         RegisterSacredSightElement();
         RegisterFreeCureElement();
+        RegisterHawksEyeElement();
         RegisterRedMageAuraElement();
         RegisterDancerAuraElements();
 
@@ -552,6 +553,7 @@ internal sealed partial class JobGaugeModule : IDisposable
             ParadoxElement.IsHidden = true;
             SacredSightElement.IsHidden = true;
             FreeCureElement.IsHidden = true;
+            HawksEyeElement.IsHidden = true;
             RedProcAurasElement.IsHidden = true;
             ThreefoldElement.IsHidden = true;
             FourfoldElement.IsHidden = true;
@@ -596,6 +598,7 @@ internal sealed partial class JobGaugeModule : IDisposable
         ParadoxElement.IsHidden = !isBlackMage || !blackMageAura.ShowParadoxAura;
         SacredSightElement.IsHidden = !isWhiteMage || !plugin.Configuration.JobGauges.WhiteMageAura.ShowSacredSightAura;
         FreeCureElement.IsHidden = !IsWhiteMageOrConjurer(player) || !plugin.Configuration.JobGauges.WhiteMageAura.ShowFreeCureAura;
+        HawksEyeElement.IsHidden = !IsBardOrArcher(player) || !plugin.Configuration.JobGauges.BardAura.ShowHawksEyeAura;
 
         var isPaladin = player is null || player.JobId == PaladinJobId;
         PaladinElement.IsHidden = !isPaladin;
@@ -662,6 +665,9 @@ internal sealed partial class JobGaugeModule : IDisposable
 
         // The aura of Freecure (the next Cure II costs no MP) of the White Mage.
         DrawFreeCureAura(plugin.Configuration.JobGauges.WhiteMageAura, player, previewJob, unlock);
+
+        // The aura of Hawk's Eye (Straight Shot ready) of the Bard.
+        DrawHawksEyeAura(plugin.Configuration.JobGauges.BardAura, player, previewJob, unlock);
 
         // The auras of Verfire Ready and Verstone Ready of the Red Mage.
         DrawRedMageProcAuras(plugin.Configuration.JobGauges.RedMage, player, previewJob, unlock, isRedMage);

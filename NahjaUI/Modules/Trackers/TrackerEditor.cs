@@ -2518,6 +2518,13 @@ internal sealed class TrackerEditor
             changed = true;
         }
 
+        var onlyInParty = definition.Load.OnlyInParty;
+        if (ImGui.Checkbox("Only with company (party member or chocobo)##only_party", ref onlyInParty))
+        {
+            definition.Load.OnlyInParty = onlyInParty;
+            changed = true;
+        }
+
         ImGui.Spacing();
 
         // Every job ticked is the same as no list at all: it is shown as "every job", never as a list of all of them.

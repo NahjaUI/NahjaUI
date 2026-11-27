@@ -91,7 +91,12 @@ internal sealed class JobGaugeEditor
                 break;
             default:
                 if (ExtraGauges.ByJob.TryGetValue(Entries[shown].JobId, out var extra))
+                {
                     DrawExtra(extra);
+
+                    if (Entries[shown].JobId == 23)
+                        DrawBardAura(plugin.Configuration.JobGauges.BardAura);
+                }
                 else
                 {
                     DrawWhiteMage(plugin.Configuration.JobGauges.WhiteMage);
@@ -833,6 +838,32 @@ internal sealed class JobGaugeEditor
             if (ImGui.SliderFloat("Freecure opacity##whmf", ref freeCureOpacity, 0.1f, 1f))
             {
                 settings.FreeCureAuraOpacity = freeCureOpacity;
+                plugin.RequestSave();
+            }
+        });
+    }
+
+    // The Hawk's Eye aura of the Bard: on or off, with a size and an opacity. The part in color is the time left of the 30 seconds.
+    private void DrawBardAura(BardAuraSettings settings)
+    {
+        Widgets.Card("##card_gauge_brd_hawkseye", 6, () =>
+        {
+            Widgets.SectionLabel("Bard (Hawk's Eye)");
+
+            var show = settings.ShowHawksEyeAura;
+            if (ImGui.Checkbox("Show the Hawk's Eye aura (Straight Shot / Refulgent Arrow ready)##brdh", ref show))
+            {
+                settings.ShowHawksEyeAura = show;
+                plugin.RequestSave();
+            }
+
+            ImGui.Spacing();
+            SizeControls("Hawk's Eye aura", plugin.JobGaugeSystem.HawksEyeElement.Layout);
+
+            var opacity = settings.HawksEyeAuraOpacity;
+            if (ImGui.SliderFloat("Hawk's Eye opacity##brdh", ref opacity, 0.1f, 1f))
+            {
+                settings.HawksEyeAuraOpacity = opacity;
                 plugin.RequestSave();
             }
         });

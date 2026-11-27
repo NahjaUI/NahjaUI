@@ -176,6 +176,9 @@ public class TrackerLoadConditions
 
     /// <summary>PvE only by default.</summary>
     public TrackerPvpMode Where { get; set; } = TrackerPvpMode.PveOnly;
+
+    /// <summary>Loads only while there is someone else in the party or a chocobo companion (a buff that needs a partner, like Closed Position).</summary>
+    public bool OnlyInParty { get; set; }
 }
 
 /// <summary>

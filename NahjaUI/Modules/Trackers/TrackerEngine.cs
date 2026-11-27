@@ -1142,6 +1142,10 @@ internal sealed class TrackerEngine
         if (!IsLoaded(tracker.Load, player, snapshot.Context))
             return TrackerState.Hidden;
 
+        // Some trackers only make sense with company: nobody else in the party and no chocobo companion, nothing to show.
+        if (tracker.Load.OnlyInParty && snapshot.Chocobo is null && !snapshot.Party.Any(member => member.EntityId != player.EntityId))
+            return TrackerState.Hidden;
+
         // The triggers are tried in order; the first one that matches decides. None matching hides the tracker.
         foreach (var rule in tracker.Rules)
         {

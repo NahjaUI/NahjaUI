@@ -34,6 +34,9 @@ public class JobGaugesSettings
     /// <summary>The Sacred Sight aura of the White Mage.</summary>
     public WhiteMageAuraSettings WhiteMageAura { get; set; } = new();
 
+    /// <summary>The Hawk's Eye aura of the Bard (the rest of its gauge is the generic one, see Extra).</summary>
+    public BardAuraSettings BardAura { get; set; } = new();
+
     /// <summary>The Threefold Fan Dance and Fourfold Fan Dance auras of the Dancer (the rest of its gauge is the generic one, see Extra).</summary>
     public DancerAuraSettings Dancer { get; set; } = new();
 
@@ -240,6 +243,15 @@ public class DancerAuraSettings
     public bool ShowFourfoldAura { get; set; } = true;
 
     public float FourfoldAuraOpacity { get; set; } = 1f;
+}
+
+/// <summary>The aura of the Bard: an arch of feathers above the character while Hawk's Eye is on (30 seconds). The part in color is the time left.</summary>
+[Serializable]
+public class BardAuraSettings
+{
+    public bool ShowHawksEyeAura { get; set; } = true;
+
+    public float HawksEyeAuraOpacity { get; set; } = 1f;
 }
 
 /// <summary>The aura of the Black Mage: an arch above the character while Thunderhead is on (the next Thunder is instant). It has no timer: it is there or it is not.</summary>

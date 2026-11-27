@@ -27,6 +27,7 @@ internal sealed partial class JobGaugeModule
 
     private long sacredSightFirstSeen;
     private bool sacredSightTimeKnown;
+    private float sacredSightLastRemaining;
 
     public LayoutElement SacredSightElement { get; private set; } = null!;
 
@@ -75,7 +76,7 @@ internal sealed partial class JobGaugeModule
                     {
                         // The stacks are in the parameter of the status; a status that does not report them counts as the full three.
                         stacks = status.Param is >= 1 and <= 3 ? status.Param : 3;
-                        fraction = TimedFraction(status.RemainingTime, SacredSightSeconds, ref sacredSightFirstSeen, ref sacredSightTimeKnown);
+                        fraction = TimedFraction(status.RemainingTime, SacredSightSeconds, ref sacredSightFirstSeen, ref sacredSightTimeKnown, ref sacredSightLastRemaining);
                         break;
                     }
                 }
@@ -86,6 +87,7 @@ internal sealed partial class JobGaugeModule
         {
             sacredSightFirstSeen = 0;
             sacredSightTimeKnown = false;
+            sacredSightLastRemaining = 0f;
             return;
         }
 

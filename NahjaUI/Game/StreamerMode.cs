@@ -33,6 +33,15 @@ internal static class StreamerMode
 
     private static readonly Dictionary<string, string> Aliases = new(StringComparer.Ordinal);
     private static readonly HashSet<string> Used = new(StringComparer.Ordinal);
+
+    // Who holds each invented name right now (entity id and the moment it was last asked for). Two people at the same time never share one.
+    private static readonly Dictionary<string, (uint EntityId, long Tick)> Holders = new(StringComparer.Ordinal);
+
+    // The name each entity was given while it was asked for (entity id -> real name, invented name).
+    private static readonly Dictionary<uint, (string Real, string Alias)> ByEntity = new();
+
+    // A holder that has not been asked for in this time has gone (left the area): its name is free for a namesake again.
+    private const long HolderMilliseconds = 10000;
     private static readonly object Gate = new();
 
     // Men and women one after the other, so any run of names is a mix of both.
@@ -70,12 +79,18 @@ internal static class StreamerMode
                 seed = value;
                 Aliases.Clear();
                 Used.Clear();
+                Holders.Clear();
+                ByEntity.Clear();
             }
         }
     }
 
-    /// <summary>The name to show: the real one, or its alias when streamer mode is on and the unit is a player character.</summary>
-    public static string Name(string name, bool isPlayer)
+    /// <summary>
+    /// The name to show: the real one, or its alias when streamer mode is on and the unit is a player character. With the entity id, two different
+    /// people who are on the screen at the same time (two members of a party, for example) never get the same invented name, even if they had the
+    /// same real name (the same name on two worlds).
+    /// </summary>
+    public static string Name(string name, bool isPlayer, uint entityId = 0)
     {
         if (!Enabled || !isPlayer || string.IsNullOrWhiteSpace(name))
             return name;
@@ -86,11 +101,32 @@ internal static class StreamerMode
 
         lock (Gate)
         {
+            var now = Environment.TickCount64;
+
+            if (entityId != 0 && ByEntity.TryGetValue(entityId, out var known) && known.Real == name)
+            {
+                Holders[known.Alias] = (entityId, now);
+                return known.Alias;
+            }
+
             if (!Aliases.TryGetValue(name, out var alias))
             {
                 alias = MakeAlias(name);
                 Aliases[name] = alias;
                 Used.Add(alias);
+            }
+
+            if (entityId != 0)
+            {
+                // Somebody else is wearing this name right now: this one gets a name of its own.
+                if (Holders.TryGetValue(alias, out var holder) && holder.EntityId != entityId && now - holder.Tick < HolderMilliseconds)
+                {
+                    alias = MakeAlias($"{name}#{entityId}");
+                    Used.Add(alias);
+                }
+
+                Holders[alias] = (entityId, now);
+                ByEntity[entityId] = (name, alias);
             }
 
             return alias;

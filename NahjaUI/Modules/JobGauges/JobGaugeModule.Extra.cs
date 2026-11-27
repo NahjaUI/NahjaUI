@@ -62,7 +62,7 @@ internal sealed partial class JobGaugeModule
 
             // Unlock mode only offers the rows of the job you are playing (all of them while the job is unknown) that are not switched off.
             // The Thaumaturge (7) has the gauge of the Black Mage (25).
-            var isJob = player is null || player.JobId == def.JobId || (def.JobId == 25 && player.JobId == 7);
+            var isJob = player is null || player.JobId == def.JobId || (def.JobId == 25 && player.JobId == 7) || (def.JobId == 23 && player.JobId == 5);
             for (var i = 0; i < elements.Length; i++)
                 elements[i].IsHidden = !isJob || !settings.Part(def.Parts[i].Id).Show;
 
@@ -73,6 +73,18 @@ internal sealed partial class JobGaugeModule
             var parts = live ?? (previewJob == def.JobId || (unlock && isJob) ? def.Sample : null);
             if (parts is null)
                 continue;
+
+            // A row the job has not got at this moment (the Repertoire in the Ballad, the rows not learned yet) is not drawn and its place in the column is
+            // given back; in unlock mode all the rows stay so they can be placed.
+            if (live is not null && !unlock)
+            {
+                for (var i = 0; i < elements.Length; i++)
+                {
+                    var id = def.Parts[i].Id;
+                    if (!live.Any(p => p.Id == id))
+                        elements[i].IsHidden = true;
+                }
+            }
 
             var shown = elements.Where((_, i) => settings.Part(def.Parts[i].Id).Show).ToArray();
             if (shown.Length == 0)
@@ -129,8 +141,25 @@ internal sealed partial class JobGaugeModule
         }
     }
 
-    // A rounded bar filled from the left, with the marks where a spender can be used and the text over it.
+    // A rounded bar filled from the left, with the marks where a spender can be used and the text over it. A row can hold two bars side by side (the DoTs
+    // of the Bard): the second one is there when Value2 is not negative, and the two share the width with a gap between them.
     private void DrawExtraBar(ImDrawListPtr drawList, ExtraGaugeJobSettings settings, GaugePartDef def, GaugePartSnapshot part, Vector2 pos, Vector2 size)
+    {
+        if (part.Value2 < 0f)
+        {
+            DrawOneBar(drawList, settings, def, pos, size, part.Value, part.Max, part.Variant, part.Alert, part.Text, part.Marks, part.Flash);
+            return;
+        }
+
+        var gap = GapPixels(settings.Part(def.Id).GapPx ?? settings.GapPx, UiScale.Overlay);
+        var half = MathF.Round((size.X - gap) / 2f);
+        var other = new Vector2(pos.X + half + gap, pos.Y);
+
+        DrawOneBar(drawList, settings, def, pos, new Vector2(half, size.Y), part.Value, part.Max, part.Variant, part.Alert, part.Text, part.Marks, part.Flash);
+        DrawOneBar(drawList, settings, def, other, new Vector2(MathF.Max(1f, pos.X + size.X - other.X), size.Y), part.Value2, part.Max, part.Variant2, part.Alert2, part.Text2, part.Marks, part.Flash);
+    }
+
+    private void DrawOneBar(ImDrawListPtr drawList, ExtraGaugeJobSettings settings, GaugePartDef def, Vector2 pos, Vector2 size, float value, float max, int variant, bool alert, string? text, float[]? marks, float flash = 0f)
     {
         var scale = UiScale.Overlay;
         var rounding = MathF.Round(GlobalColors.Current.Rounding * scale);
@@ -140,35 +169,41 @@ internal sealed partial class JobGaugeModule
         drawList.AddRectFilled(pos, end, ImGui.GetColorU32(settings.BackgroundColor), rounding);
 
         // The buff that the bar follows is missing: the whole bar pulses in red.
-        if (part.Alert)
+        if (alert)
         {
             var pulse = 0.35f + 0.65f * (0.5f + 0.5f * MathF.Sin((float)ImGui.GetTime() * 5f));
             drawList.AddRectFilled(pos, end, ImGui.GetColorU32(new Vector4(0.85f, 0.12f, 0.12f, pulse)), rounding);
         }
 
-        var fraction = part.Max <= 0f ? 0f : Math.Clamp(part.Value / part.Max, 0f, 1f);
+        var fraction = max <= 0f ? 0f : Math.Clamp(value / max, 0f, 1f);
         var fillWidth = MathF.Round(size.X * fraction);
         if (fillWidth > 0f)
         {
             // Clipped to the bar so the fill keeps its rounded outline.
             drawList.PushClipRect(pos, new Vector2(pos.X + fillWidth, end.Y), true);
-            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(settings.ColorOf(def, part.Variant)), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
+            BarGradient.Fill(drawList, pos, end, ImGui.GetColorU32(settings.ColorOf(def, variant)), rounding, ImDrawFlags.None, pos.X, pos.X + fillWidth);
             drawList.PopClipRect();
         }
 
-        if (def.Marks is not null)
+        // The marks of the moment (the snapshot) win over the fixed ones of the row (its definition).
+        var shownMarks = marks ?? def.Marks;
+        if (shownMarks is not null)
         {
-            foreach (var mark in def.Marks)
+            foreach (var mark in shownMarks)
             {
                 var x = pos.X + MathF.Round(size.X * mark);
                 drawList.AddLine(new Vector2(x, pos.Y), new Vector2(x, end.Y), ImGui.GetColorU32(settings.MarkColor), thickness);
             }
         }
 
+        // A white flash that fades out (the proc of the Mage's Ballad).
+        if (flash > 0f)
+            drawList.AddRectFilled(pos, end, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.75f * Math.Clamp(flash, 0f, 1f))), rounding);
+
         BorderStyle.BarRect(drawList, pos, end, ImGui.GetColorU32(settings.BorderColor), rounding, ImDrawFlags.None, thickness);
 
-        if (!string.IsNullOrEmpty(part.Text))
-            QueueText(drawList, part.Text, settings.Text, pos, size);
+        if (!string.IsNullOrEmpty(text))
+            QueueText(drawList, text, settings.Text, pos, size);
     }
 
     // The slots of a row of steps: a slot is lit when its bit is in Highlights, at 33 % when it is in Dim, and off (only the background) otherwise.

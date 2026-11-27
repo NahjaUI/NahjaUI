@@ -5484,6 +5484,20 @@
       "ShowWithWeapon": 0,
       "HasNoCondition": true
     },
+    "gauge.brd.hawkseye": {
+      "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
+      "AttachTo": null,
+      "ScreenAnchor": 4,
+      "SelfAnchor": 4,
+      "OffsetX": 0.0,
+      "OffsetY": 0.0,
+      "Width": 150,
+      "Height": 90,
+      "Locked": false,
+      "ShowInCombat": 0,
+      "ShowWithWeapon": 0,
+      "HasNoCondition": true
+    },
     "gauge.dnc.fourfold": {
       "$type": "NahjaUI.Core.Layout.ElementLayout, NahjaUI",
       "AttachTo": null,
@@ -8049,7 +8063,8 @@
         "JobIds": [
           38
         ],
-        "Where": 0
+        "Where": 0,
+        "OnlyInParty": true
       }
     },
     {

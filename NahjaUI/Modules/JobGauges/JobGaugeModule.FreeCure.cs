@@ -27,10 +27,13 @@ internal sealed partial class JobGaugeModule
 
     private long freeCureFirstSeen;
     private bool freeCureTimeKnown;
+    private float freeCureLastRemaining;
 
-    // The fraction of time left of an aura that works as a timer. A status that has just appeared can report no time for a moment (the game sends
-    // it a little later): during the first two seconds that counts as full, so the aura does not flash desaturated before the time arrives.
-    private static float TimedFraction(float remaining, float total, ref long firstSeen, ref bool timeKnown)
+    // The fraction of time left of an aura that works as a timer. The game sends the time of a status a little late (up to about a second): when the
+    // status has just appeared, and when it is refreshed by a new proc (Hawk's Eye hit again, Freecure again) it reports no time for a moment. Meanwhile the
+    // aura counts as full for up to two seconds, so it does not flash desaturated. firstSeen is the moment of the last report with time (the first sight
+    // before there is one); lastRemaining is the time that report gave. A status that really ran out is not held: by the count, it had no time left.
+    private static float TimedFraction(float remaining, float total, ref long firstSeen, ref bool timeKnown, ref float lastRemaining)
     {
         var now = Stopwatch.GetTimestamp();
         if (firstSeen == 0)
@@ -39,10 +42,16 @@ internal sealed partial class JobGaugeModule
         if (remaining > 0f)
         {
             timeKnown = true;
+            firstSeen = now;
+            lastRemaining = remaining;
             return Math.Clamp(remaining / total, 0f, 1f);
         }
 
-        return !timeKnown && Stopwatch.GetElapsedTime(firstSeen, now).TotalSeconds < 2.0 ? 1f : 0f;
+        var since = (float)Stopwatch.GetElapsedTime(firstSeen, now).TotalSeconds;
+        if (!timeKnown)
+            return since < 2f ? 1f : 0f;
+
+        return since < 2f && lastRemaining - since > 0.5f ? 1f : 0f;
     }
 
     private void RegisterFreeCureElement()
@@ -83,7 +92,7 @@ internal sealed partial class JobGaugeModule
             {
                 if (status.Id == FreeCureStatusId)
                 {
-                    fraction = TimedFraction(status.RemainingTime, FreeCureSeconds, ref freeCureFirstSeen, ref freeCureTimeKnown);
+                    fraction = TimedFraction(status.RemainingTime, FreeCureSeconds, ref freeCureFirstSeen, ref freeCureTimeKnown, ref freeCureLastRemaining);
                     found = true;
                     break;
                 }
@@ -93,6 +102,7 @@ internal sealed partial class JobGaugeModule
             {
                 freeCureFirstSeen = 0;
                 freeCureTimeKnown = false;
+                freeCureLastRemaining = 0f;
                 return;
             }
         }
